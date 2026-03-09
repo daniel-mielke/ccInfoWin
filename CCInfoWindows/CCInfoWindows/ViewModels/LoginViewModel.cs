@@ -75,6 +75,18 @@ public partial class LoginViewModel : ObservableObject
             }
         }
 
+        // Clear session cookies (e.g., after logout) while preserving UDF cache/service workers.
+        // This ensures claude.ai shows the login page, not a cached authenticated session.
+        var cookieManager = webView.CoreWebView2.CookieManager;
+        var existingCookies = await cookieManager.GetCookiesAsync("https://claude.ai");
+        foreach (var cookie in existingCookies)
+        {
+            cookieManager.DeleteCookie(cookie);
+        }
+
+        // Reset login state for re-entry (e.g., after logout)
+        _loginHandled = false;
+
         // Register SourceChanged on CoreWebView2 — fires on SPA pushState navigation too.
         // NavigationCompleted only fires on full page loads, which misses SPA route changes.
         webView.CoreWebView2.SourceChanged += HandleSourceChanged;

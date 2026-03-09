@@ -80,18 +80,13 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     }
 
     [RelayCommand]
-    private async Task LogoutAsync()
+    private void Logout()
     {
         _credentialService.ClearCredentials();
 
-        // Clear WebView2 cookies by deleting the UDF cookie data
-        // Full WebView2 cookie clearing requires a CoreWebView2 instance,
-        // which is only available in LoginView. Clearing credentials is sufficient
-        // because LoginView will re-initialize WebView2 with fresh state.
-        // The UDF persists cookies, but the session token in Credential Manager
-        // is what the app checks -- clearing it forces re-login.
-        await ClearWebView2CookiesAsync();
-
+        // Don't delete WebView2 UDF — it contains cache/service workers needed for rendering.
+        // WebView2 session cookies are cleared in LoginView via CookieManager API
+        // after CoreWebView2 is initialized (requires active WebView2 instance).
         WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
         IsSessionExpired = false;
         _navigationService.NavigateTo<LoginView>();
@@ -114,31 +109,4 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         }
     }
 
-    /// <summary>
-    /// Clears WebView2 cookies by deleting cookie files from the User Data Folder.
-    /// This ensures a clean slate when the user logs out and re-opens LoginView.
-    /// </summary>
-    private static Task ClearWebView2CookiesAsync()
-    {
-        return Task.Run(() =>
-        {
-            var udfPath = LoginViewModel.UserDataFolderPath;
-            if (Directory.Exists(udfPath))
-            {
-                try
-                {
-                    // Delete the entire UDF to clear all cached cookies/sessions
-                    Directory.Delete(udfPath, recursive: true);
-                }
-                catch (IOException)
-                {
-                    // UDF may be locked if WebView2 is still active -- non-critical
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    // Permission issue -- non-critical, credential manager is already cleared
-                }
-            }
-        });
-    }
 }
