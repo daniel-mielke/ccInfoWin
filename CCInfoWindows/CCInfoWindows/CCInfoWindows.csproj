@@ -21,4 +21,14 @@
     <PackageReference Include="AdysTech.CredentialManager" Version="3.1.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
   </ItemGroup>
+
+  <!-- Copy WebView2Loader.dll to output root for unpackaged app -->
+  <Target Name="CopyWebView2Loader" AfterTargets="Build">
+    <PropertyGroup>
+      <WebView2LoaderSource>$(OutputPath)runtimes\win-$(Platform)\native\WebView2Loader.dll</WebView2LoaderSource>
+      <WebView2LoaderSourceX64>$(OutputPath)runtimes\win-x64\native\WebView2Loader.dll</WebView2LoaderSourceX64>
+    </PropertyGroup>
+    <Copy SourceFiles="$(WebView2LoaderSource)" DestinationFolder="$(OutputPath)" Condition="Exists('$(WebView2LoaderSource)')" />
+    <Copy SourceFiles="$(WebView2LoaderSourceX64)" DestinationFolder="$(OutputPath)" Condition="!Exists('$(WebView2LoaderSource)') And Exists('$(WebView2LoaderSourceX64)')" />
+  </Target>
 </Project>
