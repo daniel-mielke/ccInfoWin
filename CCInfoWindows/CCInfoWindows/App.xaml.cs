@@ -1,3 +1,5 @@
+using CCInfoWindows.Services;
+using CCInfoWindows.Services.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 
@@ -27,7 +29,13 @@ public partial class App : Application
     private static IServiceProvider ConfigureServices()
     {
         var services = new ServiceCollection();
-        // Services will be registered in Task 2
+
+        // Singleton services
+        services.AddSingleton<ISettingsService, SettingsService>();
+        services.AddSingleton<INavigationService, NavigationService>();
+
+        // ICredentialService implementation deferred to Plan 02
+
         return services.BuildServiceProvider();
     }
 }

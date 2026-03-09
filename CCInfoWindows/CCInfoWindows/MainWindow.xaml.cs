@@ -1,14 +1,81 @@
+using CCInfoWindows.Helpers;
+using CCInfoWindows.Models;
+using CCInfoWindows.Services.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Windows.Graphics;
 
 namespace CCInfoWindows;
 
 /// <summary>
 /// Main application window with Frame-based navigation shell.
+/// Sets initial size, minimum constraints, and persists window state.
 /// </summary>
 public sealed partial class MainWindow : Window
 {
+    /// <summary>
+    /// WebView2 User Data Folder path for cookie/cache isolation.
+    /// Used by Plan 02 (LoginView) for WebView2 initialization.
+    /// </summary>
+    public static readonly string WebView2UserDataFolder = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "CCInfoWindows", "WebView2");
+
+    private readonly ISettingsService _settingsService;
+    private readonly INavigationService _navigationService;
+
     public MainWindow()
     {
         InitializeComponent();
+
+        _settingsService = App.Services.GetRequiredService<ISettingsService>();
+        _navigationService = App.Services.GetRequiredService<INavigationService>();
+
+        ConfigureWindow();
+        RestoreWindowState();
+        InitializeNavigation();
+
+        AppWindow.Closing += OnClosing;
+    }
+
+    private void ConfigureWindow()
+    {
+        // Set initial size (360x900)
+        var defaultSize = WindowHelper.GetDefaultWindowSize();
+        AppWindow.Resize(defaultSize);
+
+        // Set minimum size via OverlappedPresenter
+        var presenter = OverlappedPresenter.Create();
+        presenter.PreferredMinimumWidth = 300;
+        presenter.PreferredMinimumHeight = 500;
+        AppWindow.SetPresenter(presenter);
+    }
+
+    private void RestoreWindowState()
+    {
+        var savedState = _settingsService.LoadWindowState();
+        if (savedState != null && WindowHelper.IsPositionOnScreen(savedState))
+        {
+            AppWindow.MoveAndResize(new RectInt32(
+                savedState.X, savedState.Y,
+                savedState.Width, savedState.Height));
+        }
+    }
+
+    private void InitializeNavigation()
+    {
+        _navigationService.Initialize(RootFrame);
+    }
+
+    private void OnClosing(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        var state = new WindowState(
+            AppWindow.Position.X,
+            AppWindow.Position.Y,
+            AppWindow.Size.Width,
+            AppWindow.Size.Height);
+
+        _settingsService.SaveWindowState(state);
     }
 }
