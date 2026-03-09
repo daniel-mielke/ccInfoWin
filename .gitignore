@@ -1,0 +1,23 @@
+# Planning docs (local only)
+.planning/
+
+# Visual Studio
+.vs/
+bin/
+obj/
+*.user
+*.suo
+*.cache
+launchSettings.json
+
+# .NET
+*.dll
+*.exe
+*.pdb
+
+# WebView2 user data
+WebView2/
+
+# OS files
+Thumbs.db
+desktop.ini
