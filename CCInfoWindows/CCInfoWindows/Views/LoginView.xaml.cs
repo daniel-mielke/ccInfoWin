@@ -23,7 +23,8 @@ public sealed partial class LoginView : Page
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // NavigationCompleted handler is registered inside InitializeWebViewAsync
+        // BEFORE Navigate() is called, to avoid race condition with cached sessions
         await ViewModel.InitializeWebViewAsync(LoginWebView);
-        LoginWebView.NavigationCompleted += ViewModel.HandleNavigationCompleted;
     }
 }

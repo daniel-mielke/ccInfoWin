@@ -39,7 +39,9 @@ public partial class LoginViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Initializes WebView2 with explicit UDF path and navigates to claude.ai login.
+    /// Initializes WebView2 with explicit UDF path, registers NavigationCompleted handler,
+    /// and navigates to claude.ai login.
+    /// Handler is registered BEFORE Navigate() to avoid race condition with cached sessions.
     /// Includes retry logic for corrupted User Data Folder.
     /// </summary>
     public async Task InitializeWebViewAsync(WebView2 webView)
@@ -73,33 +75,82 @@ public partial class LoginViewModel : ObservableObject
             }
         }
 
+        // Register SourceChanged on CoreWebView2 — fires on SPA pushState navigation too.
+        // NavigationCompleted only fires on full page loads, which misses SPA route changes.
+        webView.CoreWebView2.SourceChanged += HandleSourceChanged;
+        webView.CoreWebView2.HistoryChanged += HandleHistoryChanged;
+        webView.NavigationCompleted += HandleNavigationCompleted;
         webView.CoreWebView2.Navigate("https://claude.ai/login");
         IsLoading = false;
     }
 
+    private async void HandleSourceChanged(CoreWebView2 sender, CoreWebView2SourceChangedEventArgs args)
+    {
+        if (_loginHandled) return;
+        await TryExtractSessionCookieAsync(sender, sender.Source ?? "");
+    }
+
+    private async void HandleHistoryChanged(CoreWebView2 sender, object args)
+    {
+        if (_loginHandled) return;
+        await TryExtractSessionCookieAsync(sender, sender.Source ?? "");
+    }
+
+    private bool _loginHandled;
+
     /// <summary>
-    /// Handles navigation completion by checking for sessionKey cookie.
-    /// CRITICAL: Cookie .Name and .Value accessed on UI thread only (Pitfall 2 from research).
+    /// Handles full page navigation completion.
     /// </summary>
     public async void HandleNavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
     {
-        if (sender.CoreWebView2 is null)
+        if (_loginHandled || sender.CoreWebView2 is null) return;
+        await TryExtractSessionCookieAsync(sender.CoreWebView2, sender.CoreWebView2.Source ?? "");
+    }
+
+    /// <summary>
+    /// Shared cookie extraction logic used by all navigation event handlers.
+    /// Checks URL for post-login state and extracts sessionKey cookie.
+    /// CRITICAL: Cookie .Name and .Value accessed on UI thread only (Pitfall 2 from research).
+    /// </summary>
+    private async Task TryExtractSessionCookieAsync(CoreWebView2 coreWebView, string currentUrl)
+    {
+        if (_loginHandled) return;
+
+        if (!IsPostLoginUrl(currentUrl))
         {
             return;
         }
 
-        var cookies = await sender.CoreWebView2.CookieManager
+        var cookies = await coreWebView.CookieManager
             .GetCookiesAsync("https://claude.ai");
 
-        // Access cookie properties on UI thread (NavigationCompleted fires on UI thread)
-        var sessionCookie = cookies.FirstOrDefault(c => c.Name == "sessionKey");
+        var sessionCookie = cookies.FirstOrDefault(c =>
+            string.Equals(c.Name, "sessionKey", StringComparison.Ordinal));
 
         if (sessionCookie is not null)
         {
+            _loginHandled = true;
             _credentialService.SaveSessionToken(sessionCookie.Value);
             WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(true));
             _navigationService.NavigateTo<MainView>();
         }
+    }
+
+    /// <summary>
+    /// Determines if the current URL indicates a successful post-login state.
+    /// Returns true for claude.ai pages that are NOT the login/signup flow.
+    /// </summary>
+    private static bool IsPostLoginUrl(string url)
+    {
+        if (!url.StartsWith("https://claude.ai", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // Login/signup flow URLs — not yet authenticated
+        var loginPaths = new[] { "/login", "/signup", "/oauth", "/auth" };
+        var uri = new Uri(url);
+        return !loginPaths.Any(p => uri.AbsolutePath.StartsWith(p, StringComparison.OrdinalIgnoreCase));
     }
 
     private static async Task InitializeCoreWebView2(WebView2 webView, string udfPath)
