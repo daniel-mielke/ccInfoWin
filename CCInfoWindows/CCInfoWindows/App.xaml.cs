@@ -33,8 +33,7 @@ public partial class App : Application
         // Singleton services
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<INavigationService, NavigationService>();
-
-        // ICredentialService implementation deferred to Plan 02
+        services.AddSingleton<ICredentialService, CredentialService>();
 
         return services.BuildServiceProvider();
     }
