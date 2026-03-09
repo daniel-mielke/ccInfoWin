@@ -1,5 +1,6 @@
 using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
+using CCInfoWindows.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 
@@ -34,6 +35,9 @@ public partial class App : Application
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<ICredentialService, CredentialService>();
+
+        // ViewModels
+        services.AddTransient<LoginViewModel>();
 
         return services.BuildServiceProvider();
     }
