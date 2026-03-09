@@ -7,17 +7,36 @@ bin/
 obj/
 *.user
 *.suo
-*.cache
+*.userprefs
+*.sln.docstats
 launchSettings.json
 
-# .NET
-*.dll
+# Build outputs
+publish/
 *.exe
+*.dll
 *.pdb
 
-# WebView2 user data
-WebView2/
+# NuGet
+packages/
+*.nupkg
+
+# Local app data (never commit)
+**/WebView2/
+settings.json
+*.cache
+*.cache.json
+
+# Secrets and credentials
+*.pfx
+*.snk
+.env
+appsettings.*.json
 
 # OS files
 Thumbs.db
 desktop.ini
+.DS_Store
+
+# JetBrains IDE
+.idea/
