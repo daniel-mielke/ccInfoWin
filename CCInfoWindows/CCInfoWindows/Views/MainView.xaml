@@ -7,12 +7,48 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid>
-        <TextBlock
-            Text="Dashboard"
-            FontSize="24"
+    <Grid RowDefinitions="Auto,*,Auto" Padding="16">
+
+        <!-- Session expired InfoBar (non-invasive banner per locked decision) -->
+        <InfoBar
+            Grid.Row="0"
+            Title="Session Expired"
+            Message="Your session has expired. Please re-login to continue using ccInfo."
+            Severity="Warning"
+            IsOpen="{x:Bind ViewModel.IsSessionExpired, Mode=OneWay}"
+            IsClosable="False"
+            Margin="0,0,0,12">
+            <InfoBar.ActionButton>
+                <Button Content="Re-Login" Command="{x:Bind ViewModel.ReLoginCommand}" />
+            </InfoBar.ActionButton>
+        </InfoBar>
+
+        <!-- Placeholder content (Phase 2 replaces this with dashboard) -->
+        <StackPanel
+            Grid.Row="1"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
-            Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+            Spacing="8">
+            <TextBlock
+                Text="ccInfo Windows"
+                FontSize="28"
+                FontWeight="SemiBold"
+                HorizontalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+            <TextBlock
+                Text="Logged in successfully"
+                FontSize="16"
+                HorizontalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        </StackPanel>
+
+        <!-- Logout button -->
+        <Button
+            Grid.Row="2"
+            Content="Logout"
+            Command="{x:Bind ViewModel.LogoutCommand}"
+            HorizontalAlignment="Center"
+            Margin="0,12,0,0"
+            Style="{ThemeResource AccentButtonStyle}" />
     </Grid>
 </Page>

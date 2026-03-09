@@ -1,13 +1,14 @@
 using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
 using CCInfoWindows.ViewModels;
+using CCInfoWindows.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 
 namespace CCInfoWindows;
 
 /// <summary>
-/// Application entry point with DI container configuration.
+/// Application entry point with DI container configuration and startup token routing.
 /// </summary>
 public partial class App : Application
 {
@@ -20,11 +21,33 @@ public partial class App : Application
         InitializeComponent();
     }
 
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         Services = ConfigureServices();
         _window = new MainWindow();
         _window.Activate();
+
+        await RouteOnStartupAsync();
+    }
+
+    /// <summary>
+    /// Checks stored token validity and navigates to MainView or LoginView accordingly.
+    /// </summary>
+    private static async Task RouteOnStartupAsync()
+    {
+        var navigationService = Services.GetRequiredService<INavigationService>();
+        var mainViewModel = Services.GetRequiredService<MainViewModel>();
+
+        var isTokenValid = await mainViewModel.ValidateTokenAsync();
+
+        if (isTokenValid)
+        {
+            navigationService.NavigateTo<MainView>();
+        }
+        else
+        {
+            navigationService.NavigateTo<LoginView>();
+        }
     }
 
     private static IServiceProvider ConfigureServices()
@@ -35,9 +58,11 @@ public partial class App : Application
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<ICredentialService, CredentialService>();
+        services.AddSingleton<HttpClient>();
 
         // ViewModels
         services.AddTransient<LoginViewModel>();
+        services.AddTransient<MainViewModel>();
 
         return services.BuildServiceProvider();
     }
