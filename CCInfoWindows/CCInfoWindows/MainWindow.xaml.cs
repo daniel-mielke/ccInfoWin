@@ -1,6 +1,8 @@
 using CCInfoWindows.Helpers;
+using CCInfoWindows.Messages;
 using CCInfoWindows.Models;
 using CCInfoWindows.Services.Interfaces;
+using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -10,9 +12,10 @@ namespace CCInfoWindows;
 
 /// <summary>
 /// Main application window with Frame-based navigation shell.
-/// Sets initial size, minimum constraints, and persists window state.
+/// Sets initial size, minimum constraints, persists window state,
+/// and applies theme changes via ThemeChangedMessage.
 /// </summary>
-public sealed partial class MainWindow : Window
+public sealed partial class MainWindow : Window, IRecipient<ThemeChangedMessage>
 {
     /// <summary>
     /// WebView2 User Data Folder path for cookie/cache isolation.
@@ -37,6 +40,21 @@ public sealed partial class MainWindow : Window
         InitializeNavigation();
 
         AppWindow.Closing += OnClosing;
+
+        WeakReferenceMessenger.Default.Register<ThemeChangedMessage>(this);
+    }
+
+    /// <summary>
+    /// Applies theme change immediately by setting RequestedTheme on the root FrameworkElement.
+    /// </summary>
+    public void Receive(ThemeChangedMessage message)
+    {
+        if (Content is FrameworkElement fe)
+        {
+            fe.RequestedTheme = message.Value == "light"
+                ? ElementTheme.Light
+                : ElementTheme.Dark;
+        }
     }
 
     private void ConfigureWindow()
