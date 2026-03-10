@@ -14,4 +14,10 @@ public class AppSettings
 {
     [JsonPropertyName("windowState")]
     public WindowState? WindowState { get; set; }
+
+    [JsonPropertyName("refreshIntervalSeconds")]
+    public int RefreshIntervalSeconds { get; set; } = 60;
+
+    [JsonPropertyName("colorMode")]
+    public string ColorMode { get; set; } = "dark";
 }

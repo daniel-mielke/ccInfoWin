@@ -11,4 +11,8 @@ public interface ICredentialService
     string? GetSessionToken();
 
     void ClearCredentials();
+
+    void SaveOrganizationId(string orgId);
+
+    string? GetOrganizationId();
 }

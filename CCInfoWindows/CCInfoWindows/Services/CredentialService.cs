@@ -10,6 +10,7 @@ namespace CCInfoWindows.Services;
 public class CredentialService : ICredentialService
 {
     private const string CredentialTarget = "CCInfoWindows/claude-session";
+    private const string OrgCredentialTarget = "CCInfoWindows/claude-org";
 
     public void SaveSessionToken(string token)
     {
@@ -33,5 +34,26 @@ public class CredentialService : ICredentialService
         {
             // Credential may not exist -- safe to ignore
         }
+
+        try
+        {
+            CredentialManager.RemoveCredentials(OrgCredentialTarget);
+        }
+        catch (Exception)
+        {
+            // Credential may not exist -- safe to ignore
+        }
+    }
+
+    public void SaveOrganizationId(string orgId)
+    {
+        var cred = new NetworkCredential("orgId", orgId);
+        CredentialManager.SaveCredentials(OrgCredentialTarget, cred);
+    }
+
+    public string? GetOrganizationId()
+    {
+        var cred = CredentialManager.GetCredentials(OrgCredentialTarget);
+        return cred?.Password;
     }
 }
