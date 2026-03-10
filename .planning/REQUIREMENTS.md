@@ -72,7 +72,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Settings
 
-- [ ] **SETT-01**: Configurable refresh interval (manual or automatic: 30s to 10min)
+- [x] **SETT-01**: Configurable refresh interval (manual or automatic: 30s to 10min)
 - [ ] **SETT-02**: Autostart option to launch app at Windows login
 - [ ] **SETT-03**: Session activity threshold configuration
 - [ ] **SETT-04**: Language support for German and English (follows system language or manual selection)
@@ -195,7 +195,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXPT-01 | Phase 6 | Pending |
 | EXPT-02 | Phase 6 | Pending |
 | EXPT-03 | Phase 6 | Pending |
-| SETT-01 | Phase 2 | Pending |
+| SETT-01 | Phase 2 | Complete |
 | SETT-02 | Phase 6 | Pending |
 | SETT-03 | Phase 4 | Pending |
 | SETT-04 | Phase 6 | Pending |
