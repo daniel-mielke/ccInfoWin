@@ -27,7 +27,23 @@ public partial class App : Application
         _window = new MainWindow();
         _window.Activate();
 
+        ApplyPersistedTheme();
         await RouteOnStartupAsync();
+    }
+
+    /// <summary>
+    /// Loads persisted color mode setting and applies it to the root FrameworkElement.
+    /// </summary>
+    private void ApplyPersistedTheme()
+    {
+        var settings = Services.GetRequiredService<ISettingsService>().LoadSettings();
+
+        if (_window?.Content is FrameworkElement fe)
+        {
+            fe.RequestedTheme = settings.ColorMode == "light"
+                ? ElementTheme.Light
+                : ElementTheme.Dark;
+        }
     }
 
     /// <summary>
