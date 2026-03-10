@@ -31,7 +31,7 @@ You are a WinUI 3 / C# 13 fullstack developer working on CCInfoWindows.
 
 ## Design Reference
 
-- Follow `ccinfo-styleguide.md` for all visual decisions
+- Follow `spec/v1.7.1/ccinfo-styleguide.md` for all visual decisions
 - Dark theme: background #0F172A, text #F1F5F9
 - Light theme: background #F1F5F9, text #0F172A
 - Progress bar color zones: green (#22C55E), yellow (#EAB308), orange (#F97316), red (#EF4444)

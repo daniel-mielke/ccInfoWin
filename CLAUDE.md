@@ -66,8 +66,8 @@ dotnet publish CCInfoWindows/CCInfoWindows.csproj -c Release -r win-x64 --self-c
 
 ## Reference Documents
 
-- `ccinfo-spec.md` -- Functional requirements (10 areas, 40+ FA-IDs)
-- `ccinfo-tech-spec.md` -- Technical specification (architecture, components, data flow)
-- `ccinfo-styleguide.md` -- Pixel-precise design guide (colors #0F172A/#F1F5F9, typography, layout, spacing)
+- `spec/v1.7.1/ccinfo-spec.md` -- Functional requirements (10 areas, 40+ FA-IDs)
+- `spec/v1.7.1/ccinfo-tech-spec.md` -- Technical specification (architecture, components, data flow)
+- `spec/v1.7.1/ccinfo-styleguide.md` -- Pixel-precise design guide (colors #0F172A/#F1F5F9, typography, layout, spacing)
 - `.claude/DOS-Secure-Coding.pdf` -- Secure coding guidelines (authoritative)
 - `.claude/DOS-Clean-code.pdf` -- Clean code guidelines (authoritative)
