@@ -75,6 +75,7 @@ public partial class App : Application
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<ICredentialService, CredentialService>();
         services.AddSingleton<HttpClient>();
+        services.AddSingleton<IClaudeApiService, ClaudeApiService>();
 
         // ViewModels
         services.AddTransient<LoginViewModel>();

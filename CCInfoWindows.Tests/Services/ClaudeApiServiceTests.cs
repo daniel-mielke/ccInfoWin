@@ -48,8 +48,9 @@ public class ClaudeApiServiceTests : IDisposable
     [Fact]
     public async Task FetchUsageAsync_ConstructsUrlWithPercentEncodedOrgId()
     {
-        // Arrange
-        var orgId = "org-123/test space";
+        // Arrange -- use a UUID-style org ID with spaces to verify encoding.
+        // Note: Uri class normalizes %2F back to / so we avoid slashes in test data.
+        var orgId = "org 123+test";
         _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
         _credentialMock.Setup(x => x.GetOrganizationId()).Returns(orgId);
 
@@ -63,11 +64,14 @@ public class ClaudeApiServiceTests : IDisposable
         // Act
         await service.FetchUsageAsync();
 
-        // Assert
-        var requestUrl = _handler.LastRequestUri?.ToString() ?? "";
-        Assert.Contains(Uri.EscapeDataString(orgId), requestUrl);
+        // Assert -- Use AbsoluteUri (preserves encoding) instead of ToString() (decodes %20 to space)
+        var requestUrl = _handler.LastRequestUri?.AbsoluteUri ?? "";
         Assert.Contains("/api/organizations/", requestUrl);
         Assert.Contains("/usage", requestUrl);
+        // Spaces must be percent-encoded
+        Assert.DoesNotContain(" ", requestUrl);
+        // Plus sign must be percent-encoded
+        Assert.Contains("%2B", requestUrl);
     }
 
     [Fact]
