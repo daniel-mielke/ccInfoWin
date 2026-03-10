@@ -1,5 +1,6 @@
 using CCInfoWindows.Services.Interfaces;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Animation;
 
 namespace CCInfoWindows.Services;
 
@@ -19,7 +20,10 @@ public class NavigationService : INavigationService
 
     public void NavigateTo<TPage>() where TPage : Page
     {
-        _frame?.Navigate(typeof(TPage));
+        _frame?.Navigate(
+            typeof(TPage),
+            null,
+            new SlideNavigationTransitionInfo { Effect = SlideNavigationTransitionEffect.FromRight });
     }
 
     public void GoBack()

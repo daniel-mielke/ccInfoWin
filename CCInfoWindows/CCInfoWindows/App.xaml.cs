@@ -80,6 +80,7 @@ public partial class App : Application
         // ViewModels
         services.AddTransient<LoginViewModel>();
         services.AddTransient<MainViewModel>();
+        services.AddTransient<SettingsViewModel>();
 
         return services.BuildServiceProvider();
     }
