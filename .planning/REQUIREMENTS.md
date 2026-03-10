@@ -11,8 +11,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **AUTH-01**: User can log in via embedded WebView2 showing claude.ai login page
 - [x] **AUTH-02**: Session tokens are securely stored in Windows Credential Manager (DPAPI-encrypted)
-- [ ] **AUTH-03**: App validates stored tokens on startup and shows login if expired
-- [ ] **AUTH-04**: User can log out, clearing all stored tokens
+- [x] **AUTH-03**: App validates stored tokens on startup and shows login if expired
+- [x] **AUTH-04**: User can log out, clearing all stored tokens
 
 ### 5-Hour Usage Window
 
@@ -109,7 +109,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **SECU-01**: Zero hardcoded secrets in source code
 - [x] **SECU-02**: Tokens stored exclusively in Windows Credential Manager (DPAPI)
-- [ ] **SECU-03**: No telemetry, no tracking, no data collection
+- [x] **SECU-03**: No telemetry, no tracking, no data collection
 - [x] **SECU-04**: Network communication only to claude.ai and raw.githubusercontent.com (HTTPS)
 - [x] **SECU-05**: WebView2 user data isolated in %LOCALAPPDATA% directory
 - [x] **SECU-06**: Comprehensive .gitignore preventing accidental secret exposure
@@ -158,8 +158,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | AUTH-01 | Phase 1 | Complete |
 | AUTH-02 | Phase 1 | Complete |
-| AUTH-03 | Phase 1 | Pending |
-| AUTH-04 | Phase 1 | Pending |
+| AUTH-03 | Phase 1 | Complete |
+| AUTH-04 | Phase 1 | Complete |
 | 5HUR-01 | Phase 2 | Pending |
 | 5HUR-02 | Phase 2 | Pending |
 | 5HUR-03 | Phase 3 | Pending |
@@ -220,7 +220,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DATA-05 | Phase 5 | Pending |
 | SECU-01 | Phase 1 | Complete |
 | SECU-02 | Phase 1 | Complete |
-| SECU-03 | Phase 1 | Pending |
+| SECU-03 | Phase 1 | Complete |
 | SECU-04 | Phase 1 | Complete |
 | SECU-05 | Phase 1 | Complete |
 | SECU-06 | Phase 1 | Complete |

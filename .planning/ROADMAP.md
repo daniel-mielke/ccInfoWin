@@ -12,7 +12,7 @@ ccInfoWin is a Windows port of the macOS ccInfo app for real-time Claude Code us
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation and Authentication** - Project scaffold, navigation shell, WebView2 login, credential storage, security baseline
+- [x] **Phase 1: Foundation and Authentication** - Project scaffold, navigation shell, WebView2 login, credential storage, security baseline (completed 2026-03-09)
 - [ ] **Phase 2: Core Monitoring Dashboard** - API polling for 5-hour and weekly usage display with progress bars, theme support, refresh settings
 - [ ] **Phase 3: Area Chart** - Win2D interactive area chart with color zones, glow indicator, usage history persistence
 - [ ] **Phase 4: Local Data Pipeline** - JSONL file watching, multi-session management, context window status, token counting
@@ -125,7 +125,7 @@ Note: Phase 4 depends on Phase 1 (not Phase 3), so Phases 3 and 4 could theoreti
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation and Authentication | 2/3 | In Progress|  |
+| 1. Foundation and Authentication | 3/3 | Complete   | 2026-03-09 |
 | 2. Core Monitoring Dashboard | 0/2 | Not started | - |
 | 3. Area Chart | 0/2 | Not started | - |
 | 4. Local Data Pipeline | 0/3 | Not started | - |
