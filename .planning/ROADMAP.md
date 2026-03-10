@@ -47,11 +47,13 @@ Plans:
   2. User sees weekly usage quota with separate Sonnet and Opus progress bars and reset dates
   3. All progress bars use unified color thresholds (green/yellow/orange/red) with opaque background in current theme
   4. User can configure refresh interval and toggle between dark and light mode with immediate effect (persisted across restarts)
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md — Models, interfaces, theme resources, helpers, test infrastructure
+- [ ] 02-02-PLAN.md — API service with retry/caching, credential extension for org ID, login flow update
+- [ ] 02-03-PLAN.md — Dashboard UI (MainView sections, progress bars, countdowns, footer, polling)
+- [ ] 02-04-PLAN.md — Settings page (refresh interval, theme toggle, logout), theme application
 
 ### Phase 3: Area Chart
 **Goal**: User can visualize their 5-hour usage history through an interactive, color-coded area chart that persists across app restarts
@@ -126,7 +128,7 @@ Note: Phase 4 depends on Phase 1 (not Phase 3), so Phases 3 and 4 could theoreti
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation and Authentication | 3/3 | Complete   | 2026-03-09 |
-| 2. Core Monitoring Dashboard | 0/2 | Not started | - |
+| 2. Core Monitoring Dashboard | 0/4 | Not started | - |
 | 3. Area Chart | 0/2 | Not started | - |
 | 4. Local Data Pipeline | 0/3 | Not started | - |
 | 5. Cost Analytics | 0/2 | Not started | - |
