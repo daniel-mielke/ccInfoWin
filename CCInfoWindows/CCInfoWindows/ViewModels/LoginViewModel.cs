@@ -143,6 +143,16 @@ public partial class LoginViewModel : ObservableObject
         {
             _loginHandled = true;
             _credentialService.SaveSessionToken(sessionCookie.Value);
+
+            // Extract lastActiveOrg cookie for API URL construction.
+            // If missing, org ID will be fetched via /api/organizations on first poll.
+            var orgCookie = cookies.FirstOrDefault(c =>
+                string.Equals(c.Name, "lastActiveOrg", StringComparison.Ordinal));
+            if (orgCookie is not null)
+            {
+                _credentialService.SaveOrganizationId(orgCookie.Value);
+            }
+
             WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(true));
             _navigationService.NavigateTo<MainView>();
         }
