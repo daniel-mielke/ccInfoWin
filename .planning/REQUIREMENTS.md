@@ -16,8 +16,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### 5-Hour Usage Window
 
-- [ ] **5HUR-01**: Current usage percentage within the sliding 5-hour window is displayed
-- [ ] **5HUR-02**: Reset countdown shows remaining time until window resets (e.g. "2h 14min")
+- [x] **5HUR-01**: Current usage percentage within the sliding 5-hour window is displayed
+- [x] **5HUR-02**: Reset countdown shows remaining time until window resets (e.g. "2h 14min")
 - [ ] **5HUR-03**: Interactive area chart visualizes usage over the full 5-hour window
 - [ ] **5HUR-04**: Chart fill and line color interpolates by zone (green 0-50%, yellow 50-75%, orange 75-90%, red 90-100%)
 - [ ] **5HUR-05**: Glowing position indicator at current time point in chart
@@ -28,9 +28,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Weekly Usage Limit
 
-- [ ] **WEEK-01**: Weekly 7-day quota displayed as percentage with progress bar
-- [ ] **WEEK-02**: Separate Sonnet and Opus weekly usage displayed as individual progress bars
-- [ ] **WEEK-03**: Reset countdown and reset date/time shown for each weekly limit
+- [x] **WEEK-01**: Weekly 7-day quota displayed as percentage with progress bar
+- [x] **WEEK-02**: Separate Sonnet and Opus weekly usage displayed as individual progress bars
+- [x] **WEEK-03**: Reset countdown and reset date/time shown for each weekly limit
 
 ### Context Window
 
@@ -77,7 +77,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **SETT-03**: Session activity threshold configuration
 - [ ] **SETT-04**: Language support for German and English (follows system language or manual selection)
 - [ ] **SETT-05**: Manual dark/light mode toggle with immediate application
-- [ ] **SETT-06**: Color mode persisted locally, restored on startup (default: dark)
+- [x] **SETT-06**: Color mode persisted locally, restored on startup (default: dark)
 - [ ] **SETT-07**: Settings displayed in-app (same window, frame navigation) — no separate window
 
 ### Auto-Update
@@ -89,9 +89,9 @@ Requirements for initial release. Each maps to roadmap phases.
 ### UI & Platform
 
 - [x] **UIPF-01**: Persistent standalone window (not popup, not tray icon)
-- [ ] **UIPF-02**: Opaque background following light/dark color scheme
+- [x] **UIPF-02**: Opaque background following light/dark color scheme
 - [x] **UIPF-03**: Compact layout matching macOS MenuBar popup layout order
-- [ ] **UIPF-04**: Unified color thresholds for all progress bars (green/yellow/orange/red)
+- [x] **UIPF-04**: Unified color thresholds for all progress bars (green/yellow/orange/red)
 - [ ] **UIPF-05**: Window position saved on close and restored on startup
 - [x] **UIPF-06**: Fixed window width (~360px), not resizable, minimizable
 - [ ] **UIPF-07**: All interactive elements screen-reader compatible (accessibility labels)
@@ -160,8 +160,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-02 | Phase 1 | Complete |
 | AUTH-03 | Phase 1 | Complete |
 | AUTH-04 | Phase 1 | Complete |
-| 5HUR-01 | Phase 2 | Pending |
-| 5HUR-02 | Phase 2 | Pending |
+| 5HUR-01 | Phase 2 | Complete |
+| 5HUR-02 | Phase 2 | Complete |
 | 5HUR-03 | Phase 3 | Pending |
 | 5HUR-04 | Phase 3 | Pending |
 | 5HUR-05 | Phase 3 | Pending |
@@ -169,9 +169,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | 5HUR-07 | Phase 3 | Pending |
 | 5HUR-08 | Phase 3 | Pending |
 | 5HUR-09 | Phase 3 | Pending |
-| WEEK-01 | Phase 2 | Pending |
-| WEEK-02 | Phase 2 | Pending |
-| WEEK-03 | Phase 2 | Pending |
+| WEEK-01 | Phase 2 | Complete |
+| WEEK-02 | Phase 2 | Complete |
+| WEEK-03 | Phase 2 | Complete |
 | CTXW-01 | Phase 4 | Pending |
 | CTXW-02 | Phase 4 | Pending |
 | CTXW-03 | Phase 4 | Pending |
@@ -200,15 +200,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SETT-03 | Phase 4 | Pending |
 | SETT-04 | Phase 6 | Pending |
 | SETT-05 | Phase 2 | Pending |
-| SETT-06 | Phase 2 | Pending |
+| SETT-06 | Phase 2 | Complete |
 | SETT-07 | Phase 6 | Pending |
 | UPDT-01 | Phase 6 | Pending |
 | UPDT-02 | Phase 6 | Pending |
 | UPDT-03 | Phase 6 | Pending |
 | UIPF-01 | Phase 1 | Complete |
-| UIPF-02 | Phase 2 | Pending |
+| UIPF-02 | Phase 2 | Complete |
 | UIPF-03 | Phase 1 | Complete |
-| UIPF-04 | Phase 2 | Pending |
+| UIPF-04 | Phase 2 | Complete |
 | UIPF-05 | Phase 6 | Pending |
 | UIPF-06 | Phase 1 | Complete |
 | UIPF-07 | Phase 6 | Pending |
