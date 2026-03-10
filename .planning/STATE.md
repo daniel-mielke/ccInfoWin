@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-01-PLAN.md
+stopped_at: Completed 02-02-PLAN.md
 last_updated: "2026-03-10T11:27:58.042Z"
-last_activity: 2026-03-10 — Plan 02-01 executed (contracts, models, helpers, tests)
+last_activity: 2026-03-10 — Plan 02-02 executed (API service, caching, retry, tests)
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 7
-  completed_plans: 4
-  percent: 57
+  completed_plans: 5
+  percent: 62
 ---
 
 # Project State
@@ -21,37 +21,38 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** Developers can see their Claude usage limits (5-hour window, weekly quota, context window) at a glance in real-time, preventing unexpected throttling.
-**Current focus:** Phase 2 in progress -- contracts and foundations done, API service next
+**Current focus:** Phase 2 in progress -- API service done, dashboard ViewModel next
 
 ## Current Position
 
 Phase: 2 of 6 (Core Monitoring Dashboard)
-Plan: 1 of 4 in current phase (02-01 complete)
+Plan: 2 of 4 in current phase (02-02 complete)
 Status: Phase 2 in progress
-Last activity: 2026-03-10 — Plan 02-01 executed (contracts, models, helpers, tests)
+Last activity: 2026-03-10 — Plan 02-02 executed (API service, caching, retry, tests)
 
-Progress: [██████░░░░] 57%
+Progress: [██████░░░░] 62%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 43 min
-- Total execution time: 2.90 hours
+- Total plans completed: 5
+- Average duration: 36 min
+- Total execution time: 2.97 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1 - Foundation | 3/3 | 168 min | 56 min |
-| 2 - Core Monitoring | 1/4 | 4 min | 4 min |
+| 2 - Core Monitoring | 2/4 | 8 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (9 min), 01-02 (7 min), 01-03 (152 min), 02-01 (4 min)
-- Trend: 02-01 was pure code generation, no runtime verification needed
+- Last 5 plans: 01-01 (9 min), 01-02 (7 min), 01-03 (152 min), 02-01 (4 min), 02-02 (4 min)
+- Trend: 02-01 and 02-02 were pure code generation, no runtime verification needed
 
 *Updated after each plan completion*
 | Phase 02 P01 | 4 | 3 tasks | 19 files |
+| Phase 02 P02 | 4 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,8 @@ Recent decisions affecting current work:
 - [Phase 02]: Separate credential target 'CCInfoWindows/claude-org' for org ID storage
 - [Phase 02]: ClearCredentials cleans both session and org credential entries
 - [Phase 02]: GlobalUsings.cs for test project (xunit 2.9.3 needs explicit using)
+- 02-02: Cache directory injectable via constructor for testability
+- 02-02: Uri.AbsoluteUri for URL assertions (Uri.ToString() decodes %20 to spaces)
 
 ### Pending Todos
 
@@ -90,5 +93,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-10T11:27:52.548Z
-Stopped at: Completed 02-01-PLAN.md
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None

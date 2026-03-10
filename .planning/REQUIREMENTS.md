@@ -99,8 +99,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Data Sources
 
-- [ ] **DATA-01**: Claude.ai API polled for 5-hour and weekly usage data via authenticated requests
-- [ ] **DATA-02**: Organization IDs percent-encoded in API URLs
+- [x] **DATA-01**: Claude.ai API polled for 5-hour and weekly usage data via authenticated requests
+- [x] **DATA-02**: Organization IDs percent-encoded in API URLs
 - [ ] **DATA-03**: JSONL files read from %USERPROFILE%\.claude\projects\ with streaming (last ~1MB only)
 - [ ] **DATA-04**: JSONL file changes detected via FileSystemWatcher with debouncing
 - [ ] **DATA-05**: LiteLLM pricing cache persisted locally with fallback to bundled prices
@@ -213,8 +213,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UIPF-06 | Phase 1 | Complete |
 | UIPF-07 | Phase 6 | Pending |
 | UIPF-08 | Phase 1 | Complete |
-| DATA-01 | Phase 2 | Pending |
-| DATA-02 | Phase 2 | Pending |
+| DATA-01 | Phase 2 | Complete |
+| DATA-02 | Phase 2 | Complete |
 | DATA-03 | Phase 4 | Pending |
 | DATA-04 | Phase 4 | Pending |
 | DATA-05 | Phase 5 | Pending |
