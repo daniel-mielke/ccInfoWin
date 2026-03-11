@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-03-11T17:31:14.893Z"
+stopped_at: "Checkpoint 04-03-PLAN.md Task 3: awaiting human-verify"
+last_updated: "2026-03-11T17:43:06.303Z"
 last_activity: 2026-03-11 — Plan 04-01 executed (data contracts, helpers, IJsonlService, unit tests)
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 13
-  completed_plans: 12
+  completed_plans: 13
   percent: 78
 ---
 
@@ -99,6 +99,9 @@ Recent decisions affecting current work:
 - 04-01: ModelContextLimits uses StringComparer.OrdinalIgnoreCase for case-insensitive model name lookup
 - [Phase 04-02]: ReadTailLines/ParseJsonlEntries as public static for direct testability without InitializeAsync lifecycle
 - [Phase 04-02]: LastAssistantEntry replaced per message (context window = last snapshot, not cumulative)
+- [Phase 04-local-data-pipeline]: CollectionViewSource Source set from code-behind OnLoaded and GroupedSessions PropertyChanged handler — x:Bind limitation with Page.Resources CollectionViewSource in WinUI 3
+- [Phase 04-local-data-pipeline]: SessionGroup implements IGrouping<string,SessionInfo> backed by List<T> for grouped ComboBox CollectionViewSource
+- [Phase 04-local-data-pipeline]: SelectedThresholdIndex in SettingsViewModel maps 0=15,1=30,2=60,3=120 minutes with default index 1 (30 min)
 
 ### Pending Todos
 
@@ -115,6 +118,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-11T17:31:14.888Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-03-11T17:42:51.110Z
+Stopped at: Checkpoint 04-03-PLAN.md Task 3: awaiting human-verify
 Resume file: None
