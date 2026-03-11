@@ -18,13 +18,13 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **5HUR-01**: Current usage percentage within the sliding 5-hour window is displayed
 - [x] **5HUR-02**: Reset countdown shows remaining time until window resets (e.g. "2h 14min")
-- [ ] **5HUR-03**: Interactive area chart visualizes usage over the full 5-hour window
-- [ ] **5HUR-04**: Chart fill and line color interpolates by zone (green 0-50%, yellow 50-75%, orange 75-90%, red 90-100%)
-- [ ] **5HUR-05**: Glowing position indicator at current time point in chart
-- [ ] **5HUR-06**: Chart shows Y-axis labels (0%, 50%, 100%) and X-axis labels (0h-5h) with dashed threshold lines
+- [x] **5HUR-03**: Interactive area chart visualizes usage over the full 5-hour window
+- [x] **5HUR-04**: Chart fill and line color interpolates by zone (green 0-50%, yellow 50-75%, orange 75-90%, red 90-100%)
+- [x] **5HUR-05**: Glowing position indicator at current time point in chart
+- [x] **5HUR-06**: Chart shows Y-axis labels (0%, 50%, 100%) and X-axis labels (0h-5h) with dashed threshold lines
 - [x] **5HUR-07**: Usage history is persisted locally and survives app restart
 - [x] **5HUR-08**: Automatic reset detection clears history when 5-hour window resets
-- [ ] **5HUR-09**: Chart colors are slightly desaturated in dark mode
+- [x] **5HUR-09**: Chart colors are slightly desaturated in dark mode
 
 ### Weekly Usage Limit
 
@@ -162,13 +162,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-04 | Phase 1 | Complete |
 | 5HUR-01 | Phase 2 | Complete |
 | 5HUR-02 | Phase 2 | Complete |
-| 5HUR-03 | Phase 3 | Pending |
-| 5HUR-04 | Phase 3 | Pending |
-| 5HUR-05 | Phase 3 | Pending |
-| 5HUR-06 | Phase 3 | Pending |
+| 5HUR-03 | Phase 3 | Complete |
+| 5HUR-04 | Phase 3 | Complete |
+| 5HUR-05 | Phase 3 | Complete |
+| 5HUR-06 | Phase 3 | Complete |
 | 5HUR-07 | Phase 3 | Complete |
 | 5HUR-08 | Phase 3 | Complete |
-| 5HUR-09 | Phase 3 | Pending |
+| 5HUR-09 | Phase 3 | Complete |
 | WEEK-01 | Phase 2 | Complete |
 | WEEK-02 | Phase 2 | Complete |
 | WEEK-03 | Phase 2 | Complete |
