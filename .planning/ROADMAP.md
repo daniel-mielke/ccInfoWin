@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation and Authentication** - Project scaffold, navigation shell, WebView2 login, credential storage, security baseline (completed 2026-03-09)
 - [x] **Phase 2: Core Monitoring Dashboard** - API polling for 5-hour and weekly usage display with progress bars, theme support, refresh settings (completed 2026-03-11)
-- [ ] **Phase 3: Area Chart** - Win2D interactive area chart with color zones, glow indicator, usage history persistence (gap closure in progress)
+- [x] **Phase 3: Area Chart** - Win2D interactive area chart with color zones, glow indicator, usage history persistence (gap closure in progress) (completed 2026-03-11)
 - [ ] **Phase 4: Local Data Pipeline** - JSONL file watching, multi-session management, context window status, token counting
 - [ ] **Phase 5: Cost Analytics** - LiteLLM pricing integration, cost calculation with tiered pricing, burn rate, token stats UI
 - [ ] **Phase 6: Export, Polish, and Distribution** - Chart export, localization, autostart, auto-update, accessibility, Inno Setup installer
@@ -130,7 +130,7 @@ Note: Phase 4 depends on Phase 1 (not Phase 3), so Phases 3 and 4 could theoreti
 |-------|----------------|--------|-----------|
 | 1. Foundation and Authentication | 3/3 | Complete   | 2026-03-09 |
 | 2. Core Monitoring Dashboard | 4/4 | Complete   | 2026-03-11 |
-| 3. Area Chart | 2/3 | Gap closure | - |
+| 3. Area Chart | 3/3 | Complete   | 2026-03-11 |
 | 4. Local Data Pipeline | 0/3 | Not started | - |
 | 5. Cost Analytics | 0/2 | Not started | - |
 | 6. Export, Polish, and Distribution | 0/3 | Not started | - |
