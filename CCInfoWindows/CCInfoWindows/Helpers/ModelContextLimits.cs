@@ -59,7 +59,7 @@ public static class ModelContextLimits
             return false;
 
         var utilization = (double)totalTokens / maxTokens;
-        var threshold = maxTokens >= LargeModelThresholdTokens
+        var threshold = maxTokens > LargeModelThresholdTokens
             ? LargeModelAutocompactThreshold
             : SmallModelAutocompactThreshold;
 
