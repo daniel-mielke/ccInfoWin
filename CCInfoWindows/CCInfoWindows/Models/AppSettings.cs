@@ -20,4 +20,10 @@ public class AppSettings
 
     [JsonPropertyName("colorMode")]
     public string ColorMode { get; set; } = "dark";
+
+    [JsonPropertyName("lastSelectedSessionId")]
+    public string? LastSelectedSessionId { get; set; }
+
+    [JsonPropertyName("sessionActivityThresholdMinutes")]
+    public int SessionActivityThresholdMinutes { get; set; } = 30;
 }
