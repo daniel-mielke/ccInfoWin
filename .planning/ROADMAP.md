@@ -13,8 +13,8 @@ ccInfoWin is a Windows port of the macOS ccInfo app for real-time Claude Code us
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation and Authentication** - Project scaffold, navigation shell, WebView2 login, credential storage, security baseline (completed 2026-03-09)
-- [ ] **Phase 2: Core Monitoring Dashboard** - API polling for 5-hour and weekly usage display with progress bars, theme support, refresh settings
-- [x] **Phase 3: Area Chart** - Win2D interactive area chart with color zones, glow indicator, usage history persistence (completed 2026-03-11)
+- [x] **Phase 2: Core Monitoring Dashboard** - API polling for 5-hour and weekly usage display with progress bars, theme support, refresh settings (completed 2026-03-11)
+- [ ] **Phase 3: Area Chart** - Win2D interactive area chart with color zones, glow indicator, usage history persistence (gap closure in progress)
 - [ ] **Phase 4: Local Data Pipeline** - JSONL file watching, multi-session management, context window status, token counting
 - [ ] **Phase 5: Cost Analytics** - LiteLLM pricing integration, cost calculation with tiered pricing, burn rate, token stats UI
 - [ ] **Phase 6: Export, Polish, and Distribution** - Chart export, localization, autostart, auto-update, accessibility, Inno Setup installer
@@ -64,11 +64,12 @@ Plans:
   2. Chart fill color interpolates by zone (green/yellow/orange/red) with slightly desaturated colors in dark mode
   3. Glowing position indicator shows current time point on the chart
   4. Usage history survives app restart and automatically clears when the 5-hour window resets
-**Plans**: 2 plans
+**Plans**: 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Usage history data model, persistence service, Win2D NuGet, DI registration
-- [ ] 03-02-PLAN.md — Chart renderer, Win2D CanvasControl, Draw handler, poll cycle wiring, reset detection
+- [x] 03-01-PLAN.md — Usage history data model, persistence service, Win2D NuGet, DI registration
+- [x] 03-02-PLAN.md — Chart renderer, Win2D CanvasControl, Draw handler, poll cycle wiring, reset detection
+- [ ] 03-03-PLAN.md — Gap closure: fix single-point segment rendering, right-edge extension, stale history on startup
 
 ### Phase 4: Local Data Pipeline
 **Goal**: User can see context window status, switch between sessions, and view token counts -- all derived from local JSONL files without API dependency
@@ -122,14 +123,14 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 Note: Phase 4 depends on Phase 1 (not Phase 3), so Phases 3 and 4 could theoretically execute in parallel.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation and Authentication | 3/3 | Complete   | 2026-03-09 |
-| 2. Core Monitoring Dashboard | 3/4 | In Progress|  |
-| 3. Area Chart | 2/2 | Complete   | 2026-03-11 |
+| 2. Core Monitoring Dashboard | 4/4 | Complete   | 2026-03-11 |
+| 3. Area Chart | 2/3 | Gap closure | - |
 | 4. Local Data Pipeline | 0/3 | Not started | - |
 | 5. Cost Analytics | 0/2 | Not started | - |
 | 6. Export, Polish, and Distribution | 0/3 | Not started | - |

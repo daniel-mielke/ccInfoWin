@@ -182,4 +182,60 @@ public class ChartRendererTests
         var segments = ChartRenderer.GetZoneSegments([]);
         Assert.Empty(segments);
     }
+
+    // --- GetRightEdgeAbsoluteX tests ---
+
+    [Fact]
+    public void GetRightEdgeAbsoluteX_MidSegment_ReturnsNextPointX()
+    {
+        // endIndex < last point: right edge is next point's X (canvas-absolute)
+        const float plotWidth = 200f;
+        var windowStart = DateTimeOffset.UtcNow.AddHours(-2);
+        var points = new List<UsageHistoryPoint>
+        {
+            new() { Timestamp = windowStart.AddHours(1), Utilization = 0.3 },
+            new() { Timestamp = windowStart.AddHours(1.5), Utilization = 0.5 }
+        };
+
+        var result = ChartRenderer.GetRightEdgeAbsoluteX(points, endIndex: 0, windowStart, plotWidth);
+
+        var expectedRelativeX = ChartRenderer.ToX(points[1].Timestamp, windowStart, plotWidth);
+        var expectedAbsoluteX = ChartRenderer.LeftMargin + expectedRelativeX;
+        Assert.Equal(expectedAbsoluteX, result, precision: 2);
+    }
+
+    [Fact]
+    public void GetRightEdgeAbsoluteX_LastSegmentNowWithinWindow_ReturnsNowX()
+    {
+        // endIndex == last point, now is within the 5-hour window
+        const float plotWidth = 200f;
+        var windowStart = DateTimeOffset.UtcNow.AddHours(-2); // now is 2h into a 5h window
+        var points = new List<UsageHistoryPoint>
+        {
+            new() { Timestamp = windowStart.AddHours(1), Utilization = 0.3 }
+        };
+
+        var result = ChartRenderer.GetRightEdgeAbsoluteX(points, endIndex: 0, windowStart, plotWidth);
+
+        // now is within the 5-hour window, so nowX < plotWidth -- result should be LeftMargin + nowX
+        var nowX = ChartRenderer.ToX(DateTimeOffset.UtcNow, windowStart, plotWidth);
+        var expectedAbsoluteX = ChartRenderer.LeftMargin + Math.Min(nowX, plotWidth);
+        Assert.Equal(expectedAbsoluteX, result, precision: 1);
+    }
+
+    [Fact]
+    public void GetRightEdgeAbsoluteX_LastSegmentNowBeyondWindow_ClampsToPlotWidth()
+    {
+        // endIndex == last point, now is past the 5-hour window end -- clamp to plotWidth
+        const float plotWidth = 200f;
+        var windowStart = DateTimeOffset.UtcNow.AddHours(-6); // window ended 1 hour ago
+        var points = new List<UsageHistoryPoint>
+        {
+            new() { Timestamp = windowStart.AddHours(1), Utilization = 0.3 }
+        };
+
+        var result = ChartRenderer.GetRightEdgeAbsoluteX(points, endIndex: 0, windowStart, plotWidth);
+
+        Assert.Equal(ChartRenderer.LeftMargin + plotWidth, result, precision: 2);
+    }
 }
