@@ -74,19 +74,19 @@ Plans:
 ### Phase 4: Local Data Pipeline
 **Goal**: User can see context window status, switch between sessions, and view token counts -- all derived from local JSONL files without API dependency
 **Depends on**: Phase 1
-**Requirements**: DATA-03, DATA-04, DATA-05, SESS-01, SESS-02, SESS-03, SESS-04, SESS-05, CTXW-01, CTXW-02, CTXW-03, CTXW-04, CTXW-05, TOKS-01, SETT-03
+**Requirements**: DATA-03, DATA-04, SESS-01, SESS-02, SESS-03, SESS-04, SESS-05, CTXW-01, CTXW-02, CTXW-03, CTXW-04, CTXW-05, TOKS-01, SETT-03
 **Success Criteria** (what must be TRUE):
   1. User sees a session dropdown listing all active Claude Code sessions with readable project names, and can switch sessions without flicker or auto-switching away from current selection
   2. User sees main context window utilization with progress bar, percentage, and model badge, plus subagent context bars when active
   3. Autocompact warning appears at >= 95% context utilization (>= 90% for 200K models), and "No active session" shown when none exists
   4. User sees input/output token counters aggregated by session with JSONL deduplication preventing double-counting
   5. JSONL file changes are detected automatically via FileSystemWatcher with debouncing, reading only the last ~1MB
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
-- [ ] 04-03: TBD
+- [ ] 04-01-PLAN.md — Models, interfaces, helpers (TokenFormatter, ModelContextLimits, SessionNameHelper), unit tests
+- [ ] 04-02-PLAN.md — JsonlService implementation (tail read, JSONL parsing, FileSystemWatcher, cache, DI registration)
+- [ ] 04-03-PLAN.md — Dashboard UI (session dropdown, context window section, token counters, settings threshold)
 
 ### Phase 5: Cost Analytics
 **Goal**: User can see what their Claude usage costs with live pricing, time-period breakdowns, and burn rate
