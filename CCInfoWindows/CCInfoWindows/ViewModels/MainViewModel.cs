@@ -154,12 +154,23 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
 
         // Load persisted history for instant chart display before first poll
         var history = _historyService.LoadHistory();
-        UsageHistoryPoints = history.Points.AsReadOnly();
-        if (history.ResetsAt.HasValue && _fiveHourResetsAt == null)
+
+        // Clear stale data when the persisted window has already expired
+        if (history.ResetsAt.HasValue && history.ResetsAt.Value < DateTimeOffset.UtcNow)
         {
-            _fiveHourResetsAt = history.ResetsAt;
+            _historyService.ClearHistory();
+            history = new UsageHistory();
         }
-        ChartInvalidateCallback?.Invoke();
+
+        if (history.Points.Count > 0)
+        {
+            UsageHistoryPoints = history.Points.AsReadOnly();
+            if (history.ResetsAt.HasValue)
+            {
+                _fiveHourResetsAt = history.ResetsAt;
+            }
+            ChartInvalidateCallback?.Invoke();
+        }
 
         // Load cache for instant display
         var cached = await _apiService.LoadCacheAsync();
@@ -236,7 +247,6 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             FiveHourCountdown = CountdownFormatter.FormatCountdown(data.FiveHour.ResetsAt);
 
             AppendHistoryPoint(data.FiveHour.ResetsAt, util);
-            _fiveHourResetsAt = data.FiveHour.ResetsAt;
         }
         else
         {
@@ -316,6 +326,9 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         });
 
         _historyService.SaveHistory(history);
+
+        // Set window timestamp BEFORE invalidating chart so FiveHourWindowStart is non-null when draw handler runs
+        _fiveHourResetsAt = apiResetsAt;
         UsageHistoryPoints = history.Points.AsReadOnly();
         ChartInvalidateCallback?.Invoke();
     }
