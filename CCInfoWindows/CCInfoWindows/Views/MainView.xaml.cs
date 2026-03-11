@@ -49,6 +49,7 @@ public sealed partial class MainView : Page
     {
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
         ViewModel.ChartInvalidateCallback = () => UsageChart.Invalidate();
+        GroupedSessionsSource.Source = ViewModel.GroupedSessions;
 
         var bridge = App.Services.GetRequiredService<WebViewBridge>();
         if (!bridge.IsInitialized)
@@ -95,7 +96,7 @@ public sealed partial class MainView : Page
         var width = (float)sender.ActualWidth;
         var height = (float)sender.ActualHeight;
         var plotWidth = width - ChartRenderer.LeftMargin;
-        var plotHeight = height - ChartRenderer.BottomMargin;
+        var plotHeight = height - ChartRenderer.BottomMargin - ChartRenderer.TopMargin;
         var isDark = ActualTheme == ElementTheme.Dark;
 
         DrawAxesAndLabels(session, plotWidth, plotHeight, isDark);
@@ -118,23 +119,27 @@ public sealed partial class MainView : Page
         var lineStart = ChartRenderer.LeftMargin;
         var lineEnd = ChartRenderer.LeftMargin + plotWidth;
 
-        // Dashed threshold lines at 50% and 100%
+        // Dashed threshold lines at 0%, 50%, and 100%
+        var y0 = ChartRenderer.ToY(0.0, plotHeight);
         var y50 = ChartRenderer.ToY(0.5, plotHeight);
         var y100 = ChartRenderer.ToY(1.0, plotHeight);
+        session.DrawLine(lineStart, y0, lineEnd, y0, thresholdColor, 1f, DashStrokeStyle);
         session.DrawLine(lineStart, y50, lineEnd, y50, thresholdColor, 1f, DashStrokeStyle);
         session.DrawLine(lineStart, y100, lineEnd, y100, thresholdColor, 1f, DashStrokeStyle);
 
-        // Y-axis labels
-        session.DrawText("100%", 0, y100, labelColor, AxisLabelFormat);
-        session.DrawText("50%", 0, y50, labelColor, AxisLabelFormat);
-        session.DrawText("0%", 0, plotHeight, labelColor, AxisLabelFormat);
+        // Y-axis labels (offset upward so text baseline aligns with line)
+        session.DrawText("100%", 0, y100 - 6f, labelColor, AxisLabelFormat);
+        session.DrawText("50%", 0, y50 - 6f, labelColor, AxisLabelFormat);
+        session.DrawText("0%", 0, y0 - 6f, labelColor, AxisLabelFormat);
 
         // X-axis labels: 0h through 5h
         for (var hour = 0; hour <= 5; hour++)
         {
             var xRatio = hour / 5f;
             var x = ChartRenderer.LeftMargin + (xRatio * plotWidth);
-            session.DrawText($"{hour}h", x, plotHeight + 2f, labelColor, AxisLabelFormat);
+            // Shift last label left so it doesn't clip beyond the canvas edge
+            if (hour == 5) x -= 14f;
+            session.DrawText($"{hour}h", x, y0 + 2f, labelColor, AxisLabelFormat);
         }
     }
 
@@ -147,6 +152,7 @@ public sealed partial class MainView : Page
         float plotHeight,
         bool isDark)
     {
+        var baselineY = ChartRenderer.ToY(0.0, plotHeight);
         var segments = ChartRenderer.GetZoneSegments(points);
         foreach (var (startIndex, endIndex, brushKey) in segments)
         {
@@ -156,7 +162,7 @@ public sealed partial class MainView : Page
 
             using var pathBuilder = new CanvasPathBuilder(resourceCreator);
             var firstX = ChartRenderer.LeftMargin + ChartRenderer.ToX(points[startIndex].Timestamp, windowStart, plotWidth);
-            pathBuilder.BeginFigure(firstX, plotHeight);
+            pathBuilder.BeginFigure(firstX, baselineY);
 
             for (var i = startIndex; i <= endIndex; i++)
             {
@@ -177,7 +183,7 @@ public sealed partial class MainView : Page
 
             var lastY = ChartRenderer.ToY(points[endIndex].Utilization, plotHeight);
             pathBuilder.AddLine(rightEdgeX, lastY);
-            pathBuilder.AddLine(rightEdgeX, plotHeight);
+            pathBuilder.AddLine(rightEdgeX, baselineY);
             pathBuilder.EndFigure(CanvasFigureLoop.Closed);
 
             using var geometry = CanvasGeometry.CreatePath(pathBuilder);
@@ -233,10 +239,10 @@ public sealed partial class MainView : Page
         bool isDark)
     {
         var lastPoint = points[^1];
-        var x = ChartRenderer.LeftMargin + ChartRenderer.ToX(lastPoint.Timestamp, windowStart, plotWidth);
+        var x = ChartRenderer.GetRightEdgeAbsoluteX(points, points.Count - 1, windowStart, plotWidth);
         var y = ChartRenderer.ToY(lastPoint.Utilization, plotHeight);
         var zoneColor = ChartColors.GetZoneColor(lastPoint.Utilization, isDark);
-        var glowColor = Color.FromArgb(77, zoneColor.R, zoneColor.G, zoneColor.B);
+        var glowColor = Color.FromArgb(115, zoneColor.R, zoneColor.G, zoneColor.B);
 
         // Draw glow halo via command list + blur
         using var commandList = new CanvasCommandList(resourceCreator);
@@ -268,6 +274,10 @@ public sealed partial class MainView : Page
             {
                 SpinnerStoryboard.Stop();
             }
+        }
+        else if (e.PropertyName == nameof(MainViewModel.GroupedSessions))
+        {
+            GroupedSessionsSource.Source = ViewModel.GroupedSessions;
         }
     }
 }

@@ -11,6 +11,7 @@
                 <ResourceDictionary Source="ms-appx:///Resources/AppTheme.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+            <converters:InvertedBoolToVisibilityConverter x:Key="InvertedBoolToVisibilityConverter" />
             <converters:PercentageToColorConverter x:Key="PercentageToColorConverter" />
         </ResourceDictionary>
     </Application.Resources>

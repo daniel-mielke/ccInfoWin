@@ -6,6 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
+    xmlns:viewmodels="using:CCInfoWindows.ViewModels"
     mc:Ignorable="d">
 
     <Page.Resources>
@@ -17,6 +18,10 @@
                 From="0" To="360"
                 Duration="0:0:1" />
         </Storyboard>
+
+        <!-- Grouped sessions source for session ComboBox -->
+        <CollectionViewSource x:Name="GroupedSessionsSource"
+                              IsSourceGrouped="True" />
     </Page.Resources>
 
     <Grid Background="{ThemeResource AppBackgroundBrush}"
@@ -46,6 +51,36 @@
         <!-- Row 1: Dashboard content -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel Spacing="16" Padding="0,4,0,4">
+
+                <!-- ==================== SESSION DROPDOWN ==================== -->
+                <ComboBox x:Name="SessionComboBox"
+                          ItemsSource="{Binding Source={StaticResource GroupedSessionsSource}}"
+                          SelectedItem="{x:Bind ViewModel.SelectedSession, Mode=TwoWay}"
+                          DisplayMemberPath="DisplayName"
+                          HorizontalAlignment="Stretch"
+                          PlaceholderText="Keine aktive Session">
+                    <ComboBox.GroupStyle>
+                        <GroupStyle>
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Key}"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               Foreground="{ThemeResource SectionHeaderBrush}"
+                                               CharacterSpacing="30"
+                                               Margin="0,4,0,2" />
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                        </GroupStyle>
+                    </ComboBox.GroupStyle>
+                </ComboBox>
+
+                <!-- Scanning indicator -->
+                <TextBlock Text="Sitzungen werden gesucht..."
+                           FontSize="12"
+                           Foreground="{ThemeResource SecondaryTextBrush}"
+                           HorizontalAlignment="Center"
+                           Visibility="{x:Bind ViewModel.IsJsonlScanning, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                 <!-- "Aktualisiere..." indicator on startup -->
                 <TextBlock
@@ -214,6 +249,115 @@
                                 FontSize="12"
                                 Foreground="{ThemeResource TertiaryTextBrush}"
                                 HorizontalAlignment="Right" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+
+                <!-- Divider before KONTEXTFENSTER -->
+                <Border Height="1" Background="{ThemeResource DividerBrush}" />
+
+                <!-- ==================== KONTEXTFENSTER ==================== -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="KONTEXTFENSTER"
+                               FontSize="11" FontWeight="SemiBold"
+                               Foreground="{ThemeResource SectionHeaderBrush}"
+                               CharacterSpacing="50" />
+
+                    <!-- Main context progress bar -->
+                    <ProgressBar Value="{x:Bind ViewModel.ContextPercentage, Mode=OneWay}"
+                                 Maximum="100"
+                                 Foreground="{x:Bind ViewModel.ContextUtilization, Mode=OneWay, Converter={StaticResource PercentageToColorConverter}}"
+                                 Background="{ThemeResource ProgressTrackBrush}"
+                                 Height="6" CornerRadius="3" />
+
+                    <!-- Percentage + model badge row -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{x:Bind ViewModel.ContextPercentageText, Mode=OneWay}"
+                                   FontSize="28" FontWeight="Bold"
+                                   Foreground="{ThemeResource PrimaryTextBrush}" />
+                        <!-- Model badge chip -->
+                        <Border Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                Background="{ThemeResource ChartBackgroundBrush}"
+                                CornerRadius="10" Padding="8,3">
+                            <TextBlock Text="{x:Bind ViewModel.ContextModelBadge, Mode=OneWay}"
+                                       FontSize="11"
+                                       Foreground="{ThemeResource SecondaryTextBrush}" />
+                        </Border>
+                    </Grid>
+
+                    <!-- Autocompact warning -->
+                    <TextBlock Text="&#x26A0; Autocompact bald"
+                               FontSize="12"
+                               Foreground="{ThemeResource ProgressOrangeBrush}"
+                               Visibility="{x:Bind ViewModel.ShowAutocompactWarning, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                    <!-- No active session placeholder -->
+                    <TextBlock Text="Keine aktive Session"
+                               FontSize="12"
+                               Foreground="{ThemeResource TertiaryTextBrush}"
+                               Visibility="{x:Bind ViewModel.HasActiveSession, Mode=OneWay, Converter={StaticResource InvertedBoolToVisibilityConverter}}" />
+
+                    <!-- Subagent context bars (dynamic) -->
+                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.SubagentContexts, Mode=OneWay}">
+                        <ItemsRepeater.ItemTemplate>
+                            <DataTemplate x:DataType="viewmodels:SubagentDisplayData">
+                                <StackPanel Spacing="4" Margin="12,4,0,0">
+                                    <ProgressBar Value="{x:Bind Percentage}" Maximum="100"
+                                                 Background="{ThemeResource ProgressTrackBrush}"
+                                                 Height="4" CornerRadius="2" />
+                                    <Grid>
+                                        <TextBlock Text="{x:Bind PercentageText}"
+                                                   FontSize="12"
+                                                   Foreground="{ThemeResource SecondaryTextBrush}" />
+                                        <Border HorizontalAlignment="Right"
+                                                Background="{ThemeResource ChartBackgroundBrush}"
+                                                CornerRadius="8" Padding="6,2">
+                                            <TextBlock Text="{x:Bind ModelBadge}"
+                                                       FontSize="10"
+                                                       Foreground="{ThemeResource TertiaryTextBrush}" />
+                                        </Border>
+                                    </Grid>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
+                </StackPanel>
+
+                <!-- Divider before TOKENS -->
+                <Border Height="1" Background="{ThemeResource DividerBrush}" />
+
+                <!-- ==================== TOKENS ==================== -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="TOKENS"
+                               FontSize="11" FontWeight="SemiBold"
+                               Foreground="{ThemeResource SectionHeaderBrush}"
+                               CharacterSpacing="50" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <!-- Input tokens -->
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="Input"
+                                       FontSize="11"
+                                       Foreground="{ThemeResource TertiaryTextBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.InputTokensText, Mode=OneWay}"
+                                       FontSize="20" FontWeight="SemiBold"
+                                       Foreground="{ThemeResource PrimaryTextBrush}" />
+                        </StackPanel>
+                        <!-- Output tokens -->
+                        <StackPanel Grid.Column="1" Spacing="2">
+                            <TextBlock Text="Output"
+                                       FontSize="11"
+                                       Foreground="{ThemeResource TertiaryTextBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.OutputTokensText, Mode=OneWay}"
+                                       FontSize="20" FontWeight="SemiBold"
+                                       Foreground="{ThemeResource PrimaryTextBrush}" />
                         </StackPanel>
                     </Grid>
                 </StackPanel>

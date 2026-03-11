@@ -38,6 +38,22 @@
             <!-- Divider -->
             <Border Height="1" Background="{ThemeResource DividerBrush}" />
 
+            <!-- Session activity timeout -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="Sitzungs-Timeout"
+                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}" />
+                <ComboBox SelectedIndex="{x:Bind ViewModel.SelectedThresholdIndex, Mode=TwoWay}"
+                          HorizontalAlignment="Stretch">
+                    <ComboBoxItem Content="15 Minuten" />
+                    <ComboBoxItem Content="30 Minuten" />
+                    <ComboBoxItem Content="60 Minuten" />
+                    <ComboBoxItem Content="120 Minuten" />
+                </ComboBox>
+            </StackPanel>
+
+            <!-- Divider -->
+            <Border Height="1" Background="{ThemeResource DividerBrush}" />
+
             <!-- Dark/Light mode -->
             <Grid>
                 <Grid.ColumnDefinitions>

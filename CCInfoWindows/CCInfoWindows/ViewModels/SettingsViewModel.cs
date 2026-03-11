@@ -37,6 +37,9 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _isDarkMode;
 
+    [ObservableProperty]
+    private int _selectedThresholdIndex;
+
     public SettingsViewModel(
         ISettingsService settingsService,
         ICredentialService credentialService,
@@ -46,6 +49,8 @@ public partial class SettingsViewModel : ObservableObject
         _credentialService = credentialService;
         _navigationService = navigationService;
     }
+
+    private static readonly int[] ThresholdMinuteOptions = [15, 30, 60, 120];
 
     /// <summary>
     /// Loads persisted settings and binds them to observable properties.
@@ -57,9 +62,11 @@ public partial class SettingsViewModel : ObservableObject
         _selectedRefreshOption = RefreshOptions.FirstOrDefault(o => o.Seconds == settings.RefreshIntervalSeconds)
                                  ?? RefreshOptions[1]; // default 60s
         _isDarkMode = settings.ColorMode != "light"; // default dark
+        _selectedThresholdIndex = MapMinutesToThresholdIndex(settings.SessionActivityThresholdMinutes);
 
         OnPropertyChanged(nameof(SelectedRefreshOption));
         OnPropertyChanged(nameof(IsDarkMode));
+        OnPropertyChanged(nameof(SelectedThresholdIndex));
     }
 
     partial void OnSelectedRefreshOptionChanged(RefreshOption value)
@@ -69,6 +76,27 @@ public partial class SettingsViewModel : ObservableObject
         _settingsService.SaveSettings(settings);
 
         WeakReferenceMessenger.Default.Send(new RefreshIntervalChangedMessage(value.Seconds));
+    }
+
+    partial void OnSelectedThresholdIndexChanged(int value)
+    {
+        var settings = _settingsService.LoadSettings();
+        settings.SessionActivityThresholdMinutes = MapThresholdIndexToMinutes(value);
+        _settingsService.SaveSettings(settings);
+    }
+
+    private static int MapThresholdIndexToMinutes(int index)
+    {
+        if (index >= 0 && index < ThresholdMinuteOptions.Length)
+            return ThresholdMinuteOptions[index];
+
+        return ThresholdMinuteOptions[1]; // default 30 minutes
+    }
+
+    private static int MapMinutesToThresholdIndex(int minutes)
+    {
+        var index = Array.IndexOf(ThresholdMinuteOptions, minutes);
+        return index >= 0 ? index : 1; // default to index 1 (30 minutes)
     }
 
     partial void OnIsDarkModeChanged(bool value)
