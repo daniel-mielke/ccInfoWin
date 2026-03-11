@@ -34,23 +34,23 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Context Window
 
-- [ ] **CTXW-01**: Main context window utilization shown with progress bar and percentage
-- [ ] **CTXW-02**: Model badge displayed next to context bar (e.g. "Opus 4.6", "Sonnet 4.6")
-- [ ] **CTXW-03**: Active subagent context windows shown with own model badge and progress bar
-- [ ] **CTXW-04**: Autocompact warning displayed at >= 95% context utilization (>= 90% for 200K models)
+- [x] **CTXW-01**: Main context window utilization shown with progress bar and percentage
+- [x] **CTXW-02**: Model badge displayed next to context bar (e.g. "Opus 4.6", "Sonnet 4.6")
+- [x] **CTXW-03**: Active subagent context windows shown with own model badge and progress bar
+- [x] **CTXW-04**: Autocompact warning displayed at >= 95% context utilization (>= 90% for 200K models)
 - [ ] **CTXW-05**: When no active session exists, show 0% bar with "No active session" message
 
 ### Multi-Session Management
 
-- [ ] **SESS-01**: Dropdown lists all active Claude Code sessions with project name from JSONL working directory
-- [ ] **SESS-02**: Configurable activity threshold to hide/mark inactive sessions
-- [ ] **SESS-03**: No flickering of stale data when switching sessions
-- [ ] **SESS-04**: App does not auto-switch away from the currently selected session when it becomes inactive
-- [ ] **SESS-05**: Readable session names for Claude-internal projects instead of encoded directory paths
+- [x] **SESS-01**: Dropdown lists all active Claude Code sessions with project name from JSONL working directory
+- [x] **SESS-02**: Configurable activity threshold to hide/mark inactive sessions
+- [x] **SESS-03**: No flickering of stale data when switching sessions
+- [x] **SESS-04**: App does not auto-switch away from the currently selected session when it becomes inactive
+- [x] **SESS-05**: Readable session names for Claude-internal projects instead of encoded directory paths
 
 ### Token Statistics
 
-- [ ] **TOKS-01**: Input and output token counters aggregated by session, today, week, month
+- [x] **TOKS-01**: Input and output token counters aggregated by session, today, week, month
 - [ ] **TOKS-02**: Tab bar (segmented control) switches between the four time periods with loading indicator
 - [ ] **TOKS-03**: Subagent tokens included in all time period aggregations
 - [ ] **TOKS-04**: JSONL entries deduplicated by messageId and requestId to prevent double-counting
@@ -74,7 +74,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **SETT-01**: Configurable refresh interval (manual or automatic: 30s to 10min)
 - [ ] **SETT-02**: Autostart option to launch app at Windows login
-- [ ] **SETT-03**: Session activity threshold configuration
+- [x] **SETT-03**: Session activity threshold configuration
 - [ ] **SETT-04**: Language support for German and English (follows system language or manual selection)
 - [ ] **SETT-05**: Manual dark/light mode toggle with immediate application
 - [x] **SETT-06**: Color mode persisted locally, restored on startup (default: dark)
@@ -101,8 +101,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **DATA-01**: Claude.ai API polled for 5-hour and weekly usage data via authenticated requests
 - [x] **DATA-02**: Organization IDs percent-encoded in API URLs
-- [ ] **DATA-03**: JSONL files read from %USERPROFILE%\.claude\projects\ with streaming (last ~1MB only)
-- [ ] **DATA-04**: JSONL file changes detected via FileSystemWatcher with debouncing
+- [x] **DATA-03**: JSONL files read from %USERPROFILE%\.claude\projects\ with streaming (last ~1MB only)
+- [x] **DATA-04**: JSONL file changes detected via FileSystemWatcher with debouncing
 - [ ] **DATA-05**: LiteLLM pricing cache persisted locally with fallback to bundled prices
 
 ### Security
@@ -172,17 +172,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WEEK-01 | Phase 2 | Complete |
 | WEEK-02 | Phase 2 | Complete |
 | WEEK-03 | Phase 2 | Complete |
-| CTXW-01 | Phase 4 | Pending |
-| CTXW-02 | Phase 4 | Pending |
-| CTXW-03 | Phase 4 | Pending |
-| CTXW-04 | Phase 4 | Pending |
+| CTXW-01 | Phase 4 | Complete |
+| CTXW-02 | Phase 4 | Complete |
+| CTXW-03 | Phase 4 | Complete |
+| CTXW-04 | Phase 4 | Complete |
 | CTXW-05 | Phase 4 | Pending |
-| SESS-01 | Phase 4 | Pending |
-| SESS-02 | Phase 4 | Pending |
-| SESS-03 | Phase 4 | Pending |
-| SESS-04 | Phase 4 | Pending |
-| SESS-05 | Phase 4 | Pending |
-| TOKS-01 | Phase 4 | Pending |
+| SESS-01 | Phase 4 | Complete |
+| SESS-02 | Phase 4 | Complete |
+| SESS-03 | Phase 4 | Complete |
+| SESS-04 | Phase 4 | Complete |
+| SESS-05 | Phase 4 | Complete |
+| TOKS-01 | Phase 4 | Complete |
 | TOKS-02 | Phase 5 | Pending |
 | TOKS-03 | Phase 5 | Pending |
 | TOKS-04 | Phase 5 | Pending |
@@ -197,7 +197,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXPT-03 | Phase 6 | Pending |
 | SETT-01 | Phase 2 | Complete |
 | SETT-02 | Phase 6 | Pending |
-| SETT-03 | Phase 4 | Pending |
+| SETT-03 | Phase 4 | Complete |
 | SETT-04 | Phase 6 | Pending |
 | SETT-05 | Phase 2 | Pending |
 | SETT-06 | Phase 2 | Complete |
@@ -215,8 +215,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UIPF-08 | Phase 1 | Complete |
 | DATA-01 | Phase 2 | Complete |
 | DATA-02 | Phase 2 | Complete |
-| DATA-03 | Phase 4 | Pending |
-| DATA-04 | Phase 4 | Pending |
+| DATA-03 | Phase 4 | Complete |
+| DATA-04 | Phase 4 | Complete |
 | DATA-05 | Phase 5 | Pending |
 | SECU-01 | Phase 1 | Complete |
 | SECU-02 | Phase 1 | Complete |
