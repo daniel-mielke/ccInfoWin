@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
     mc:Ignorable="d">
 
     <Page.Resources>
@@ -64,14 +65,13 @@
                         Foreground="{ThemeResource SectionHeaderBrush}"
                         CharacterSpacing="50" />
 
-                    <!-- Progress bar -->
-                    <ProgressBar
-                        Value="{x:Bind ViewModel.FiveHourPercentage, Mode=OneWay}"
-                        Maximum="100"
-                        Foreground="{x:Bind ViewModel.FiveHourUtilization, Mode=OneWay, Converter={StaticResource PercentageToColorConverter}}"
-                        Background="{ThemeResource ProgressTrackBrush}"
-                        Height="6"
-                        CornerRadius="3" />
+                    <!-- Area chart replacing ProgressBar -->
+                    <Border Background="{ThemeResource ChartBackgroundBrush}"
+                            CornerRadius="8" Padding="8" Height="120">
+                        <canvas:CanvasControl x:Name="UsageChart"
+                                              Draw="UsageChart_Draw"
+                                              ClearColor="Transparent" />
+                    </Border>
 
                     <!-- Percentage and countdown row -->
                     <Grid>
