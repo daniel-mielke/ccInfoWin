@@ -78,6 +78,7 @@ public partial class App : Application
         services.AddSingleton<WebViewBridge>();
         services.AddSingleton<IWebViewBridge>(sp => sp.GetRequiredService<WebViewBridge>());
         services.AddSingleton<IClaudeApiService, ClaudeApiService>();
+        services.AddSingleton<IJsonlService, JsonlService>();
 
         // ViewModels
         services.AddTransient<LoginViewModel>();
