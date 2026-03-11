@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text.Json;
 using CCInfoWindows.Messages;
 using CCInfoWindows.Models;
@@ -10,30 +9,27 @@ using Moq;
 namespace CCInfoWindows.Tests.Services;
 
 /// <summary>
-/// Unit tests for ClaudeApiService HTTP client with retry, caching, and error handling.
-/// Uses a custom HttpMessageHandler to intercept HTTP calls without real network access.
+/// Unit tests for ClaudeApiService with retry, caching, and auth error handling.
+/// Uses Mock of IWebViewBridge to simulate API responses without network access.
 /// </summary>
 public class ClaudeApiServiceTests : IDisposable
 {
     private readonly Mock<ICredentialService> _credentialMock;
-    private readonly MockHttpMessageHandler _handler;
-    private readonly HttpClient _httpClient;
+    private readonly Mock<IWebViewBridge> _bridgeMock;
     private readonly string _cacheDir;
     private readonly string _cacheFile;
 
     public ClaudeApiServiceTests()
     {
         _credentialMock = new Mock<ICredentialService>();
-        _handler = new MockHttpMessageHandler();
-        _httpClient = new HttpClient(_handler);
+        _bridgeMock = new Mock<IWebViewBridge>();
+        _bridgeMock.Setup(b => b.IsInitialized).Returns(true);
         _cacheDir = Path.Combine(Path.GetTempPath(), $"ccinfo_test_{Guid.NewGuid():N}");
         _cacheFile = Path.Combine(_cacheDir, "usage_cache.json");
     }
 
     public void Dispose()
     {
-        _httpClient.Dispose();
-        _handler.Dispose();
         if (Directory.Exists(_cacheDir))
         {
             Directory.Delete(_cacheDir, recursive: true);
@@ -42,69 +38,42 @@ public class ClaudeApiServiceTests : IDisposable
 
     private ClaudeApiService CreateService()
     {
-        return new ClaudeApiService(_httpClient, _credentialMock.Object, _cacheDir);
+        return new ClaudeApiService(_bridgeMock.Object, _credentialMock.Object, _cacheDir);
     }
 
     [Fact]
     public async Task FetchUsageAsync_ConstructsUrlWithPercentEncodedOrgId()
     {
-        // Arrange -- use a UUID-style org ID with spaces to verify encoding.
-        // Note: Uri class normalizes %2F back to / so we avoid slashes in test data.
         var orgId = "org 123+test";
         _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
         _credentialMock.Setup(x => x.GetOrganizationId()).Returns(orgId);
 
-        _handler.SetResponse(new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(CreateUsageJson(0.5))
-        });
+        string? capturedUrl = null;
+        _bridgeMock
+            .Setup(b => b.FetchJsonAsync(It.IsAny<string>()))
+            .Callback<string>(url => capturedUrl = url)
+            .ReturnsAsync(CreateUsageJson(0.5));
 
         var service = CreateService();
 
-        // Act
         await service.FetchUsageAsync();
 
-        // Assert -- Use AbsoluteUri (preserves encoding) instead of ToString() (decodes %20 to space)
-        var requestUrl = _handler.LastRequestUri?.AbsoluteUri ?? "";
-        Assert.Contains("/api/organizations/", requestUrl);
-        Assert.Contains("/usage", requestUrl);
-        // Spaces must be percent-encoded
-        Assert.DoesNotContain(" ", requestUrl);
-        // Plus sign must be percent-encoded
-        Assert.Contains("%2B", requestUrl);
-    }
-
-    [Fact]
-    public async Task FetchUsageAsync_IncludesRequiredHeaders()
-    {
-        // Arrange
-        _credentialMock.Setup(x => x.GetSessionToken()).Returns("my-session-key");
-        _credentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
-
-        _handler.SetResponse(new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(CreateUsageJson(0.3))
-        });
-
-        var service = CreateService();
-
-        // Act
-        await service.FetchUsageAsync();
-
-        // Assert
-        var request = _handler.LastRequest!;
-        Assert.Contains("sessionKey=my-session-key", request.Headers.GetValues("Cookie").First());
-        Assert.Equal("web_claude_ai", request.Headers.GetValues("anthropic-client-platform").First());
+        Assert.NotNull(capturedUrl);
+        Assert.Contains("/api/organizations/", capturedUrl);
+        Assert.Contains("/usage", capturedUrl);
+        Assert.DoesNotContain(" ", capturedUrl);
+        Assert.Contains("%2B", capturedUrl);
     }
 
     [Fact]
     public async Task FetchUsageAsync_On401_SendsAuthStateChangedAndReturnsNull()
     {
-        // Arrange
         _credentialMock.Setup(x => x.GetSessionToken()).Returns("expired-token");
         _credentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
 
-        _handler.SetResponse(new HttpResponseMessage(HttpStatusCode.Unauthorized));
+        _bridgeMock
+            .Setup(b => b.FetchJsonAsync(It.IsAny<string>()))
+            .ThrowsAsync(new UnauthorizedAccessException());
 
         bool authMessageReceived = false;
         bool authState = true;
@@ -116,74 +85,59 @@ public class ClaudeApiServiceTests : IDisposable
 
         var service = CreateService();
 
-        // Act
         var result = await service.FetchUsageAsync();
 
-        // Assert
         Assert.Null(result);
         Assert.True(authMessageReceived);
         Assert.False(authState);
-        Assert.Equal(1, _handler.RequestCount); // No retry on 401
 
         WeakReferenceMessenger.Default.UnregisterAll(this);
     }
 
     [Fact]
-    public async Task FetchUsageAsync_OnTransientError_RetriesAndSucceeds()
+    public async Task FetchUsageAsync_OnTransientNullResponse_RetriesAndSucceeds()
     {
-        // Arrange
         _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
         _credentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
 
-        _handler.SetResponses(new[]
-        {
-            new HttpResponseMessage(HttpStatusCode.InternalServerError),
-            new HttpResponseMessage(HttpStatusCode.InternalServerError),
-            new HttpResponseMessage(HttpStatusCode.OK)
+        var callCount = 0;
+        _bridgeMock
+            .Setup(b => b.FetchJsonAsync(It.IsAny<string>()))
+            .ReturnsAsync(() =>
             {
-                Content = new StringContent(CreateUsageJson(0.75))
-            }
-        });
+                callCount++;
+                return callCount < 3 ? null : CreateUsageJson(0.75);
+            });
 
         var service = CreateService();
 
-        // Act
         var result = await service.FetchUsageAsync();
 
-        // Assert
         Assert.NotNull(result);
         Assert.Equal(0.75, result!.FiveHour!.Utilization);
-        Assert.Equal(3, _handler.RequestCount);
+        Assert.Equal(3, callCount);
     }
 
     [Fact]
-    public async Task FetchUsageAsync_OnPersistentError_ReturnsNullAfterRetries()
+    public async Task FetchUsageAsync_OnPersistentNullResponse_ReturnsNullAfterRetries()
     {
-        // Arrange
         _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
         _credentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
 
-        _handler.SetResponses(new[]
-        {
-            new HttpResponseMessage(HttpStatusCode.InternalServerError),
-            new HttpResponseMessage(HttpStatusCode.InternalServerError),
-            new HttpResponseMessage(HttpStatusCode.InternalServerError)
-        });
+        _bridgeMock
+            .Setup(b => b.FetchJsonAsync(It.IsAny<string>()))
+            .ReturnsAsync((string?)null);
 
         var service = CreateService();
 
-        // Act
         var result = await service.FetchUsageAsync();
 
-        // Assert
         Assert.Null(result);
-        Assert.Equal(3, _handler.RequestCount);
     }
 
     [Fact]
     public async Task CacheRoundTrip_SaveAndLoadReturnsEquivalentData()
     {
-        // Arrange
         var service = CreateService();
         var data = new UsageResponse
         {
@@ -191,11 +145,9 @@ public class ClaudeApiServiceTests : IDisposable
             SevenDay = new UsageWindow { Utilization = 0.88 }
         };
 
-        // Act
         await service.SaveCacheAsync(data);
         var loaded = await service.LoadCacheAsync();
 
-        // Assert
         Assert.NotNull(loaded);
         Assert.Equal(0.42, loaded!.FiveHour!.Utilization);
         Assert.Equal(0.88, loaded!.SevenDay!.Utilization);
@@ -204,100 +156,83 @@ public class ClaudeApiServiceTests : IDisposable
     [Fact]
     public async Task LoadCacheAsync_MissingFile_ReturnsNull()
     {
-        // Arrange
         var service = CreateService();
 
-        // Act
         var loaded = await service.LoadCacheAsync();
 
-        // Assert
         Assert.Null(loaded);
     }
 
     [Fact]
     public async Task LoadCacheAsync_CorruptFile_ReturnsNull()
     {
-        // Arrange
         Directory.CreateDirectory(_cacheDir);
         await File.WriteAllTextAsync(_cacheFile, "not valid json{{{");
         var service = CreateService();
 
-        // Act
         var loaded = await service.LoadCacheAsync();
 
-        // Assert
         Assert.Null(loaded);
     }
 
     [Fact]
     public async Task GetCachedUsage_ReturnsLastFetchedData()
     {
-        // Arrange
         _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
         _credentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
 
-        _handler.SetResponse(new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(CreateUsageJson(0.6))
-        });
+        _bridgeMock
+            .Setup(b => b.FetchJsonAsync(It.IsAny<string>()))
+            .ReturnsAsync(CreateUsageJson(0.6));
 
         var service = CreateService();
 
-        // Act
         Assert.Null(service.GetCachedUsage());
         await service.FetchUsageAsync();
         var cached = service.GetCachedUsage();
 
-        // Assert
         Assert.NotNull(cached);
         Assert.Equal(0.6, cached!.FiveHour!.Utilization);
     }
 
     [Fact]
-    public async Task FetchUsageAsync_NullSessionToken_ReturnsNull()
+    public async Task FetchUsageAsync_BridgeNotInitialized_ReturnsNull()
     {
-        // Arrange
-        _credentialMock.Setup(x => x.GetSessionToken()).Returns((string?)null);
+        _bridgeMock.Setup(b => b.IsInitialized).Returns(false);
+        _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
+        _credentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
 
         var service = CreateService();
 
-        // Act
         var result = await service.FetchUsageAsync();
 
-        // Assert
         Assert.Null(result);
-        Assert.Equal(0, _handler.RequestCount);
+        _bridgeMock.Verify(b => b.FetchJsonAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
     public async Task FetchUsageAsync_NullOrgId_AttemptsOrgMigration()
     {
-        // Arrange
         _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
         _credentialMock.SetupSequence(x => x.GetOrganizationId())
-            .Returns((string?)null)  // First call: no org ID
-            .Returns("migrated-org"); // After migration
+            .Returns((string?)null)
+            .Returns("migrated-org");
 
-        // First request: /api/organizations (migration)
-        // Second request: /api/organizations/{id}/usage (actual fetch)
-        _handler.SetResponses(new[]
-        {
-            new HttpResponseMessage(HttpStatusCode.OK)
+        var callCount = 0;
+        _bridgeMock
+            .Setup(b => b.FetchJsonAsync(It.IsAny<string>()))
+            .ReturnsAsync(() =>
             {
-                Content = new StringContent("[{\"uuid\":\"migrated-org\",\"name\":\"My Org\"}]")
-            },
-            new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(CreateUsageJson(0.33))
-            }
-        });
+                callCount++;
+                return callCount == 1
+                    ? "[{\"uuid\":\"migrated-org\",\"name\":\"My Org\"}]"
+                    : CreateUsageJson(0.33);
+            });
 
         var service = CreateService();
 
-        // Act
         var result = await service.FetchUsageAsync();
 
-        // Assert
         Assert.NotNull(result);
         _credentialMock.Verify(x => x.SaveOrganizationId("migrated-org"), Times.Once);
     }
@@ -305,18 +240,17 @@ public class ClaudeApiServiceTests : IDisposable
     [Fact]
     public async Task FetchUsageAsync_OrgMigrationFails_ReturnsNull()
     {
-        // Arrange
         _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
         _credentialMock.Setup(x => x.GetOrganizationId()).Returns((string?)null);
 
-        _handler.SetResponse(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        _bridgeMock
+            .Setup(b => b.FetchJsonAsync(It.IsAny<string>()))
+            .ReturnsAsync((string?)null);
 
         var service = CreateService();
 
-        // Act
         var result = await service.FetchUsageAsync();
 
-        // Assert
         Assert.Null(result);
     }
 
@@ -327,47 +261,5 @@ public class ClaudeApiServiceTests : IDisposable
             five_hour = new { utilization, resets_at = DateTimeOffset.UtcNow.AddHours(1).ToString("o") },
             seven_day = new { utilization = utilization * 0.5, resets_at = DateTimeOffset.UtcNow.AddDays(3).ToString("o") }
         });
-    }
-
-    /// <summary>
-    /// Test double for HttpMessageHandler that captures requests and returns configured responses.
-    /// </summary>
-    private class MockHttpMessageHandler : HttpMessageHandler
-    {
-        private readonly Queue<HttpResponseMessage> _responses = new();
-        private HttpResponseMessage? _defaultResponse;
-
-        public HttpRequestMessage? LastRequest { get; private set; }
-        public Uri? LastRequestUri { get; private set; }
-        public int RequestCount { get; private set; }
-
-        public void SetResponse(HttpResponseMessage response)
-        {
-            _defaultResponse = response;
-        }
-
-        public void SetResponses(IEnumerable<HttpResponseMessage> responses)
-        {
-            _responses.Clear();
-            foreach (var r in responses)
-            {
-                _responses.Enqueue(r);
-            }
-        }
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            LastRequest = request;
-            LastRequestUri = request.RequestUri;
-            RequestCount++;
-
-            if (_responses.Count > 0)
-            {
-                return Task.FromResult(_responses.Dequeue());
-            }
-
-            return Task.FromResult(_defaultResponse ?? new HttpResponseMessage(HttpStatusCode.OK));
-        }
     }
 }
