@@ -12,7 +12,7 @@ using Microsoft.UI.Xaml;
 namespace CCInfoWindows.ViewModels;
 
 /// <summary>
-/// Dashboard ViewModel with API polling, usage display properties, countdown timers, and footer commands.
+/// Dashboard ViewModel with API polling, usage history accumulation, chart invalidation, and footer commands.
 /// </summary>
 public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChangedMessage>
 {
@@ -20,6 +20,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     private readonly INavigationService _navigationService;
     private readonly IClaudeApiService _apiService;
     private readonly ISettingsService _settingsService;
+    private readonly IUsageHistoryService _historyService;
 
     private DispatcherQueueTimer? _pollTimer;
     private DispatcherQueueTimer? _countdownTimer;
@@ -101,16 +102,35 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     [ObservableProperty]
     private bool _isUpdatingFromCache;
 
+    // --- Chart state ---
+
+    [ObservableProperty]
+    private IReadOnlyList<UsageHistoryPoint> _usageHistoryPoints = [];
+
+    /// <summary>
+    /// Callback invoked after each data update to trigger Win2D canvas redraw.
+    /// Set by MainView.xaml.cs after the canvas is created.
+    /// </summary>
+    public Action? ChartInvalidateCallback { get; set; }
+
+    /// <summary>
+    /// Start of the current 5-hour window, computed as ResetsAt minus 5 hours.
+    /// Returns null until the first API response is received.
+    /// </summary>
+    public DateTimeOffset? FiveHourWindowStart => _fiveHourResetsAt?.AddHours(-5);
+
     public MainViewModel(
         ICredentialService credentialService,
         INavigationService navigationService,
         IClaudeApiService apiService,
-        ISettingsService settingsService)
+        ISettingsService settingsService,
+        IUsageHistoryService historyService)
     {
         _credentialService = credentialService;
         _navigationService = navigationService;
         _apiService = apiService;
         _settingsService = settingsService;
+        _historyService = historyService;
 
         WeakReferenceMessenger.Default.Register<AuthStateChangedMessage>(this);
     }
@@ -131,6 +151,15 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         {
             ((MainViewModel)r).UpdateRefreshInterval(m.Value);
         });
+
+        // Load persisted history for instant chart display before first poll
+        var history = _historyService.LoadHistory();
+        UsageHistoryPoints = history.Points.AsReadOnly();
+        if (history.ResetsAt.HasValue && _fiveHourResetsAt == null)
+        {
+            _fiveHourResetsAt = history.ResetsAt;
+        }
+        ChartInvalidateCallback?.Invoke();
 
         // Load cache for instant display
         var cached = await _apiService.LoadCacheAsync();
@@ -163,10 +192,6 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     /// </summary>
     public Task<bool> ValidateTokenAsync()
     {
-        // Token presence check only — no API validation.
-        // Cloudflare bot-protection blocks bare HttpClient requests with 403.
-        // Actual token validity is verified on the first FetchUsageAsync call;
-        // if the token is expired, AuthStateChangedMessage(false) triggers re-login.
         var token = _credentialService.GetSessionToken();
         return Task.FromResult(!string.IsNullOrEmpty(token));
     }
@@ -209,6 +234,8 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             FiveHourPercentage = Math.Min(util * 100, 100);
             FiveHourPercentageText = $"{Math.Min(util * 100, 100):0}%";
             FiveHourCountdown = CountdownFormatter.FormatCountdown(data.FiveHour.ResetsAt);
+
+            AppendHistoryPoint(data.FiveHour.ResetsAt, util);
             _fiveHourResetsAt = data.FiveHour.ResetsAt;
         }
         else
@@ -265,6 +292,34 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         }
     }
 
+    /// <summary>
+    /// Appends a new data point to persisted history, clearing history first when the 5-hour window resets.
+    /// </summary>
+    private void AppendHistoryPoint(DateTimeOffset? apiResetsAt, double utilization)
+    {
+        var history = _historyService.LoadHistory();
+
+        var windowResetDetected = history.ResetsAt.HasValue
+            && apiResetsAt.HasValue
+            && history.ResetsAt.Value != apiResetsAt.Value;
+
+        if (windowResetDetected)
+        {
+            history = new UsageHistory();
+        }
+
+        history.ResetsAt = apiResetsAt;
+        history.Points.Add(new UsageHistoryPoint
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Utilization = utilization
+        });
+
+        _historyService.SaveHistory(history);
+        UsageHistoryPoints = history.Points.AsReadOnly();
+        ChartInvalidateCallback?.Invoke();
+    }
+
     private void UpdateCountdowns()
     {
         FiveHourCountdown = CountdownFormatter.FormatCountdown(_fiveHourResetsAt);
@@ -315,6 +370,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     [RelayCommand]
     private void Logout()
     {
+        _historyService.ClearHistory();
         _credentialService.ClearCredentials();
         WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
         IsSessionExpired = false;
