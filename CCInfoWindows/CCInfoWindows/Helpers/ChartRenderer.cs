@@ -32,6 +32,26 @@ public static class ChartRenderer
     }
 
     /// <summary>
+    /// Returns the canvas-absolute X coordinate of the right edge for a zone segment.
+    /// For mid-segment ends, the right edge is the next point's X position.
+    /// For the last segment, the right edge is the current time clamped to plot bounds.
+    /// The returned value already includes LeftMargin -- use directly in AddLine calls.
+    /// </summary>
+    public static float GetRightEdgeAbsoluteX(
+        IReadOnlyList<UsageHistoryPoint> points,
+        int endIndex,
+        DateTimeOffset windowStart,
+        float plotWidth)
+    {
+        if (endIndex < points.Count - 1)
+        {
+            return LeftMargin + ToX(points[endIndex + 1].Timestamp, windowStart, plotWidth);
+        }
+        var nowX = ToX(DateTimeOffset.UtcNow, windowStart, plotWidth);
+        return LeftMargin + Math.Min(nowX, plotWidth);
+    }
+
+    /// <summary>
     /// Groups consecutive data points by color zone (from ColorThresholds).
     /// Returns a list of (StartIndex, EndIndex, BrushKey) tuples.
     /// </summary>

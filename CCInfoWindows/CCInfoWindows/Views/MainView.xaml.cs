@@ -152,6 +152,7 @@ public sealed partial class MainView : Page
         {
             var zoneColor = ChartColors.GetColor(brushKey, isDark);
             var fillColor = Color.FromArgb(102, zoneColor.R, zoneColor.G, zoneColor.B);
+            var rightEdgeX = ChartRenderer.GetRightEdgeAbsoluteX(points, endIndex, windowStart, plotWidth);
 
             using var pathBuilder = new CanvasPathBuilder(resourceCreator);
             var firstX = ChartRenderer.LeftMargin + ChartRenderer.ToX(points[startIndex].Timestamp, windowStart, plotWidth);
@@ -164,7 +165,6 @@ public sealed partial class MainView : Page
 
                 if (i == startIndex)
                 {
-                    pathBuilder.AddLine(x, plotHeight);
                     pathBuilder.AddLine(x, y);
                 }
                 else
@@ -175,8 +175,9 @@ public sealed partial class MainView : Page
                 }
             }
 
-            var lastX = ChartRenderer.LeftMargin + ChartRenderer.ToX(points[endIndex].Timestamp, windowStart, plotWidth);
-            pathBuilder.AddLine(lastX, plotHeight);
+            var lastY = ChartRenderer.ToY(points[endIndex].Utilization, plotHeight);
+            pathBuilder.AddLine(rightEdgeX, lastY);
+            pathBuilder.AddLine(rightEdgeX, plotHeight);
             pathBuilder.EndFigure(CanvasFigureLoop.Closed);
 
             using var geometry = CanvasGeometry.CreatePath(pathBuilder);
@@ -197,6 +198,7 @@ public sealed partial class MainView : Page
         foreach (var (startIndex, endIndex, brushKey) in segments)
         {
             var zoneColor = ChartColors.GetColor(brushKey, isDark);
+            var rightEdgeX = ChartRenderer.GetRightEdgeAbsoluteX(points, endIndex, windowStart, plotWidth);
 
             using var pathBuilder = new CanvasPathBuilder(resourceCreator);
             var firstX = ChartRenderer.LeftMargin + ChartRenderer.ToX(points[startIndex].Timestamp, windowStart, plotWidth);
@@ -212,6 +214,8 @@ public sealed partial class MainView : Page
                 pathBuilder.AddLine(x, y);
             }
 
+            var lastY = ChartRenderer.ToY(points[endIndex].Utilization, plotHeight);
+            pathBuilder.AddLine(rightEdgeX, lastY);
             pathBuilder.EndFigure(CanvasFigureLoop.Open);
 
             using var geometry = CanvasGeometry.CreatePath(pathBuilder);
