@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-area-chart-03-PLAN.md
-last_updated: "2026-03-11T11:54:32.722Z"
-last_activity: 2026-03-10 — Plan 02-03 executed (dashboard UI with progress bars, polling, footer)
+stopped_at: "Completed 04-01-PLAN.md"
+last_updated: "2026-03-11T17:22:00Z"
+last_activity: 2026-03-11 — Plan 04-01 executed (data contracts, helpers, IJsonlService, unit tests)
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 10
-  completed_plans: 10
-  percent: 75
+  completed_plans: 11
+  percent: 78
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 2 of 6 (Core Monitoring Dashboard)
-Plan: 3 of 4 in current phase (02-03 complete)
-Status: Phase 2 in progress
-Last activity: 2026-03-10 — Plan 02-03 executed (dashboard UI with progress bars, polling, footer)
+Phase: 4 of 6 (Local Data Pipeline)
+Plan: 1 of 3 in current phase (04-01 complete)
+Status: Phase 4 in progress
+Last activity: 2026-03-11 — Plan 04-01 executed (data contracts, helpers, IJsonlService, unit tests)
 
-Progress: [███████░░░] 75%
+Progress: [███████░░░] 78%
 
 ## Performance Metrics
 
@@ -93,6 +93,9 @@ Recent decisions affecting current work:
 - [Phase 03-area-chart]: ChartInvalidateCallback as Action? property for view-to-viewmodel chart invalidation
 - [Phase 03-area-chart]: GetRightEdgeAbsoluteX returns canvas-absolute X (includes LeftMargin) to match existing call-site pattern
 - [Phase 03-area-chart]: _fiveHourResetsAt set inside AppendHistoryPoint before ChartInvalidateCallback fires, duplicate removed from UpdateUsageProperties
+- 04-01: JsonlEntry.DefaultOptions uses UnmappedMemberHandling.Skip for tolerant JSONL deserialization
+- 04-01: ShouldWarnAutocompact uses > LargeModelThresholdTokens (not >=) so exactly 100K models use 95% threshold
+- 04-01: ModelContextLimits uses StringComparer.OrdinalIgnoreCase for case-insensitive model name lookup
 
 ### Pending Todos
 
@@ -109,6 +112,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-11T11:54:32.720Z
-Stopped at: Completed 03-area-chart-03-PLAN.md
-Resume file: None
+Last session: 2026-03-11T17:22:00Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: .planning/phases/04-local-data-pipeline/04-02-PLAN.md
