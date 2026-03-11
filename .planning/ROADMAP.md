@@ -129,7 +129,7 @@ Note: Phase 4 depends on Phase 1 (not Phase 3), so Phases 3 and 4 could theoreti
 |-------|----------------|--------|-----------|
 | 1. Foundation and Authentication | 3/3 | Complete   | 2026-03-09 |
 | 2. Core Monitoring Dashboard | 3/4 | In Progress|  |
-| 3. Area Chart | 0/2 | Not started | - |
+| 3. Area Chart | 1/2 | In Progress|  |
 | 4. Local Data Pipeline | 0/3 | Not started | - |
 | 5. Cost Analytics | 0/2 | Not started | - |
 | 6. Export, Polish, and Distribution | 0/3 | Not started | - |
