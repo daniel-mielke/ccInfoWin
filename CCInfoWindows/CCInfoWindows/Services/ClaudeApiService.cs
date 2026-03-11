@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text.Json;
 using CCInfoWindows.Messages;
 using CCInfoWindows.Models;
@@ -8,31 +7,31 @@ using CommunityToolkit.Mvvm.Messaging;
 namespace CCInfoWindows.Services;
 
 /// <summary>
-/// HTTP client for Claude API usage data with retry logic, disk caching, and auth error handling.
-/// Constructs requests to https://claude.ai/api/organizations/{orgId}/usage.
+/// Fetches Claude API usage data via WebView2 bridge with retry logic, disk caching, and auth error handling.
+/// Routes requests through Chromium's fetch() to bypass Cloudflare bot protection.
 /// </summary>
 public class ClaudeApiService : IClaudeApiService
 {
     private const string BaseUrl = "https://claude.ai";
     private const int MaxAttempts = 3;
 
-    private readonly HttpClient _httpClient;
+    private readonly IWebViewBridge _bridge;
     private readonly ICredentialService _credentialService;
     private readonly string _cacheFilePath;
 
     private UsageResponse? _cachedUsage;
 
-    /// <param name="httpClient">Singleton HttpClient from DI.</param>
+    /// <param name="bridge">WebView2 bridge for Cloudflare-safe HTTP requests.</param>
     /// <param name="credentialService">Credential store for session token and org ID.</param>
     /// <param name="cacheDirectory">
     /// Override cache directory for testing. Defaults to %LOCALAPPDATA%\CCInfoWindows.
     /// </param>
     public ClaudeApiService(
-        HttpClient httpClient,
+        IWebViewBridge bridge,
         ICredentialService credentialService,
         string? cacheDirectory = null)
     {
-        _httpClient = httpClient;
+        _bridge = bridge;
         _credentialService = credentialService;
 
         var dir = cacheDirectory ?? Path.Combine(
@@ -43,8 +42,7 @@ public class ClaudeApiService : IClaudeApiService
 
     public async Task<UsageResponse?> FetchUsageAsync(CancellationToken ct = default)
     {
-        var sessionKey = _credentialService.GetSessionToken();
-        if (sessionKey is null)
+        if (!_bridge.IsInitialized)
         {
             return null;
         }
@@ -52,7 +50,7 @@ public class ClaudeApiService : IClaudeApiService
         var orgId = _credentialService.GetOrganizationId();
         if (orgId is null)
         {
-            orgId = await TryMigrateOrgIdAsync(sessionKey, ct);
+            orgId = await TryMigrateOrgIdAsync(ct);
             if (orgId is null)
             {
                 return null;
@@ -64,23 +62,15 @@ public class ClaudeApiService : IClaudeApiService
 
         for (int attempt = 1; attempt <= MaxAttempts; attempt++)
         {
+            ct.ThrowIfCancellationRequested();
+
             try
             {
-                using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.TryAddWithoutValidation("Cookie", $"sessionKey={sessionKey}");
-                request.Headers.TryAddWithoutValidation("anthropic-client-platform", "web_claude_ai");
+                var responseBody = await _bridge.FetchJsonAsync(url);
 
-                var response = await _httpClient.SendAsync(request, ct);
-
-                if (response.StatusCode == HttpStatusCode.Unauthorized)
+                if (responseBody is null)
                 {
-                    WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
-                    return null;
-                }
-
-                if (response.StatusCode == HttpStatusCode.TooManyRequests ||
-                    (int)response.StatusCode >= 500)
-                {
+                    // Non-success status or network error — retry
                     if (attempt < MaxAttempts)
                     {
                         await Task.Delay(attempt * 1000, ct);
@@ -89,10 +79,7 @@ public class ClaudeApiService : IClaudeApiService
                     return null;
                 }
 
-                response.EnsureSuccessStatusCode();
-
-                var stream = await response.Content.ReadAsStreamAsync(ct);
-                var usage = await JsonSerializer.DeserializeAsync<UsageResponse>(stream, cancellationToken: ct);
+                var usage = JsonSerializer.Deserialize<UsageResponse>(responseBody);
 
                 if (usage is not null)
                 {
@@ -102,9 +89,13 @@ public class ClaudeApiService : IClaudeApiService
 
                 return usage;
             }
+            catch (UnauthorizedAccessException)
+            {
+                WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
+                return null;
+            }
             catch (TaskCanceledException) when (!ct.IsCancellationRequested)
             {
-                // Timeout -- retry
                 if (attempt < MaxAttempts)
                 {
                     await Task.Delay(attempt * 1000, ct);
@@ -112,15 +103,9 @@ public class ClaudeApiService : IClaudeApiService
                 }
                 return null;
             }
-            catch (HttpRequestException)
+            catch (Exception) when (attempt < MaxAttempts)
             {
-                // Network error -- retry
-                if (attempt < MaxAttempts)
-                {
-                    await Task.Delay(attempt * 1000, ct);
-                    continue;
-                }
-                return null;
+                await Task.Delay(attempt * 1000, ct);
             }
         }
 
@@ -157,30 +142,28 @@ public class ClaudeApiService : IClaudeApiService
         }
         catch (Exception)
         {
-            // Corrupt cache file -- safe to ignore
             return null;
         }
     }
 
     /// <summary>
     /// Fetches org ID from /api/organizations when lastActiveOrg cookie was not captured.
-    /// Extracts first organization's uuid and persists it for future use.
     /// </summary>
-    private async Task<string?> TryMigrateOrgIdAsync(string sessionKey, CancellationToken ct)
+    private async Task<string?> TryMigrateOrgIdAsync(CancellationToken ct)
     {
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/api/organizations");
-            request.Headers.TryAddWithoutValidation("Cookie", $"sessionKey={sessionKey}");
-            request.Headers.TryAddWithoutValidation("anthropic-client-platform", "web_claude_ai");
+            ct.ThrowIfCancellationRequested();
 
-            var response = await _httpClient.SendAsync(request, ct);
-            response.EnsureSuccessStatusCode();
+            var responseBody = await _bridge.FetchJsonAsync($"{BaseUrl}/api/organizations");
+            if (responseBody is null)
+            {
+                return null;
+            }
 
-            var stream = await response.Content.ReadAsStreamAsync(ct);
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-
+            using var doc = JsonDocument.Parse(responseBody);
             var orgs = doc.RootElement;
+
             if (orgs.GetArrayLength() > 0)
             {
                 var uuid = orgs[0].GetProperty("uuid").GetString();
@@ -191,9 +174,13 @@ public class ClaudeApiService : IClaudeApiService
                 }
             }
         }
+        catch (UnauthorizedAccessException)
+        {
+            WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
+        }
         catch (Exception)
         {
-            // Migration failed -- user needs to re-login
+            // Migration failed — user needs to re-login
         }
 
         return null;

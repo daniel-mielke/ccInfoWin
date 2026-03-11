@@ -22,6 +22,12 @@
           RowDefinitions="Auto,*,Auto"
           Padding="16,12,16,12">
 
+        <!-- Hidden WebView2 for API calls via Chromium fetch() — bypasses Cloudflare -->
+        <WebView2
+            x:Name="ApiBridgeWebView"
+            Visibility="Collapsed"
+            Width="0" Height="0" />
+
         <!-- Row 0: Session expired InfoBar -->
         <InfoBar
             Grid.Row="0"

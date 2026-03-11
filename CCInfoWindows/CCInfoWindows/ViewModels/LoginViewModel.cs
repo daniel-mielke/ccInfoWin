@@ -1,8 +1,10 @@
 using CCInfoWindows.Messages;
+using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
 using CCInfoWindows.Views;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Messaging;
+using Microsoft.UI.Dispatching;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.UI.Xaml.Controls;
 
@@ -15,6 +17,7 @@ public partial class LoginViewModel : ObservableObject
 {
     private readonly ICredentialService _credentialService;
     private readonly INavigationService _navigationService;
+    private readonly WebViewBridge _bridge;
 
     [ObservableProperty]
     private bool _isLoading;
@@ -32,10 +35,14 @@ public partial class LoginViewModel : ObservableObject
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "CCInfoWindows", "WebView2");
 
-    public LoginViewModel(ICredentialService credentialService, INavigationService navigationService)
+    public LoginViewModel(
+        ICredentialService credentialService,
+        INavigationService navigationService,
+        WebViewBridge bridge)
     {
         _credentialService = credentialService;
         _navigationService = navigationService;
+        _bridge = bridge;
     }
 
     /// <summary>
@@ -152,6 +159,10 @@ public partial class LoginViewModel : ObservableObject
             {
                 _credentialService.SaveOrganizationId(orgCookie.Value);
             }
+
+            // Initialize WebView2 bridge for API calls — Chromium context has
+            // all Cloudflare cookies and proper TLS fingerprint at this point.
+            _bridge.Initialize(coreWebView, DispatcherQueue.GetForCurrentThread());
 
             WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(true));
             _navigationService.NavigateTo<MainView>();

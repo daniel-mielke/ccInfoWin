@@ -74,7 +74,8 @@ public partial class App : Application
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<ICredentialService, CredentialService>();
-        services.AddSingleton<HttpClient>();
+        services.AddSingleton<WebViewBridge>();
+        services.AddSingleton<IWebViewBridge>(sp => sp.GetRequiredService<WebViewBridge>());
         services.AddSingleton<IClaudeApiService, ClaudeApiService>();
 
         // ViewModels

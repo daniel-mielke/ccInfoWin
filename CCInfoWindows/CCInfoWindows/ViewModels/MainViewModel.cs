@@ -20,7 +20,6 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     private readonly INavigationService _navigationService;
     private readonly IClaudeApiService _apiService;
     private readonly ISettingsService _settingsService;
-    private readonly HttpClient _httpClient;
 
     private DispatcherQueueTimer? _pollTimer;
     private DispatcherQueueTimer? _countdownTimer;
@@ -106,14 +105,12 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         ICredentialService credentialService,
         INavigationService navigationService,
         IClaudeApiService apiService,
-        ISettingsService settingsService,
-        HttpClient httpClient)
+        ISettingsService settingsService)
     {
         _credentialService = credentialService;
         _navigationService = navigationService;
         _apiService = apiService;
         _settingsService = settingsService;
-        _httpClient = httpClient;
 
         WeakReferenceMessenger.Default.Register<AuthStateChangedMessage>(this);
     }
@@ -164,45 +161,14 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     /// Validates the stored session token by calling claude.ai API.
     /// Returns true if token is valid or if offline (assume valid to not block user).
     /// </summary>
-    public async Task<bool> ValidateTokenAsync()
+    public Task<bool> ValidateTokenAsync()
     {
+        // Token presence check only — no API validation.
+        // Cloudflare bot-protection blocks bare HttpClient requests with 403.
+        // Actual token validity is verified on the first FetchUsageAsync call;
+        // if the token is expired, AuthStateChangedMessage(false) triggers re-login.
         var token = _credentialService.GetSessionToken();
-        if (string.IsNullOrEmpty(token))
-        {
-            return false;
-        }
-
-        try
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Get, "https://claude.ai/api/organizations");
-            request.Headers.Add("Cookie", $"sessionKey={token}");
-
-            var response = await _httpClient.SendAsync(request);
-
-            if (response.IsSuccessStatusCode)
-            {
-                return true;
-            }
-
-            var statusCode = (int)response.StatusCode;
-            if (statusCode == 401 || statusCode == 403)
-            {
-                return false;
-            }
-
-            // Other HTTP errors: assume valid (don't block user)
-            return true;
-        }
-        catch (HttpRequestException)
-        {
-            // Network error: assume valid (user might be offline)
-            return true;
-        }
-        catch (TaskCanceledException)
-        {
-            // Timeout: assume valid
-            return true;
-        }
+        return Task.FromResult(!string.IsNullOrEmpty(token));
     }
 
     private async Task PollUsageAsync()
@@ -238,10 +204,10 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         // 5-STUNDEN-FENSTER = FiveHour
         if (data.FiveHour != null)
         {
-            var util = data.FiveHour.Utilization;
+            var util = data.FiveHour.NormalizedUtilization;
             FiveHourUtilization = util;
-            FiveHourPercentage = Math.Min(util, 1.0) * 100;
-            FiveHourPercentageText = $"{Math.Min(util, 1.0) * 100:0}%";
+            FiveHourPercentage = Math.Min(util * 100, 100);
+            FiveHourPercentageText = $"{Math.Min(util * 100, 100):0}%";
             FiveHourCountdown = CountdownFormatter.FormatCountdown(data.FiveHour.ResetsAt);
             _fiveHourResetsAt = data.FiveHour.ResetsAt;
         }
@@ -258,10 +224,10 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         var weeklyWindow = data.SevenDayOpus ?? data.SevenDay;
         if (weeklyWindow != null)
         {
-            var util = weeklyWindow.Utilization;
+            var util = weeklyWindow.NormalizedUtilization;
             WeeklyUtilization = util;
-            WeeklyPercentage = Math.Min(util, 1.0) * 100;
-            WeeklyPercentageText = $"{Math.Min(util, 1.0) * 100:0}%";
+            WeeklyPercentage = Math.Min(util * 100, 100);
+            WeeklyPercentageText = $"{Math.Min(util * 100, 100):0}%";
             WeeklyCountdown = CountdownFormatter.FormatCountdown(weeklyWindow.ResetsAt);
             WeeklyResetDate = CountdownFormatter.FormatResetDate(weeklyWindow.ResetsAt);
             _weeklyResetsAt = weeklyWindow.ResetsAt;
@@ -280,10 +246,10 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         HasSonnetData = data.SevenDaySonnet != null;
         if (data.SevenDaySonnet != null)
         {
-            var util = data.SevenDaySonnet.Utilization;
+            var util = data.SevenDaySonnet.NormalizedUtilization;
             SonnetUtilization = util;
-            SonnetPercentage = Math.Min(util, 1.0) * 100;
-            SonnetPercentageText = $"{Math.Min(util, 1.0) * 100:0}%";
+            SonnetPercentage = Math.Min(util * 100, 100);
+            SonnetPercentageText = $"{Math.Min(util * 100, 100):0}%";
             SonnetCountdown = CountdownFormatter.FormatCountdown(data.SevenDaySonnet.ResetsAt);
             SonnetResetDate = CountdownFormatter.FormatResetDate(data.SevenDaySonnet.ResetsAt);
             _sonnetResetsAt = data.SevenDaySonnet.ResetsAt;

@@ -56,6 +56,12 @@ dotnet run --project CCInfoWindows/CCInfoWindows
 dotnet publish CCInfoWindows/CCInfoWindows.csproj -c Release -r win-x64 --self-contained
 ```
 
+## Bash Permission Rules
+
+- **Never chain commands** with `;`, `&&`, or `|` in a single Bash call -- Claude Code's permission system blocks compound commands even if each part is individually allowed
+- **Use separate Bash tool calls** for each command instead (parallel if independent, sequential if dependent)
+- Example: to kill the app and rebuild, use two separate Bash calls: `taskkill //F //IM CCInfoWindows.exe` then `dotnet build ...`
+
 ## Security Rules
 
 - **No secrets in source code** -- zero hardcoded tokens, keys, or passwords
