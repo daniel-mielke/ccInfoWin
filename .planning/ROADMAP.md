@@ -64,11 +64,11 @@ Plans:
   2. Chart fill color interpolates by zone (green/yellow/orange/red) with slightly desaturated colors in dark mode
   3. Glowing position indicator shows current time point on the chart
   4. Usage history survives app restart and automatically clears when the 5-hour window resets
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md — Usage history data model, persistence service, Win2D NuGet, DI registration
+- [ ] 03-02-PLAN.md — Chart renderer, Win2D CanvasControl, Draw handler, poll cycle wiring, reset detection
 
 ### Phase 4: Local Data Pipeline
 **Goal**: User can see context window status, switch between sessions, and view token counts -- all derived from local JSONL files without API dependency
