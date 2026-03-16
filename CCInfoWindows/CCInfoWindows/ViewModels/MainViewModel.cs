@@ -7,9 +7,10 @@ using CCInfoWindows.Views;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Media;
 
 namespace CCInfoWindows.ViewModels;
 
@@ -23,6 +24,22 @@ public class SubagentDisplayData
     public double Percentage { get; init; }
     public required string PercentageText { get; init; }
     public required string ModelBadge { get; init; }
+    public required SolidColorBrush BadgeColor { get; init; }
+}
+
+/// <summary>
+/// Flat display item for the session ComboBox with activity indicator color.
+/// Wraps a SessionInfo and adds a colored dot (green = active, gray = inactive).
+/// </summary>
+public class SessionDisplayItem
+{
+    private static readonly SolidColorBrush ActiveBrush = new(Colors.LimeGreen);
+    private static readonly SolidColorBrush InactiveBrush = new(Colors.Gray);
+
+    public required SessionInfo Session { get; init; }
+    public required string DisplayName { get; init; }
+    public required bool IsActive { get; init; }
+    public Brush StatusColor => IsActive ? ActiveBrush : InactiveBrush;
 }
 
 /// <summary>
@@ -128,7 +145,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     private ObservableCollection<SessionInfo> _sessions = [];
 
     [ObservableProperty]
-    private SessionInfo? _selectedSession;
+    private SessionDisplayItem? _selectedSession;
 
     [ObservableProperty]
     private bool _isJsonlScanning;
@@ -151,6 +168,9 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     private string _contextModelBadge = string.Empty;
 
     [ObservableProperty]
+    private SolidColorBrush _contextModelBadgeColor = new(Microsoft.UI.Colors.Gray);
+
+    [ObservableProperty]
     private bool _showAutocompactWarning;
 
     [ObservableProperty]
@@ -167,38 +187,10 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     [ObservableProperty]
     private string _outputTokensText = "--";
 
-    // --- Grouped sessions for CollectionViewSource ---
+    // --- Sorted session display items ---
 
-    /// <summary>
-    /// Sessions grouped by active status for the ComboBox CollectionViewSource.
-    /// Groups: "Aktiv" (active sessions first), "Inaktiv" (inactive sessions below).
-    /// </summary>
-    public IEnumerable<object> GroupedSessions
-    {
-        get
-        {
-            var threshold = TimeSpan.FromMinutes(
-                _settingsService.LoadSettings().SessionActivityThresholdMinutes);
-
-            var active = Sessions
-                .Where(s => s.IsActive(threshold))
-                .OrderByDescending(s => s.LastActivity)
-                .ToList();
-
-            var inactive = Sessions
-                .Where(s => !s.IsActive(threshold))
-                .OrderByDescending(s => s.LastActivity)
-                .ToList();
-
-            var groups = new List<SessionGroup>();
-            if (active.Count > 0)
-                groups.Add(new SessionGroup("Aktiv", active));
-            if (inactive.Count > 0)
-                groups.Add(new SessionGroup("Inaktiv", inactive));
-
-            return groups;
-        }
-    }
+    [ObservableProperty]
+    private ObservableCollection<SessionDisplayItem> _sortedSessions = [];
 
     /// <summary>
     /// Callback invoked after each data update to trigger Win2D canvas redraw.
@@ -490,53 +482,64 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         var latestSessions = _jsonlService.Sessions;
         HasActiveSessions = latestSessions.Count > 0;
 
-        // Rebuild collection in place to minimize UI churn
+        var settings = _settingsService.LoadSettings();
+        var threshold = TimeSpan.FromMinutes(settings.SessionActivityThresholdMinutes);
+
+        // Rebuild internal sessions collection
         Sessions.Clear();
         foreach (var session in latestSessions)
         {
             Sessions.Add(session);
         }
 
-        OnPropertyChanged(nameof(GroupedSessions));
+        // Rebuild flat display list: active first, then inactive, both by last activity desc
+        var displayItems = latestSessions
+            .OrderByDescending(s => s.IsActive(threshold))
+            .ThenByDescending(s => s.LastActivity)
+            .Select(s => new SessionDisplayItem
+            {
+                Session = s,
+                DisplayName = s.DisplayName,
+                IsActive = s.IsActive(threshold)
+            })
+            .ToList();
 
+        SortedSessions = new ObservableCollection<SessionDisplayItem>(displayItems);
+
+        // SESS-04: preserve current selection
         var currentSelection = SelectedSession;
 
         if (currentSelection != null)
         {
-            // SESS-04: do not auto-switch; re-find the same session object by ID
-            var updated = latestSessions.FirstOrDefault(s => s.Id == currentSelection.Id);
-            if (updated != null && !ReferenceEquals(SelectedSession, updated))
+            var updatedItem = SortedSessions.FirstOrDefault(d => d.Session.Id == currentSelection.Session.Id);
+            if (updatedItem != null)
             {
-                // Update to fresh object but keep the same logical selection
-                _selectedSession = updated;
-                OnPropertyChanged(nameof(SelectedSession));
-                UpdateSessionData(updated);
+                SelectedSession = updatedItem;
+                UpdateSessionData(updatedItem.Session);
             }
             return;
         }
 
         // No current selection — try to restore from persisted setting
-        var settings = _settingsService.LoadSettings();
         if (!string.IsNullOrEmpty(settings.LastSelectedSessionId))
         {
-            var restored = latestSessions.FirstOrDefault(s => s.Id == settings.LastSelectedSessionId);
-            if (restored != null)
+            var restoredItem = SortedSessions.FirstOrDefault(d => d.Session.Id == settings.LastSelectedSessionId);
+            if (restoredItem != null)
             {
-                SelectedSession = restored;
+                SelectedSession = restoredItem;
                 return;
             }
         }
 
         // Fall back to first active session
-        var threshold = TimeSpan.FromMinutes(settings.SessionActivityThresholdMinutes);
-        var firstActive = latestSessions.FirstOrDefault(s => s.IsActive(threshold));
-        if (firstActive != null)
+        var firstActiveItem = SortedSessions.FirstOrDefault(d => d.IsActive);
+        if (firstActiveItem != null)
         {
-            SelectedSession = firstActive;
+            SelectedSession = firstActiveItem;
         }
     }
 
-    partial void OnSelectedSessionChanged(SessionInfo? value)
+    partial void OnSelectedSessionChanged(SessionDisplayItem? value)
     {
         if (value == null)
         {
@@ -544,8 +547,8 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             return;
         }
 
-        UpdateSessionData(value);
-        PersistSelectedSessionId(value.Id);
+        UpdateSessionData(value.Session);
+        PersistSelectedSessionId(value.Session.Id);
     }
 
     private void ClearSessionData()
@@ -554,6 +557,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         ContextPercentage = 0;
         ContextPercentageText = "--";
         ContextModelBadge = string.Empty;
+        ContextModelBadgeColor = ParseHexBrush(ModelContextLimits.GetBadgeColorHex(null));
         ShowAutocompactWarning = false;
         HasActiveSession = false;
         SubagentContexts.Clear();
@@ -569,6 +573,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         ContextPercentage = Math.Min(context.Utilization * 100, 100);
         ContextPercentageText = $"{Math.Min(context.Utilization * 100, 100):0}%";
         ContextModelBadge = ModelContextLimits.GetDisplayName(context.ModelName);
+        ContextModelBadgeColor = ParseHexBrush(ModelContextLimits.GetBadgeColorHex(context.ModelName));
         ShowAutocompactWarning = context.ShouldWarnAutocompact;
         HasActiveSession = true;
 
@@ -582,13 +587,23 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
                 Utilization = subUtil,
                 Percentage = Math.Min(subUtil * 100, 100),
                 PercentageText = $"{Math.Min(subUtil * 100, 100):0}%",
-                ModelBadge = ModelContextLimits.GetDisplayName(subagent.ModelName)
+                ModelBadge = ModelContextLimits.GetDisplayName(subagent.ModelName),
+                BadgeColor = ParseHexBrush(ModelContextLimits.GetBadgeColorHex(subagent.ModelName))
             });
         }
 
         var tokens = _jsonlService.GetTokenSummary(session.Id);
         InputTokensText = TokenFormatter.FormatTokenCount(tokens.InputTokens);
         OutputTokensText = TokenFormatter.FormatTokenCount(tokens.OutputTokens);
+    }
+
+    private static SolidColorBrush ParseHexBrush(string hex)
+    {
+        var value = hex.TrimStart('#');
+        var r = byte.Parse(value[..2], System.Globalization.NumberStyles.HexNumber);
+        var g = byte.Parse(value[2..4], System.Globalization.NumberStyles.HexNumber);
+        var b = byte.Parse(value[4..6], System.Globalization.NumberStyles.HexNumber);
+        return new SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b));
     }
 
     private void PersistSelectedSessionId(string sessionId)
@@ -643,16 +658,3 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     }
 }
 
-/// <summary>
-/// A named group of sessions for the grouped ComboBox CollectionViewSource.
-/// Implements IGrouping to work with CollectionViewSource IsSourceGrouped=true.
-/// </summary>
-public class SessionGroup : List<SessionInfo>, IGrouping<string, SessionInfo>
-{
-    public string Key { get; }
-
-    public SessionGroup(string key, IEnumerable<SessionInfo> sessions) : base(sessions)
-    {
-        Key = key;
-    }
-}

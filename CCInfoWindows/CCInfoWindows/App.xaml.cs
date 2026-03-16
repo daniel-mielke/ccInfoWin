@@ -19,6 +19,17 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        UnhandledException += OnUnhandledException;
+    }
+
+    private static void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+    {
+        var logPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "CCInfoWindows", "crash.log");
+        Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+        File.AppendAllText(logPath, $"[{DateTime.Now:O}] {e.Exception}\n\n");
+        e.Handled = true;
     }
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)

@@ -49,7 +49,6 @@ public sealed partial class MainView : Page
     {
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
         ViewModel.ChartInvalidateCallback = () => UsageChart.Invalidate();
-        GroupedSessionsSource.Source = ViewModel.GroupedSessions;
 
         var bridge = App.Services.GetRequiredService<WebViewBridge>();
         if (!bridge.IsInitialized)
@@ -274,10 +273,6 @@ public sealed partial class MainView : Page
             {
                 SpinnerStoryboard.Stop();
             }
-        }
-        else if (e.PropertyName == nameof(MainViewModel.GroupedSessions))
-        {
-            GroupedSessionsSource.Source = ViewModel.GroupedSessions;
         }
     }
 }

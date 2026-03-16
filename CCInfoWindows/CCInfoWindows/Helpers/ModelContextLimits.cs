@@ -6,6 +6,9 @@ namespace CCInfoWindows.Helpers;
 public static class ModelContextLimits
 {
     public const long DefaultContextLimit = 200_000;
+    public const long StandardAutocompactBuffer = 33_000;
+    public const long ExtendedAutocompactBuffer = 165_000;
+    public const long ExtendedContextDetectionThreshold = 180_000;
 
     private const double LargeModelAutocompactThreshold = 0.90;
     private const double SmallModelAutocompactThreshold = 0.95;
@@ -37,6 +40,17 @@ public static class ModelContextLimits
     }
 
     /// <summary>
+    /// Returns the effective max tokens after subtracting the autocompact buffer.
+    /// Uses the extended buffer when current tokens exceed the extended context detection threshold.
+    /// </summary>
+    public static long GetEffectiveMaxTokens(long currentTokens, long maxTokens)
+    {
+        var isExtended = currentTokens > ExtendedContextDetectionThreshold;
+        var buffer = isExtended ? ExtendedAutocompactBuffer : StandardAutocompactBuffer;
+        return Math.Max(1, maxTokens - buffer);
+    }
+
+    /// <summary>
     /// Returns a friendly display name for the given model name.
     /// Strips date suffixes and formats as "Family Major.Minor".
     /// </summary>
@@ -48,6 +62,33 @@ public static class ModelContextLimits
         var normalized = StripDateSuffix(modelName);
         return ParseDisplayName(normalized) ?? modelName;
     }
+
+    /// <summary>
+    /// Returns the badge background hex color for the given model name.
+    /// Opus = purple (#BF5AF2), Sonnet = orange (#FF9F0A), Haiku = blue (#0A84FF).
+    /// Falls back to gray (#636366) for unknown models.
+    /// </summary>
+    public static string GetBadgeColorHex(string? modelName)
+    {
+        if (string.IsNullOrEmpty(modelName))
+            return FallbackBadgeColor;
+
+        var lower = modelName.ToLowerInvariant();
+
+        if (lower.Contains("opus"))
+            return OpusBadgeColor;
+        if (lower.Contains("sonnet"))
+            return SonnetBadgeColor;
+        if (lower.Contains("haiku"))
+            return HaikuBadgeColor;
+
+        return FallbackBadgeColor;
+    }
+
+    private const string OpusBadgeColor = "#BF5AF2";
+    private const string SonnetBadgeColor = "#FF9F0A";
+    private const string HaikuBadgeColor = "#0A84FF";
+    private const string FallbackBadgeColor = "#636366";
 
     /// <summary>
     /// Returns true when the token count is at or above the autocompact warning threshold

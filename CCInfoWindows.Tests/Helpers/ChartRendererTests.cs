@@ -54,38 +54,38 @@ public class ChartRendererTests
     // --- ToY tests ---
 
     [Fact]
-    public void ToY_ZeroUtilization_ReturnsPlotHeight()
+    public void ToY_ZeroUtilization_ReturnsTopMarginPlusPlotHeight()
     {
         var result = ChartRenderer.ToY(utilization: 0.0, plotHeight: 100f);
-        Assert.Equal(100f, result, precision: 2);
+        Assert.Equal(ChartRenderer.TopMargin + 100f, result, precision: 2);
     }
 
     [Fact]
-    public void ToY_FullUtilization_ReturnsZero()
+    public void ToY_FullUtilization_ReturnsTopMargin()
     {
         var result = ChartRenderer.ToY(utilization: 1.0, plotHeight: 100f);
-        Assert.Equal(0f, result, precision: 2);
+        Assert.Equal(ChartRenderer.TopMargin, result, precision: 2);
     }
 
     [Fact]
-    public void ToY_HalfUtilization_ReturnsHalfPlotHeight()
+    public void ToY_HalfUtilization_ReturnsTopMarginPlusHalfPlotHeight()
     {
         var result = ChartRenderer.ToY(utilization: 0.5, plotHeight: 100f);
-        Assert.Equal(50f, result, precision: 2);
+        Assert.Equal(ChartRenderer.TopMargin + 50f, result, precision: 2);
     }
 
     [Fact]
-    public void ToY_OverOneUtilization_ClampsToZero()
+    public void ToY_OverOneUtilization_ClampsToTopMargin()
     {
         var result = ChartRenderer.ToY(utilization: 1.5, plotHeight: 100f);
-        Assert.Equal(0f, result, precision: 2);
+        Assert.Equal(ChartRenderer.TopMargin, result, precision: 2);
     }
 
     [Fact]
-    public void ToY_NegativeUtilization_ClampsToPlotHeight()
+    public void ToY_NegativeUtilization_ClampsToTopMarginPlusPlotHeight()
     {
         var result = ChartRenderer.ToY(utilization: -0.1, plotHeight: 100f);
-        Assert.Equal(100f, result, precision: 2);
+        Assert.Equal(ChartRenderer.TopMargin + 100f, result, precision: 2);
     }
 
     // --- GetZoneSegments tests ---

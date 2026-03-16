@@ -8,6 +8,7 @@ namespace CCInfoWindows.Helpers;
 public static class ChartRenderer
 {
     public const float LeftMargin = 22f;
+    public const float TopMargin = 10f;
     public const float BottomMargin = 16f;
     public const double WindowDurationSeconds = 5 * 60 * 60;
 
@@ -24,11 +25,11 @@ public static class ChartRenderer
 
     /// <summary>
     /// Maps a utilization value (0.0-1.0) to a Y pixel coordinate.
-    /// 0.0 maps to plotHeight (bottom), 1.0 maps to 0 (top). Values are clamped.
+    /// 0.0 maps to plotHeight (bottom), 1.0 maps to TopMargin (top). Values are clamped.
     /// </summary>
     public static float ToY(double utilization, float plotHeight)
     {
-        return (float)((1.0 - Math.Clamp(utilization, 0.0, 1.0)) * plotHeight);
+        return TopMargin + (float)((1.0 - Math.Clamp(utilization, 0.0, 1.0)) * plotHeight);
     }
 
     /// <summary>

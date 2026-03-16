@@ -25,11 +25,12 @@ public sealed class JsonlService : IJsonlService, IDisposable
     private const string JsonlFilePattern = "*.jsonl";
 
     // -------------------------------------------------------------------------
-    // Internal per-session aggregation
+    // Internal per-project aggregation (keyed by project directory name)
     // -------------------------------------------------------------------------
 
-    private sealed class SessionData
+    private sealed class ProjectData
     {
+        public string ProjectDirName { get; set; } = string.Empty;
         public string? Cwd { get; set; }
         public string? ModelName { get; set; }
         public DateTimeOffset LastActivity { get; set; }
@@ -37,7 +38,8 @@ public sealed class JsonlService : IJsonlService, IDisposable
         public long TotalInputTokens { get; set; }
         public long TotalOutputTokens { get; set; }
         public HashSet<string> SeenIds { get; } = [];
-        public List<string> SubagentFiles { get; } = [];
+        public string? NewestSessionFile { get; set; }
+        public DateTimeOffset NewestSessionModTime { get; set; }
     }
 
     // -------------------------------------------------------------------------
@@ -50,7 +52,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
     private readonly object _debounceLock = new();
 
     private List<SessionInfo> _sessions = [];
-    private Dictionary<string, SessionData> _sessionData = [];
+    private Dictionary<string, ProjectData> _projectData = [];
     private Dictionary<string, FilePositionMarker> _filePositions = [];
     private FileSystemWatcher? _watcher;
     private System.Threading.Timer? _debounceTimer;
@@ -91,11 +93,11 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
     public event EventHandler? DataUpdated;
 
-    public ContextWindowData GetContextWindow(string sessionId)
+    public ContextWindowData GetContextWindow(string projectDirName)
     {
         lock (_sessionsLock)
         {
-            if (!_sessionData.TryGetValue(sessionId, out var data))
+            if (!_projectData.TryGetValue(projectDirName, out var data))
                 return ContextWindowData.Empty;
 
             var entry = data.LastAssistantEntry;
@@ -105,7 +107,8 @@ public sealed class JsonlService : IJsonlService, IDisposable
             var totalTokens = ComputeContextTokens(entry);
             var modelName = entry.Message?.Model;
             var maxTokens = ModelContextLimits.GetMaxContextTokens(modelName);
-            var subagents = BuildSubagentContext(data.SubagentFiles);
+            var subagentFiles = FindSubagentFilesForNewestSession(data);
+            var subagents = BuildSubagentContext(subagentFiles);
 
             return new ContextWindowData
             {
@@ -118,14 +121,15 @@ public sealed class JsonlService : IJsonlService, IDisposable
         }
     }
 
-    public ContextWindowData GetSubagentContext(string sessionId, string agentId)
+    public ContextWindowData GetSubagentContext(string projectDirName, string agentId)
     {
         lock (_sessionsLock)
         {
-            if (!_sessionData.TryGetValue(sessionId, out var data))
+            if (!_projectData.TryGetValue(projectDirName, out var data))
                 return ContextWindowData.Empty;
 
-            var subagents = BuildSubagentContext(data.SubagentFiles);
+            var subagentFiles = FindSubagentFilesForNewestSession(data);
+            var subagents = BuildSubagentContext(subagentFiles);
             var agent = subagents.FirstOrDefault(a => a.AgentId == agentId);
             if (agent is null)
                 return ContextWindowData.Empty;
@@ -141,11 +145,11 @@ public sealed class JsonlService : IJsonlService, IDisposable
         }
     }
 
-    public TokenSummary GetTokenSummary(string sessionId)
+    public TokenSummary GetTokenSummary(string projectDirName)
     {
         lock (_sessionsLock)
         {
-            if (!_sessionData.TryGetValue(sessionId, out var data))
+            if (!_projectData.TryGetValue(projectDirName, out var data))
                 return TokenSummary.Empty;
 
             return new TokenSummary
@@ -266,31 +270,43 @@ public sealed class JsonlService : IJsonlService, IDisposable
         if (!Directory.Exists(_projectsDirectory))
             return;
 
-        var allFiles = Directory.GetFiles(_projectsDirectory, JsonlFilePattern, SearchOption.AllDirectories);
-        var mainSessionFiles = allFiles
-            .Where(f => !IsSubagentFile(f))
-            .ToArray();
-
         lock (_sessionsLock)
         {
-            foreach (var file in mainSessionFiles)
-                ParseFile(file);
-
-            foreach (var (sessionId, data) in _sessionData)
-                data.SubagentFiles.Clear();
-
-            // Discover subagent files and associate with sessions
-            foreach (var sessionId in _sessionData.Keys)
+            foreach (var projectDir in Directory.GetDirectories(_projectsDirectory))
             {
-                var subagentFiles = FindSubagentFiles(sessionId);
-                _sessionData[sessionId].SubagentFiles.AddRange(subagentFiles);
+                var projectDirName = Path.GetFileName(projectDir);
+                var jsonlFiles = Directory.GetFiles(projectDir, JsonlFilePattern)
+                    .Where(f => !IsSubagentFile(f))
+                    .ToArray();
+
+                if (jsonlFiles.Length == 0)
+                    continue;
+
+                if (!_projectData.TryGetValue(projectDirName, out var data))
+                {
+                    data = new ProjectData { ProjectDirName = projectDirName };
+                    _projectData[projectDirName] = data;
+                }
+
+                foreach (var file in jsonlFiles)
+                {
+                    ParseFileIntoProject(file, data);
+
+                    // Track the newest session file for subagent discovery
+                    var modTime = File.GetLastWriteTimeUtc(file);
+                    if (modTime > data.NewestSessionModTime)
+                    {
+                        data.NewestSessionModTime = new DateTimeOffset(modTime, TimeSpan.Zero);
+                        data.NewestSessionFile = file;
+                    }
+                }
             }
 
             RebuildSessionsList();
         }
     }
 
-    private void ParseFile(string filePath)
+    private void ParseFileIntoProject(string filePath, ProjectData data)
     {
         var isIncremental = _filePositions.TryGetValue(filePath, out var marker);
         IEnumerable<string> lines;
@@ -316,32 +332,18 @@ public sealed class JsonlService : IJsonlService, IDisposable
             return;
         }
 
+        // Populate project cwd from first entry if not yet set
         var firstEntry = entries[0];
-        var sessionId = firstEntry.SessionId ?? ExtractSessionIdFromPath(filePath);
-
-        if (string.IsNullOrEmpty(sessionId))
-        {
-            UpdateFilePosition(filePath, newPosition);
-            return;
-        }
-
-        if (!_sessionData.TryGetValue(sessionId, out var data))
-        {
-            data = new SessionData();
-            _sessionData[sessionId] = data;
-        }
-
-        // Populate session metadata from first entry if not yet set
         if (string.IsNullOrEmpty(data.Cwd))
             data.Cwd = firstEntry.Cwd;
 
         foreach (var entry in entries)
-            ApplyEntryToSessionData(entry, data);
+            ApplyEntryToProjectData(entry, data);
 
         UpdateFilePosition(filePath, newPosition);
     }
 
-    private static void ApplyEntryToSessionData(JsonlEntry entry, SessionData data)
+    private static void ApplyEntryToProjectData(JsonlEntry entry, ProjectData data)
     {
         if (entry.Timestamp.HasValue && entry.Timestamp > data.LastActivity)
             data.LastActivity = entry.Timestamp.Value;
@@ -380,34 +382,32 @@ public sealed class JsonlService : IJsonlService, IDisposable
         filePath.Contains(Path.DirectorySeparatorChar + SubagentsDirectoryName + Path.DirectorySeparatorChar)
         || filePath.Contains('/' + SubagentsDirectoryName + '/');
 
-    private static string ExtractSessionIdFromPath(string filePath) =>
-        Path.GetFileNameWithoutExtension(filePath);
 
-    private List<string> FindSubagentFiles(string sessionId)
+    private List<string> FindSubagentFilesForNewestSession(ProjectData data)
     {
         var result = new List<string>();
-
-        if (!Directory.Exists(_projectsDirectory))
+        if (string.IsNullOrEmpty(data.NewestSessionFile))
             return result;
 
-        foreach (var projectDir in Directory.GetDirectories(_projectsDirectory))
-        {
-            var subagentDir = Path.Combine(projectDir, sessionId, SubagentsDirectoryName);
-            if (!Directory.Exists(subagentDir))
-                continue;
-
+        // Primary: {sessionUUID}/subagents/agent-*.jsonl
+        var sessionDir = Path.ChangeExtension(data.NewestSessionFile, null);
+        var subagentDir = Path.Combine(sessionDir, SubagentsDirectoryName);
+        if (Directory.Exists(subagentDir))
             result.AddRange(Directory.GetFiles(subagentDir, AgentFilePattern));
-        }
 
-        // Also check direct subagent directories under project folders
-        foreach (var projectDir in Directory.GetDirectories(_projectsDirectory))
+        // Fallback: project dir level agent files
+        if (result.Count == 0)
         {
-            var subagentDir = Path.Combine(projectDir, SubagentsDirectoryName);
-            if (Directory.Exists(subagentDir))
-                result.AddRange(Directory.GetFiles(subagentDir, AgentFilePattern));
+            var projectDir = Path.GetDirectoryName(data.NewestSessionFile);
+            if (projectDir != null)
+            {
+                var projectSubagentDir = Path.Combine(projectDir, SubagentsDirectoryName);
+                if (Directory.Exists(projectSubagentDir))
+                    result.AddRange(Directory.GetFiles(projectSubagentDir, AgentFilePattern));
+            }
         }
 
-        return result.Distinct().ToList();
+        return result;
     }
 
     private static IReadOnlyList<SubagentContextData> BuildSubagentContext(List<string> subagentFiles)
@@ -470,18 +470,26 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
     private void RebuildSessionsList()
     {
-        _sessions = _sessionData
+        _sessions = _projectData
             .Where(kvp => !string.IsNullOrEmpty(kvp.Key))
-            .Select(kvp => new SessionInfo
+            .Select(kvp =>
             {
-                Id = kvp.Key,
-                Cwd = kvp.Value.Cwd ?? string.Empty,
-                DisplayName = SessionNameHelper.GetDisplayName(kvp.Value.Cwd),
-                LastActivity = kvp.Value.LastActivity,
-                ModelName = kvp.Value.ModelName
+                var displayName = SessionNameHelper.GetDisplayName(kvp.Value.Cwd, kvp.Key);
+                if (displayName is null)
+                    return null;
+
+                return new SessionInfo
+                {
+                    Id = kvp.Key,
+                    Cwd = kvp.Value.Cwd ?? string.Empty,
+                    DisplayName = displayName,
+                    LastActivity = kvp.Value.LastActivity,
+                    ModelName = kvp.Value.ModelName
+                };
             })
-            .OrderByDescending(s => s.LastActivity)
-            .ToList();
+            .Where(s => s is not null)
+            .OrderByDescending(s => s!.LastActivity)
+            .ToList()!;
     }
 
     // -------------------------------------------------------------------------
@@ -528,14 +536,25 @@ public sealed class JsonlService : IJsonlService, IDisposable
         {
             lock (_sessionsLock)
             {
-                ParseFile(filePath);
+                var projectDir = Path.GetDirectoryName(filePath);
+                var projectDirName = projectDir != null ? Path.GetFileName(projectDir) : null;
 
-                // Re-discover subagent files for updated sessions
-                var sessionId = ExtractSessionIdFromPath(filePath);
-                if (_sessionData.TryGetValue(sessionId, out var data))
+                if (string.IsNullOrEmpty(projectDirName))
+                    return;
+
+                if (!_projectData.TryGetValue(projectDirName, out var data))
                 {
-                    data.SubagentFiles.Clear();
-                    data.SubagentFiles.AddRange(FindSubagentFiles(sessionId));
+                    data = new ProjectData { ProjectDirName = projectDirName };
+                    _projectData[projectDirName] = data;
+                }
+
+                ParseFileIntoProject(filePath, data);
+
+                var modTime = File.GetLastWriteTimeUtc(filePath);
+                if (modTime > data.NewestSessionModTime)
+                {
+                    data.NewestSessionModTime = new DateTimeOffset(modTime, TimeSpan.Zero);
+                    data.NewestSessionFile = filePath;
                 }
 
                 RebuildSessionsList();

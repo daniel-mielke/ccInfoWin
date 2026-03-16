@@ -1,3 +1,5 @@
+using CCInfoWindows.Helpers;
+
 namespace CCInfoWindows.Models;
 
 /// <summary>
@@ -10,8 +12,14 @@ public record SubagentContextData
     public long MaxTokens { get; init; }
     public string? ModelName { get; init; }
 
-    public double Utilization =>
-        MaxTokens > 0 ? Math.Clamp((double)TotalTokens / MaxTokens, 0.0, double.MaxValue) : 0.0;
+    public double Utilization
+    {
+        get
+        {
+            var effective = ModelContextLimits.GetEffectiveMaxTokens(TotalTokens, MaxTokens);
+            return effective > 0 ? Math.Clamp((double)TotalTokens / effective, 0.0, 1.0) : 0.0;
+        }
+    }
 }
 
 /// <summary>
@@ -34,6 +42,12 @@ public record ContextWindowData
     public bool ShouldWarnAutocompact { get; init; }
     public IReadOnlyList<SubagentContextData> Subagents { get; init; } = [];
 
-    public double Utilization =>
-        MaxTokens > 0 ? Math.Clamp((double)TotalTokens / MaxTokens, 0.0, double.MaxValue) : 0.0;
+    public double Utilization
+    {
+        get
+        {
+            var effective = ModelContextLimits.GetEffectiveMaxTokens(TotalTokens, MaxTokens);
+            return effective > 0 ? Math.Clamp((double)TotalTokens / effective, 0.0, 1.0) : 0.0;
+        }
+    }
 }

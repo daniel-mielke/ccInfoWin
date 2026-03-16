@@ -12,6 +12,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>13.0</LangVersion>
+    <!-- Uncomment to test chart with mock data (disables API polling) -->
+    <!-- <DefineConstants>$(DefineConstants);MOCK_CHART</DefineConstants> -->
   </PropertyGroup>
 
   <ItemGroup>
