@@ -63,7 +63,6 @@ public sealed partial class MainView : Page
         _shimmerStoryboard?.Stop();
 
         var shimmerBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(ShimmerBaseColor);
-        BurnRateShimmer.Background = shimmerBrush;
 
         var animation = new ColorAnimation
         {

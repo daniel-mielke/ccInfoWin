@@ -217,13 +217,12 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     [ObservableProperty]
     private string _statisticsCost = "\u2013";
 
-    [ObservableProperty]
-    private string _statisticsBurnRate = "0 T/h";
-
     // --- Sorted session display items ---
 
     [ObservableProperty]
     private ObservableCollection<SessionDisplayItem> _sortedSessions = [];
+
+    private bool _isRefreshingSessionList;
 
     /// <summary>
     /// Callback invoked after each data update to trigger Win2D canvas redraw.
@@ -544,6 +543,12 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             Sessions.Add(session);
         }
 
+        // SESS-04: capture current selection BEFORE rebuilding the collection
+        var previousSessionId = SelectedSession?.Session.Id;
+
+        // Guard: suppress OnSelectedSessionChanged while rebuilding
+        _isRefreshingSessionList = true;
+
         // Rebuild flat display list: active first, then inactive, both by last activity desc
         var displayItems = latestSessions
             .OrderByDescending(s => s.IsActive(threshold))
@@ -558,19 +563,24 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
 
         SortedSessions = new ObservableCollection<SessionDisplayItem>(displayItems);
 
-        // SESS-04: preserve current selection
-        var currentSelection = SelectedSession;
-
-        if (currentSelection != null)
+        // Restore previous selection without triggering ClearSessionData
+        if (previousSessionId != null)
         {
-            var updatedItem = SortedSessions.FirstOrDefault(d => d.Session.Id == currentSelection.Session.Id);
+            var updatedItem = SortedSessions.FirstOrDefault(d => d.Session.Id == previousSessionId);
             if (updatedItem != null)
             {
                 SelectedSession = updatedItem;
+                _isRefreshingSessionList = false;
                 UpdateSessionData(updatedItem.Session);
+            }
+            else
+            {
+                _isRefreshingSessionList = false;
             }
             return;
         }
+
+        _isRefreshingSessionList = false;
 
         // No current selection — try to restore from persisted setting
         if (!string.IsNullOrEmpty(settings.LastSelectedSessionId))
@@ -593,6 +603,9 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
 
     partial void OnSelectedSessionChanged(SessionDisplayItem? value)
     {
+        // Suppress spurious null transitions during session list rebuild
+        if (_isRefreshingSessionList) return;
+
         if (value == null)
         {
             ClearSessionData();
@@ -613,7 +626,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         ShowAutocompactWarning = false;
         HasActiveSession = false;
         SubagentContexts.Clear();
-        SelectedTabIndex = 0;
+        // Do NOT reset SelectedTabIndex — user's tab choice must survive session refreshes
         ApplyStatistics(StatisticsSummary.Empty);
     }
 
@@ -662,8 +675,14 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
 
     internal void ApplyStatistics(StatisticsSummary stats)
     {
-        StatisticsModels = stats.Models.Count > 0
-            ? string.Join(", ", stats.Models.Select(m => ModelContextLimits.GetDisplayName(m)))
+        var displayModels = stats.Models
+            .Where(m => !string.Equals(m, "<synthetic>", StringComparison.OrdinalIgnoreCase)
+                     && !string.Equals(m, "synthetic", StringComparison.OrdinalIgnoreCase)
+                     && !string.Equals(m, "unknown", StringComparison.OrdinalIgnoreCase))
+            .Select(m => ModelContextLimits.GetDisplayName(m))
+            .ToList();
+        StatisticsModels = displayModels.Count > 0
+            ? string.Join(", ", displayModels)
             : "\u2013";
         StatisticsInput = stats.InputTokens > 0 ? TokenFormatter.FormatTokenCount(stats.InputTokens) : "\u2013";
         StatisticsOutput = stats.OutputTokens > 0 ? TokenFormatter.FormatTokenCount(stats.OutputTokens) : "\u2013";
@@ -671,11 +690,6 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         StatisticsCacheRead = stats.CacheReadTokens > 0 ? TokenFormatter.FormatTokenCount(stats.CacheReadTokens) : "\u2013";
         StatisticsTotal = stats.TotalTokens > 0 ? TokenFormatter.FormatTokenCount(stats.TotalTokens) : "\u2013";
         StatisticsCost = CostFormatter.FormatCost(stats.TotalCostUsd, stats.HasEstimatedCosts);
-
-        var burnRate = BurnRateCalculator.ComputeBurnRate(stats.BurnRateEntries);
-        StatisticsBurnRate = burnRate > 0
-            ? $"{TokenFormatter.FormatTokenCount((long)burnRate)} T/h"
-            : "0 T/h";
     }
 
     private void UpdateSessionData(SessionInfo session)

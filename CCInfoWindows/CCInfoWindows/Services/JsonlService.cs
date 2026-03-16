@@ -66,6 +66,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
         public decimal? CostUsd { get; init; }
         public string? ModelName { get; init; }
         public string DeduplicationKey { get; init; } = string.Empty;
+        public string SourceFile { get; init; } = string.Empty;
     }
 
     // -------------------------------------------------------------------------
@@ -237,50 +238,29 @@ public sealed class JsonlService : IJsonlService, IDisposable
         if (sessionId is null || !_projectData.TryGetValue(sessionId, out var data))
             return StatisticsSummary.Empty;
 
-        var burnRateEntries = data.EntryLog
-            .Select(e => (e.Timestamp, e.TotalTokens))
-            .ToList();
+        // Session = start of current hour (matches macOS reference app)
+        var now = DateTimeOffset.Now;
+        var hourStart = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, 0, 0, now.Offset);
+        var cutoff = hourStart.ToUniversalTime();
 
-        var models = data.EntryLog
-            .Where(e => e.ModelName is not null)
-            .Select(e => e.ModelName!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var entries = data.EntryLog.Where(e => e.Timestamp >= cutoff);
 
-        var (totalCost, hasEstimated) = ComputeCostFromEntryLog(data.EntryLog);
-
-        return new StatisticsSummary
-        {
-            InputTokens = data.TotalInputTokens,
-            OutputTokens = data.TotalOutputTokens,
-            CacheCreationTokens = data.TotalCacheCreationTokens,
-            CacheReadTokens = data.TotalCacheReadTokens,
-            TotalCostUsd = totalCost,
-            HasEstimatedCosts = hasEstimated,
-            Models = models,
-            BurnRateEntries = burnRateEntries
-        };
+        return AggregateEntryLog(entries);
     }
 
     private StatisticsSummary BuildTimePeriodStatistics(TimePeriod period)
     {
+        var now = DateTimeOffset.Now;
         var cutoff = period switch
         {
-            TimePeriod.Today => DateTimeOffset.UtcNow.AddDays(-1),
-            TimePeriod.Week => DateTimeOffset.UtcNow.AddDays(-7),
-            TimePeriod.Month => DateTimeOffset.UtcNow.AddDays(-30),
+            TimePeriod.Today => new DateTimeOffset(now.Date, now.Offset).ToUniversalTime(),
+            TimePeriod.Week => StartOfWeek(now).ToUniversalTime(),
+            TimePeriod.Month => new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, now.Offset).ToUniversalTime(),
             _ => DateTimeOffset.MinValue
         };
 
-        long inputTokens = 0;
-        long outputTokens = 0;
-        long cacheCreation = 0;
-        long cacheRead = 0;
-        decimal totalCost = 0m;
-        bool hasEstimated = false;
         var seenIds = new HashSet<string>(StringComparer.Ordinal);
-        var modelSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var burnRateEntries = new List<(DateTimeOffset Timestamp, long Tokens)>();
+        var filtered = new List<EntryLogItem>();
 
         foreach (var data in _projectData.Values)
         {
@@ -296,27 +276,84 @@ public sealed class JsonlService : IJsonlService, IDisposable
                     continue;
                 }
 
-                inputTokens += logEntry.InputTokens;
-                outputTokens += logEntry.OutputTokens;
-                cacheCreation += logEntry.CacheCreationTokens;
-                cacheRead += logEntry.CacheReadTokens;
-                burnRateEntries.Add((logEntry.Timestamp, logEntry.TotalTokens));
+                filtered.Add(logEntry);
+            }
+        }
 
-                if (logEntry.ModelName is not null)
-                    modelSet.Add(logEntry.ModelName);
+        return AggregateEntryLog(filtered);
+    }
 
-                if (logEntry.CostUsd is > 0m)
+    private static DateTimeOffset StartOfWeek(DateTimeOffset date)
+    {
+        var diff = ((int)date.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+        return new DateTimeOffset(date.Date.AddDays(-diff), date.Offset);
+    }
+
+    private const long TierBreakpointTokens = 200_000;
+
+    private StatisticsSummary AggregateEntryLog(IEnumerable<EntryLogItem> entries)
+    {
+        long inputTokens = 0;
+        long outputTokens = 0;
+        long cacheCreation = 0;
+        long cacheRead = 0;
+        decimal totalCost = 0m;
+        bool hasEstimated = false;
+        var modelSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Cumulative input tracker per model for tiered pricing (matches macOS reference)
+        var cumulativeInputByModel = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var logEntry in entries)
+        {
+            inputTokens += logEntry.InputTokens;
+            outputTokens += logEntry.OutputTokens;
+            cacheCreation += logEntry.CacheCreationTokens;
+            cacheRead += logEntry.CacheReadTokens;
+
+            if (logEntry.ModelName is not null)
+                modelSet.Add(logEntry.ModelName);
+
+            if (logEntry.CostUsd is > 0m)
+            {
+                totalCost += logEntry.CostUsd.Value;
+            }
+            else
+            {
+                var modelKey = logEntry.ModelName ?? "unknown";
+                var pricing = logEntry.ModelName is not null
+                    ? _pricingService.GetPrice(logEntry.ModelName)
+                    : null;
+
+                if (pricing is not null)
                 {
-                    totalCost += logEntry.CostUsd.Value;
+                    // Track cumulative input for tiered pricing
+                    cumulativeInputByModel.TryGetValue(modelKey, out var cumulativeBefore);
+                    var entryInput = logEntry.InputTokens + logEntry.CacheCreationTokens;
+                    cumulativeInputByModel[modelKey] = cumulativeBefore + entryInput;
+
+                    var useExtended = cumulativeBefore >= TierBreakpointTokens;
+
+                    var inputPrice = useExtended && pricing.InputCostAbove200k.HasValue
+                        ? pricing.InputCostAbove200k.Value
+                        : pricing.InputCostPerToken;
+                    var outputPrice = pricing.OutputCostPerToken;
+                    var cacheCreatePrice = useExtended && pricing.CacheCreationCostAbove200k.HasValue
+                        ? pricing.CacheCreationCostAbove200k.Value
+                        : pricing.CacheCreationCost ?? 0.0;
+                    var cacheReadPrice = useExtended && pricing.CacheReadCostAbove200k.HasValue
+                        ? pricing.CacheReadCostAbove200k.Value
+                        : pricing.CacheReadCost ?? 0.0;
+
+                    var entryCost = (logEntry.InputTokens * inputPrice)
+                                  + (logEntry.OutputTokens * outputPrice)
+                                  + (logEntry.CacheCreationTokens * cacheCreatePrice)
+                                  + (logEntry.CacheReadTokens * cacheReadPrice);
+                    totalCost += (decimal)entryCost;
                 }
                 else
                 {
-                    var pricing = logEntry.ModelName is not null
-                        ? _pricingService.GetPrice(logEntry.ModelName)
-                        : null;
-
-                    if (pricing is null)
-                        hasEstimated = true;
+                    hasEstimated = true;
                 }
             }
         }
@@ -329,34 +366,8 @@ public sealed class JsonlService : IJsonlService, IDisposable
             CacheReadTokens = cacheRead,
             TotalCostUsd = totalCost,
             HasEstimatedCosts = hasEstimated,
-            Models = modelSet.ToList(),
-            BurnRateEntries = burnRateEntries
+            Models = modelSet.ToList()
         };
-    }
-
-    private (decimal cost, bool hasEstimated) ComputeCostFromEntryLog(List<EntryLogItem> entryLog)
-    {
-        decimal totalCost = 0m;
-        bool hasEstimated = false;
-
-        foreach (var log in entryLog)
-        {
-            if (log.CostUsd is > 0m)
-            {
-                totalCost += log.CostUsd.Value;
-            }
-            else
-            {
-                var pricing = log.ModelName is not null
-                    ? _pricingService.GetPrice(log.ModelName)
-                    : null;
-
-                if (pricing is null)
-                    hasEstimated = true;
-            }
-        }
-
-        return (totalCost, hasEstimated);
     }
 
     // -------------------------------------------------------------------------
@@ -385,6 +396,24 @@ public sealed class JsonlService : IJsonlService, IDisposable
             if (!string.IsNullOrWhiteSpace(line))
                 yield return line;
         }
+    }
+
+    /// <summary>
+    /// Reads all lines from a JSONL file. Used for initial session discovery
+    /// where we need the complete file content for accurate statistics.
+    /// </summary>
+    private static List<string> ReadAllLines(string filePath)
+    {
+        using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(stream);
+        var lines = new List<string>();
+        string? line;
+        while ((line = reader.ReadLine()) != null)
+        {
+            if (!string.IsNullOrWhiteSpace(line))
+                lines.Add(line);
+        }
+        return lines;
     }
 
     /// <summary>
@@ -464,7 +493,9 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
                 foreach (var file in jsonlFiles)
                 {
-                    ParseFileIntoProject(file, data);
+                    // Always do a full read on startup to rebuild _projectData from scratch.
+                    // Cache positions are only useful for live file-watcher incremental updates.
+                    ParseFileIntoProject(file, data, forceFullRead: true);
 
                     // Track the newest session file for subagent discovery
                     var modTime = File.GetLastWriteTimeUtc(file);
@@ -480,9 +511,10 @@ public sealed class JsonlService : IJsonlService, IDisposable
         }
     }
 
-    private void ParseFileIntoProject(string filePath, ProjectData data)
+    private void ParseFileIntoProject(string filePath, ProjectData data, bool forceFullRead = false)
     {
-        var isIncremental = _filePositions.TryGetValue(filePath, out var marker);
+        _filePositions.TryGetValue(filePath, out var marker);
+        var isIncremental = !forceFullRead && marker is not null;
         IEnumerable<string> lines;
         long newPosition;
 
@@ -491,6 +523,12 @@ public sealed class JsonlService : IJsonlService, IDisposable
             var (incrementalLines, pos) = ReadIncrementalLines(filePath, marker.LastReadPosition);
             lines = incrementalLines;
             newPosition = pos;
+        }
+        else if (forceFullRead)
+        {
+            var allLines = ReadAllLines(filePath);
+            lines = allLines;
+            newPosition = new FileInfo(filePath).Length;
         }
         else
         {
@@ -512,12 +550,12 @@ public sealed class JsonlService : IJsonlService, IDisposable
             data.Cwd = firstEntry.Cwd;
 
         foreach (var entry in entries)
-            ApplyEntryToProjectData(entry, data);
+            ApplyEntryToProjectData(entry, data, filePath);
 
         UpdateFilePosition(filePath, newPosition);
     }
 
-    private static void ApplyEntryToProjectData(JsonlEntry entry, ProjectData data)
+    private static void ApplyEntryToProjectData(JsonlEntry entry, ProjectData data, string sourceFile = "")
     {
         if (entry.Timestamp.HasValue && entry.Timestamp > data.LastActivity)
             data.LastActivity = entry.Timestamp.Value;
@@ -560,7 +598,8 @@ public sealed class JsonlService : IJsonlService, IDisposable
             CacheReadTokens = cacheRead,
             CostUsd = entry.CostUsd,
             ModelName = model,
-            DeduplicationKey = BuildDeduplicationKey(entry)
+            DeduplicationKey = BuildDeduplicationKey(entry),
+            SourceFile = sourceFile
         });
     }
 
@@ -569,7 +608,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
         && !entry.IsSidechain;
 
     private static string BuildDeduplicationKey(JsonlEntry entry) =>
-        $"{entry.Uuid}|{entry.RequestId}";
+        entry.UniqueHash ?? string.Empty;
 
     private static bool IsSubagentFile(string filePath) =>
         filePath.Contains(Path.DirectorySeparatorChar + SubagentsDirectoryName + Path.DirectorySeparatorChar)

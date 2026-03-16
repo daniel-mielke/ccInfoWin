@@ -7,7 +7,7 @@ using Moq;
 namespace CCInfoWindows.Tests.ViewModels;
 
 /// <summary>
-/// Unit tests for MainViewModel statistics tab switching and statistics display logic.
+/// Unit tests for MainViewModel statistics display logic.
 /// Tests use the internal ApplyStatistics method directly to avoid DispatcherQueue dependency.
 /// </summary>
 public class MainViewModelStatisticsTests
@@ -26,38 +26,6 @@ public class MainViewModelStatisticsTests
         pricingService.Setup(s => s.EnsurePricesLoadedAsync()).Returns(Task.CompletedTask);
 
         return new MainViewModelTestHarness(jsonlService.Object, pricingService.Object);
-    }
-
-    [Fact]
-    public void ApplyStatistics_WithEmptyBurnRateEntries_SetsBurnRateToZero()
-    {
-        var harness = CreateHarness();
-
-        harness.ApplyStatistics(StatisticsSummary.Empty);
-
-        Assert.Equal("0 T/h", harness.StatisticsBurnRate);
-    }
-
-    [Fact]
-    public void ApplyStatistics_WithBurnRateEntries_SetsNonZeroBurnRate()
-    {
-        var harness = CreateHarness();
-        var now = DateTimeOffset.UtcNow;
-        var entries = new List<(DateTimeOffset Timestamp, long Tokens)>
-        {
-            (now.AddMinutes(-30), 6000),
-            (now.AddMinutes(-15), 6000)
-        };
-        var stats = new StatisticsSummary
-        {
-            InputTokens = 12000,
-            BurnRateEntries = entries
-        };
-
-        harness.ApplyStatistics(stats);
-
-        Assert.NotEqual("0 T/h", harness.StatisticsBurnRate);
-        Assert.Contains("T/h", harness.StatisticsBurnRate);
     }
 
     [Fact]
@@ -129,32 +97,6 @@ public class MainViewModelStatisticsTests
         Assert.Equal("\u2013", harness.StatisticsCacheRead);
         Assert.Equal("\u2013", harness.StatisticsTotal);
     }
-
-    [Fact]
-    public void BurnRateCalculator_WithOldEntries_ReturnsZero()
-    {
-        var oldEntries = new List<(DateTimeOffset Timestamp, long Tokens)>
-        {
-            (DateTimeOffset.UtcNow.AddHours(-3), 10000)
-        };
-
-        var burnRate = BurnRateCalculator.ComputeBurnRate(oldEntries, windowMinutes: 60);
-
-        Assert.Equal(0, burnRate);
-    }
-
-    [Fact]
-    public void BurnRateCalculator_WithRecentEntries_ReturnsExpectedRate()
-    {
-        var recentEntries = new List<(DateTimeOffset Timestamp, long Tokens)>
-        {
-            (DateTimeOffset.UtcNow.AddMinutes(-30), 3000)
-        };
-
-        var burnRate = BurnRateCalculator.ComputeBurnRate(recentEntries, windowMinutes: 60);
-
-        Assert.True(burnRate > 0);
-    }
 }
 
 /// <summary>
@@ -162,8 +104,6 @@ public class MainViewModelStatisticsTests
 /// </summary>
 public class MainViewModelTestHarness
 {
-    private readonly IJsonlService _jsonlService;
-
     public string StatisticsModels { get; private set; } = "\u2013";
     public string StatisticsInput { get; private set; } = "\u2013";
     public string StatisticsOutput { get; private set; } = "\u2013";
@@ -171,11 +111,9 @@ public class MainViewModelTestHarness
     public string StatisticsCacheRead { get; private set; } = "\u2013";
     public string StatisticsTotal { get; private set; } = "\u2013";
     public string StatisticsCost { get; private set; } = "\u2013";
-    public string StatisticsBurnRate { get; private set; } = "0 T/h";
 
     public MainViewModelTestHarness(IJsonlService jsonlService, IPricingService pricingService)
     {
-        _jsonlService = jsonlService;
     }
 
     public void ApplyStatistics(StatisticsSummary stats)
@@ -189,10 +127,5 @@ public class MainViewModelTestHarness
         StatisticsCacheRead = stats.CacheReadTokens > 0 ? TokenFormatter.FormatTokenCount(stats.CacheReadTokens) : "\u2013";
         StatisticsTotal = stats.TotalTokens > 0 ? TokenFormatter.FormatTokenCount(stats.TotalTokens) : "\u2013";
         StatisticsCost = CostFormatter.FormatCost(stats.TotalCostUsd, stats.HasEstimatedCosts);
-
-        var burnRate = BurnRateCalculator.ComputeBurnRate(stats.BurnRateEntries);
-        StatisticsBurnRate = burnRate > 0
-            ? $"{TokenFormatter.FormatTokenCount((long)burnRate)} T/h"
-            : "0 T/h";
     }
 }

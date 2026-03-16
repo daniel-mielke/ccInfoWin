@@ -362,7 +362,6 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
                         <!-- Row 0: Modelle -->
@@ -454,17 +453,6 @@
                                 HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
-                        <!-- Row 8: Burn Rate -->
-                        <TextBlock Grid.Row="8" Grid.Column="0" Text="Burn Rate:" FontSize="13"
-                                   Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
-                        <TextBlock Grid.Row="8" Grid.Column="1"
-                                   Text="{x:Bind ViewModel.StatisticsBurnRate, Mode=OneWay}"
-                                   FontSize="13" HorizontalAlignment="Right"
-                                   Foreground="{ThemeResource SecondaryTextBrush}"
-                                   Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
-                        <Border x:Name="BurnRateShimmer" Grid.Row="8" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
-                                HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
-                                Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
                     </Grid>
                 </StackPanel>
 

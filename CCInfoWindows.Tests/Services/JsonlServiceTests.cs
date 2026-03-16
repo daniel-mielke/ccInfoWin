@@ -473,19 +473,24 @@ public class JsonlServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task GetStatistics_Session_PopulatesBurnRateEntries()
+    public async Task GetStatistics_Session_ReturnsTokenSumsForCurrentHour()
     {
         const string SessionId = "aaaaaaaa-0000-0000-0000-000000000054";
         var projectDir = CreateProjectSessionDir(SessionId);
-        var projectDirName = Path.GetFileName(projectDir); // "project-aaaaaaaa"
+        var projectDirName = Path.GetFileName(projectDir);
         var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
+
+        // Use timestamps guaranteed to be within the current hour
+        var now = DateTimeOffset.Now;
+        var safeTimestamp1 = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, 1, 0, now.Offset);
+        var safeTimestamp2 = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, 2, 0, now.Offset);
 
         await File.WriteAllLinesAsync(jsonlFile,
         [
             BuildAssistantEntry(SessionId, "uuid-1", "req-1",
-                inputTokens: 100, outputTokens: 50, timestamp: DateTimeOffset.UtcNow.AddMinutes(-20)),
+                inputTokens: 100, outputTokens: 50, timestamp: safeTimestamp1),
             BuildAssistantEntry(SessionId, "uuid-2", "req-2",
-                inputTokens: 200, outputTokens: 80, timestamp: DateTimeOffset.UtcNow.AddMinutes(-10))
+                inputTokens: 200, outputTokens: 80, timestamp: safeTimestamp2)
         ]);
 
         var pricingService = BuildNullPricingService();
@@ -494,11 +499,8 @@ public class JsonlServiceTests : IDisposable
 
         var stats = service.GetStatistics(TimePeriod.Session, projectDirName);
 
-        Assert.Equal(2, stats.BurnRateEntries.Count);
-        // First entry: 100+50 = 150 tokens
-        Assert.Equal(150L, stats.BurnRateEntries[0].Tokens);
-        // Second entry: 200+80 = 280 tokens
-        Assert.Equal(280L, stats.BurnRateEntries[1].Tokens);
+        Assert.Equal(300L, stats.InputTokens);
+        Assert.Equal(130L, stats.OutputTokens);
     }
 
     private static IPricingService BuildNullPricingService()
@@ -588,7 +590,8 @@ public class JsonlServiceTests : IDisposable
         long inputTokens = 0,
         long outputTokens = 0,
         bool isSidechain = false,
-        DateTimeOffset? timestamp = null)
+        DateTimeOffset? timestamp = null,
+        string? uniqueHash = null)
     {
         return JsonSerializer.Serialize(new
         {
@@ -598,6 +601,7 @@ public class JsonlServiceTests : IDisposable
             cwd = cwd ?? "/home/user/project",
             timestamp = (timestamp ?? DateTimeOffset.UtcNow).ToString("O"),
             isSidechain,
+            uniqueHash = uniqueHash ?? $"{uuid}|{requestId}",
             type = "assistant",
             message = new
             {

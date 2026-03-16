@@ -1,7 +1,7 @@
 namespace CCInfoWindows.Models;
 
 /// <summary>
-/// Aggregated token counts, cost, and burn rate data for a given time period.
+/// Aggregated token counts and cost data for a given time period.
 /// </summary>
 public record StatisticsSummary
 {
@@ -21,10 +21,4 @@ public record StatisticsSummary
     public bool HasEstimatedCosts { get; init; }
 
     public IReadOnlyList<string> Models { get; init; } = [];
-
-    /// <summary>
-    /// Per-entry (Timestamp, TotalTokens) tuples collected during aggregation.
-    /// Consumed by BurnRateCalculator in the ViewModel to compute tokens/hour.
-    /// </summary>
-    public IReadOnlyList<(DateTimeOffset Timestamp, long Tokens)> BurnRateEntries { get; init; } = [];
 }

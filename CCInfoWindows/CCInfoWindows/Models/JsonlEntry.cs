@@ -74,4 +74,7 @@ public record JsonlEntry
 
     [JsonPropertyName("costUSD")]
     public decimal? CostUsd { get; init; }
+
+    [JsonPropertyName("uniqueHash")]
+    public string? UniqueHash { get; init; }
 }
