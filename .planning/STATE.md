@@ -3,11 +3,27 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Checkpoint 04-03-PLAN.md Task 3: awaiting human-verify"
-last_updated: "2026-03-11T17:43:06.303Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-16T12:14:48.734Z"
 last_activity: 2026-03-11 — Plan 04-01 executed (data contracts, helpers, IJsonlService, unit tests)
 progress:
   total_phases: 6
+  completed_phases: 4
+  total_plans: 15
+  completed_plans: 14
+  percent: 93
+---
+
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: executing
+stopped_at: Phase 5 UI-SPEC approved
+last_updated: "2026-03-16T11:20:07.013Z"
+last_activity: 2026-03-11 — Plan 04-01 executed (data contracts, helpers, IJsonlService, unit tests)
+progress:
+  [█████████░] 93%
   completed_phases: 4
   total_plans: 13
   completed_plans: 13
@@ -58,6 +74,7 @@ Progress: [███████░░░] 78%
 | Phase 03-area-chart P02 | 5 | 3 tasks | 6 files |
 | Phase 03-area-chart P03 | 10 | 2 tasks | 4 files |
 | Phase 04-local-data-pipeline P02 | 5 | 2 tasks | 3 files |
+| Phase 05-cost-analytics P01 | 53 | 2 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -102,14 +119,18 @@ Recent decisions affecting current work:
 - [Phase 04-local-data-pipeline]: CollectionViewSource Source set from code-behind OnLoaded and GroupedSessions PropertyChanged handler — x:Bind limitation with Page.Resources CollectionViewSource in WinUI 3
 - [Phase 04-local-data-pipeline]: SessionGroup implements IGrouping<string,SessionInfo> backed by List<T> for grouped ComboBox CollectionViewSource
 - [Phase 04-local-data-pipeline]: SelectedThresholdIndex in SettingsViewModel maps 0=15,1=30,2=60,3=120 minutes with default index 1 (30 min)
+- [Phase 05-01]: EntryLogItem stores full per-entry token breakdown in ProjectData.EntryLog for time-period aggregation without re-reading JSONL files
+- [Phase 05-01]: NullPricingService as inner class provides backward compatibility when IPricingService not injected into JsonlService
 
 ### Pending Todos
 
-1. **Fix 5h chart dashed line thickness and add 0% line** (ui) — `.planning/todos/pending/2026-03-11-fix-5h-chart-dashed-line-thickness-and-add-0-line.md`
-2. **Add filled area gradient to 5h chart** (ui) — `.planning/todos/pending/2026-03-11-add-filled-area-gradient-to-5h-chart.md`
-3. **Match font from original macOS ccInfo app** (ui) — `.planning/todos/pending/2026-03-11-match-font-from-original-macos-ccinfo-app.md`
-4. **Add 5h label to x-axis of area chart** (ui) — `.planning/todos/pending/2026-03-11-add-5h-label-to-x-axis-of-area-chart.md`
-5. **Change dark mode background color to #1C1C1E** (ui) — `.planning/todos/pending/2026-03-11-change-dark-mode-background-color-to-1c1c1e.md`
+1. **Add filled area gradient to 5h chart** (ui) — `.planning/todos/pending/2026-03-11-add-filled-area-gradient-to-5h-chart.md`
+2. **Match font from original macOS ccInfo app** (ui) — `.planning/todos/pending/2026-03-11-match-font-from-original-macos-ccinfo-app.md`
+3. **Change dark mode background color to #1C1C1E** (ui) — `.planning/todos/pending/2026-03-11-change-dark-mode-background-color-to-1c1c1e.md`
+4. **Display API errors as red banner with technical details** (ui) — `.planning/todos/pending/2026-03-16-display-api-errors-as-red-banner-with-technical-details.md`
+5. **Filter inactive sessions from project dropdown** (ui) — `.planning/todos/pending/2026-03-16-filter-inactive-sessions-from-project-dropdown.md`
+6. **Force session dropdown to always open downward** (ui) — `.planning/todos/pending/2026-03-16-force-session-dropdown-to-always-open-downward.md`
+7. **Make vertical scrollbar always visible when content overflows** (ui) — `.planning/todos/pending/2026-03-16-make-vertical-scrollbar-always-visible-when-content-overflows.md`
 
 ### Blockers/Concerns
 
@@ -118,6 +139,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-11T17:42:51.110Z
-Stopped at: Checkpoint 04-03-PLAN.md Task 3: awaiting human-verify
+Last session: 2026-03-16T12:14:48.731Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None
