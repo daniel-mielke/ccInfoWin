@@ -15,6 +15,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ISettingsService _settingsService;
     private readonly ICredentialService _credentialService;
     private readonly INavigationService _navigationService;
+    private readonly IPricingService _pricingService;
 
     /// <summary>
     /// Represents a selectable refresh interval option for the ComboBox.
@@ -40,14 +41,27 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private int _selectedThresholdIndex;
 
+    public string PricingSourceText => _pricingService.Source switch
+    {
+        PricingSource.Live => "Live (LiteLLM API)",
+        PricingSource.Fallback => "Fallback (geb\u00fcndelt)",
+        _ => "Unbekannt"
+    };
+
+    public string LastPricingFetchText => _pricingService.LastFetch.HasValue
+        ? _pricingService.LastFetch.Value.LocalDateTime.ToString("dd.MM.yyyy HH:mm")
+        : "Nie";
+
     public SettingsViewModel(
         ISettingsService settingsService,
         ICredentialService credentialService,
-        INavigationService navigationService)
+        INavigationService navigationService,
+        IPricingService pricingService)
     {
         _settingsService = settingsService;
         _credentialService = credentialService;
         _navigationService = navigationService;
+        _pricingService = pricingService;
     }
 
     private static readonly int[] ThresholdMinuteOptions = [15, 30, 60, 120];

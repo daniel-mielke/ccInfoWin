@@ -1,3 +1,4 @@
+using System.Net.Http;
 using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
 using CCInfoWindows.ViewModels;
@@ -81,6 +82,9 @@ public partial class App : Application
     {
         var services = new ServiceCollection();
 
+        // Infrastructure
+        services.AddSingleton<HttpClient>();
+
         // Singleton services
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IUsageHistoryService, UsageHistoryService>();
@@ -89,7 +93,10 @@ public partial class App : Application
         services.AddSingleton<WebViewBridge>();
         services.AddSingleton<IWebViewBridge>(sp => sp.GetRequiredService<WebViewBridge>());
         services.AddSingleton<IClaudeApiService, ClaudeApiService>();
-        services.AddSingleton<IJsonlService, JsonlService>();
+        services.AddSingleton<IPricingService>(sp =>
+            new LiteLLMPricingService(sp.GetRequiredService<HttpClient>()));
+        services.AddSingleton<IJsonlService>(sp =>
+            new JsonlService(pricingService: sp.GetRequiredService<IPricingService>()));
 
         // ViewModels
         services.AddTransient<LoginViewModel>();

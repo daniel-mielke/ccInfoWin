@@ -53,6 +53,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     private readonly ISettingsService _settingsService;
     private readonly IUsageHistoryService _historyService;
     private readonly IJsonlService _jsonlService;
+    private readonly IPricingService _pricingService;
 
     private DispatcherQueueTimer? _pollTimer;
     private DispatcherQueueTimer? _countdownTimer;
@@ -179,13 +180,45 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     [ObservableProperty]
     private ObservableCollection<SubagentDisplayData> _subagentContexts = [];
 
-    // --- Token counters ---
+    // --- Token counters (backward compat until Task 2 replaces TOKENS section in XAML) ---
 
     [ObservableProperty]
     private string _inputTokensText = "--";
 
     [ObservableProperty]
     private string _outputTokensText = "--";
+
+    // --- Statistics (STATISTIKEN section) ---
+
+    [ObservableProperty]
+    private int _selectedTabIndex;
+
+    [ObservableProperty]
+    private bool _isAggregating;
+
+    [ObservableProperty]
+    private string _statisticsModels = "\u2013";
+
+    [ObservableProperty]
+    private string _statisticsInput = "\u2013";
+
+    [ObservableProperty]
+    private string _statisticsOutput = "\u2013";
+
+    [ObservableProperty]
+    private string _statisticsCacheCreation = "\u2013";
+
+    [ObservableProperty]
+    private string _statisticsCacheRead = "\u2013";
+
+    [ObservableProperty]
+    private string _statisticsTotal = "\u2013";
+
+    [ObservableProperty]
+    private string _statisticsCost = "\u2013";
+
+    [ObservableProperty]
+    private string _statisticsBurnRate = "0 T/h";
 
     // --- Sorted session display items ---
 
@@ -210,7 +243,8 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         IClaudeApiService apiService,
         ISettingsService settingsService,
         IUsageHistoryService historyService,
-        IJsonlService jsonlService)
+        IJsonlService jsonlService,
+        IPricingService pricingService)
     {
         _credentialService = credentialService;
         _navigationService = navigationService;
@@ -218,6 +252,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         _settingsService = settingsService;
         _historyService = historyService;
         _jsonlService = jsonlService;
+        _pricingService = pricingService;
 
         WeakReferenceMessenger.Default.Register<AuthStateChangedMessage>(this);
     }
@@ -275,6 +310,9 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         {
             // Background scan failure should not block the dashboard
         }
+
+        // Load pricing in background — non-blocking, fallback activates on failure
+        _ = _pricingService.EnsurePricesLoadedAsync();
 
         RefreshSessionList();
 
@@ -575,8 +613,69 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         ShowAutocompactWarning = false;
         HasActiveSession = false;
         SubagentContexts.Clear();
-        InputTokensText = "--";
-        OutputTokensText = "--";
+        SelectedTabIndex = 0;
+        ApplyStatistics(StatisticsSummary.Empty);
+    }
+
+    partial void OnSelectedTabIndexChanged(int value)
+    {
+        var period = (TimePeriod)value;
+        if (period == TimePeriod.Session)
+        {
+            UpdateStatisticsFromSession();
+        }
+        else
+        {
+            _ = AggregateStatisticsAsync(period);
+        }
+    }
+
+    private void UpdateStatisticsFromSession()
+    {
+        if (SelectedSession == null)
+        {
+            ApplyStatistics(StatisticsSummary.Empty);
+            return;
+        }
+        var stats = _jsonlService.GetStatistics(TimePeriod.Session, SelectedSession.Session.Id);
+        ApplyStatistics(stats);
+    }
+
+    private async Task AggregateStatisticsAsync(TimePeriod period)
+    {
+        IsAggregating = true;
+        try
+        {
+            await _pricingService.EnsurePricesLoadedAsync();
+            var stats = await Task.Run(() => _jsonlService.GetStatistics(period));
+            DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() => ApplyStatistics(stats));
+        }
+        catch
+        {
+            DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() => ApplyStatistics(StatisticsSummary.Empty));
+        }
+        finally
+        {
+            DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() => IsAggregating = false);
+        }
+    }
+
+    internal void ApplyStatistics(StatisticsSummary stats)
+    {
+        StatisticsModels = stats.Models.Count > 0
+            ? string.Join(", ", stats.Models.Select(m => ModelContextLimits.GetDisplayName(m)))
+            : "\u2013";
+        StatisticsInput = stats.InputTokens > 0 ? TokenFormatter.FormatTokenCount(stats.InputTokens) : "\u2013";
+        StatisticsOutput = stats.OutputTokens > 0 ? TokenFormatter.FormatTokenCount(stats.OutputTokens) : "\u2013";
+        StatisticsCacheCreation = stats.CacheCreationTokens > 0 ? TokenFormatter.FormatTokenCount(stats.CacheCreationTokens) : "\u2013";
+        StatisticsCacheRead = stats.CacheReadTokens > 0 ? TokenFormatter.FormatTokenCount(stats.CacheReadTokens) : "\u2013";
+        StatisticsTotal = stats.TotalTokens > 0 ? TokenFormatter.FormatTokenCount(stats.TotalTokens) : "\u2013";
+        StatisticsCost = CostFormatter.FormatCost(stats.TotalCostUsd, stats.HasEstimatedCosts);
+
+        var burnRate = BurnRateCalculator.ComputeBurnRate(stats.BurnRateEntries);
+        StatisticsBurnRate = burnRate > 0
+            ? $"{TokenFormatter.FormatTokenCount((long)burnRate)} T/h"
+            : "0 T/h";
     }
 
     private void UpdateSessionData(SessionInfo session)
@@ -606,9 +705,8 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             });
         }
 
-        var tokens = _jsonlService.GetTokenSummary(session.Id);
-        InputTokensText = TokenFormatter.FormatTokenCount(tokens.InputTokens);
-        OutputTokensText = TokenFormatter.FormatTokenCount(tokens.OutputTokens);
+        if (SelectedTabIndex == 0) // Session tab
+            UpdateStatisticsFromSession();
     }
 
     private static SolidColorBrush ParseHexBrush(string hex)
