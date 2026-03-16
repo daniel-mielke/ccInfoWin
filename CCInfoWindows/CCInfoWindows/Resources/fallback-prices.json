@@ -1,0 +1,52 @@
+{
+  "claude-opus-4-6-20260205": {
+    "input_cost_per_token": 0.000015,
+    "output_cost_per_token": 0.000075,
+    "cache_creation_input_token_cost": 0.00001875,
+    "cache_read_input_token_cost": 0.0000015,
+    "input_cost_per_token_above_200k_tokens": 0.00002,
+    "output_cost_per_token_above_200k_tokens": 0.0001,
+    "cache_creation_input_token_cost_above_200k_tokens": 0.000025,
+    "cache_read_input_token_cost_above_200k_tokens": 0.000002,
+    "litellm_provider": "anthropic",
+    "max_input_tokens": 1000000
+  },
+  "claude-opus-4-5-20251101": {
+    "input_cost_per_token": 0.000015,
+    "output_cost_per_token": 0.000075,
+    "cache_creation_input_token_cost": 0.00001875,
+    "cache_read_input_token_cost": 0.0000015,
+    "input_cost_per_token_above_200k_tokens": 0.00002,
+    "output_cost_per_token_above_200k_tokens": 0.0001,
+    "cache_creation_input_token_cost_above_200k_tokens": 0.000025,
+    "cache_read_input_token_cost_above_200k_tokens": 0.000002,
+    "litellm_provider": "anthropic",
+    "max_input_tokens": 1000000
+  },
+  "claude-sonnet-4-5-20250929": {
+    "input_cost_per_token": 0.000003,
+    "output_cost_per_token": 0.000015,
+    "cache_creation_input_token_cost": 0.00000375,
+    "cache_read_input_token_cost": 0.0000003,
+    "input_cost_per_token_above_200k_tokens": 0.0000036,
+    "output_cost_per_token_above_200k_tokens": 0.000018,
+    "litellm_provider": "anthropic",
+    "max_input_tokens": 1000000
+  },
+  "claude-sonnet-4-6-20260205": {
+    "input_cost_per_token": 0.000003,
+    "output_cost_per_token": 0.000015,
+    "cache_creation_input_token_cost": 0.00000375,
+    "cache_read_input_token_cost": 0.0000003,
+    "litellm_provider": "anthropic",
+    "max_input_tokens": 200000
+  },
+  "claude-haiku-4-5-20251001": {
+    "input_cost_per_token": 0.0000008,
+    "output_cost_per_token": 0.000004,
+    "cache_creation_input_token_cost": 0.000001,
+    "cache_read_input_token_cost": 0.00000008,
+    "litellm_provider": "anthropic",
+    "max_input_tokens": 200000
+  }
+}

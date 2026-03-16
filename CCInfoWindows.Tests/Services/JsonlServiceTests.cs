@@ -1,7 +1,10 @@
 using System.Text;
 using System.Text.Json;
+using CCInfoWindows.Helpers;
 using CCInfoWindows.Models;
 using CCInfoWindows.Services;
+using CCInfoWindows.Services.Interfaces;
+using Moq;
 
 namespace CCInfoWindows.Tests.Services;
 
@@ -383,6 +386,162 @@ public class JsonlServiceTests : IDisposable
 
         Assert.Single(ctx.Subagents);
         Assert.Equal(8000L, ctx.Subagents[0].TotalTokens);
+    }
+
+    // -------------------------------------------------------------------------
+    // GetStatistics
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetStatistics_Session_ReturnsCorrectTokenAggregation()
+    {
+        const string SessionId = "aaaaaaaa-0000-0000-0000-000000000050";
+        var projectDir = CreateProjectSessionDir(SessionId);
+        var projectDirName = Path.GetFileName(projectDir); // "project-aaaaaaaa"
+        var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
+
+        await File.WriteAllLinesAsync(jsonlFile,
+        [
+            BuildAssistantEntryWithCache(SessionId, "uuid-1", "req-1",
+                inputTokens: 500, outputTokens: 100, cacheCreation: 200, cacheRead: 50),
+            BuildAssistantEntryWithCache(SessionId, "uuid-2", "req-2",
+                inputTokens: 300, outputTokens: 80, cacheCreation: 0, cacheRead: 20)
+        ]);
+
+        var pricingService = BuildNullPricingService();
+        var service = new JsonlService(_tempDir, pricingService: pricingService);
+        await service.InitializeAsync();
+
+        var stats = service.GetStatistics(TimePeriod.Session, projectDirName);
+
+        Assert.Equal(800L, stats.InputTokens);
+        Assert.Equal(180L, stats.OutputTokens);
+        Assert.Equal(200L, stats.CacheCreationTokens);
+        Assert.Equal(70L, stats.CacheReadTokens);
+    }
+
+    [Fact]
+    public async Task GetStatistics_Today_FiltersEntriesByTimestamp()
+    {
+        const string SessionId = "aaaaaaaa-0000-0000-0000-000000000051";
+        var projectDir = CreateProjectSessionDir(SessionId);
+        var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
+
+        var recentTime = DateTimeOffset.UtcNow.AddHours(-2);
+        var oldTime = DateTimeOffset.UtcNow.AddDays(-5);
+
+        await File.WriteAllLinesAsync(jsonlFile,
+        [
+            BuildAssistantEntry(SessionId, "uuid-1", "req-1", inputTokens: 1000, outputTokens: 100, timestamp: recentTime),
+            BuildAssistantEntry(SessionId, "uuid-2", "req-2", inputTokens: 9999, outputTokens: 999, timestamp: oldTime)
+        ]);
+
+        var pricingService = BuildNullPricingService();
+        var service = new JsonlService(_tempDir, pricingService: pricingService);
+        await service.InitializeAsync();
+
+        var stats = service.GetStatistics(TimePeriod.Today);
+
+        Assert.Equal(1000L, stats.InputTokens);
+        Assert.Equal(100L, stats.OutputTokens);
+    }
+
+    [Fact]
+    public async Task GetStatistics_DeduplicatesByUuidAndRequestIdAcrossProjects()
+    {
+        const string Session1 = "aaaaaaaa-0000-0000-0000-000000000052";
+        const string Session2 = "aaaaaaaa-0000-0000-0000-000000000053";
+        var projectDir1 = CreateProjectSessionDir(Session1);
+        var projectDir2 = CreateProjectSessionDir(Session2);
+
+        // Same uuid+requestId in two different project dirs — must only count once
+        var json1 = BuildAssistantEntry(Session1, "shared-uuid", "shared-req",
+            inputTokens: 500, outputTokens: 100, timestamp: DateTimeOffset.UtcNow.AddHours(-1));
+        var json2 = BuildAssistantEntry(Session2, "shared-uuid", "shared-req",
+            inputTokens: 500, outputTokens: 100, timestamp: DateTimeOffset.UtcNow.AddHours(-1));
+
+        await File.WriteAllTextAsync(Path.Combine(projectDir1, $"{Session1}.jsonl"), json1 + "\n");
+        await File.WriteAllTextAsync(Path.Combine(projectDir2, $"{Session2}.jsonl"), json2 + "\n");
+
+        var pricingService = BuildNullPricingService();
+        var service = new JsonlService(_tempDir, pricingService: pricingService);
+        await service.InitializeAsync();
+
+        var stats = service.GetStatistics(TimePeriod.Today);
+
+        Assert.Equal(500L, stats.InputTokens);
+    }
+
+    [Fact]
+    public async Task GetStatistics_Session_PopulatesBurnRateEntries()
+    {
+        const string SessionId = "aaaaaaaa-0000-0000-0000-000000000054";
+        var projectDir = CreateProjectSessionDir(SessionId);
+        var projectDirName = Path.GetFileName(projectDir); // "project-aaaaaaaa"
+        var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
+
+        await File.WriteAllLinesAsync(jsonlFile,
+        [
+            BuildAssistantEntry(SessionId, "uuid-1", "req-1",
+                inputTokens: 100, outputTokens: 50, timestamp: DateTimeOffset.UtcNow.AddMinutes(-20)),
+            BuildAssistantEntry(SessionId, "uuid-2", "req-2",
+                inputTokens: 200, outputTokens: 80, timestamp: DateTimeOffset.UtcNow.AddMinutes(-10))
+        ]);
+
+        var pricingService = BuildNullPricingService();
+        var service = new JsonlService(_tempDir, pricingService: pricingService);
+        await service.InitializeAsync();
+
+        var stats = service.GetStatistics(TimePeriod.Session, projectDirName);
+
+        Assert.Equal(2, stats.BurnRateEntries.Count);
+        // First entry: 100+50 = 150 tokens
+        Assert.Equal(150L, stats.BurnRateEntries[0].Tokens);
+        // Second entry: 200+80 = 280 tokens
+        Assert.Equal(280L, stats.BurnRateEntries[1].Tokens);
+    }
+
+    private static IPricingService BuildNullPricingService()
+    {
+        var mock = new Mock<IPricingService>();
+        mock.Setup(p => p.GetPrice(It.IsAny<string>())).Returns((ModelPricing?)null);
+        mock.Setup(p => p.EnsurePricesLoadedAsync()).Returns(Task.CompletedTask);
+        mock.SetupGet(p => p.Source).Returns(PricingSource.Unknown);
+        mock.SetupGet(p => p.LastFetch).Returns((DateTimeOffset?)null);
+        return mock.Object;
+    }
+
+    private static string BuildAssistantEntryWithCache(
+        string sessionId,
+        string uuid,
+        string requestId,
+        long inputTokens = 0,
+        long outputTokens = 0,
+        long cacheCreation = 0,
+        long cacheRead = 0,
+        DateTimeOffset? timestamp = null)
+    {
+        return JsonSerializer.Serialize(new
+        {
+            uuid,
+            requestId,
+            sessionId,
+            cwd = "/home/user/project",
+            timestamp = (timestamp ?? DateTimeOffset.UtcNow).ToString("O"),
+            isSidechain = false,
+            type = "assistant",
+            message = new
+            {
+                model = "claude-sonnet-4-6",
+                usage = new
+                {
+                    input_tokens = inputTokens,
+                    output_tokens = outputTokens,
+                    cache_creation_input_tokens = cacheCreation,
+                    cache_read_input_tokens = cacheRead
+                }
+            }
+        });
     }
 
     // -------------------------------------------------------------------------

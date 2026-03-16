@@ -4,6 +4,7 @@ using CCInfoWindows.Helpers;
 using CCInfoWindows.Models;
 using CCInfoWindows.Services.Interfaces;
 
+
 namespace CCInfoWindows.Services;
 
 /// <summary>
@@ -37,9 +38,34 @@ public sealed class JsonlService : IJsonlService, IDisposable
         public JsonlEntry? LastAssistantEntry { get; set; }
         public long TotalInputTokens { get; set; }
         public long TotalOutputTokens { get; set; }
+        public long TotalCacheCreationTokens { get; set; }
+        public long TotalCacheReadTokens { get; set; }
         public HashSet<string> SeenIds { get; } = [];
         public string? NewestSessionFile { get; set; }
         public DateTimeOffset NewestSessionModTime { get; set; }
+
+        /// <summary>
+        /// Compact per-entry log for time-period filtering.
+        /// Stores token breakdown, cost, and model per assistant entry.
+        /// Roughly 120 bytes per entry — keeps time-period aggregation in memory.
+        /// </summary>
+        public List<EntryLogItem> EntryLog { get; } = [];
+    }
+
+    /// <summary>
+    /// Compact record of a single JSONL assistant entry for time-period aggregation.
+    /// </summary>
+    private sealed class EntryLogItem
+    {
+        public DateTimeOffset Timestamp { get; init; }
+        public long InputTokens { get; init; }
+        public long OutputTokens { get; init; }
+        public long CacheCreationTokens { get; init; }
+        public long CacheReadTokens { get; init; }
+        public long TotalTokens => InputTokens + OutputTokens + CacheCreationTokens + CacheReadTokens;
+        public decimal? CostUsd { get; init; }
+        public string? ModelName { get; init; }
+        public string DeduplicationKey { get; init; } = string.Empty;
     }
 
     // -------------------------------------------------------------------------
@@ -48,6 +74,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
     private readonly string _projectsDirectory;
     private readonly string _cacheDirectory;
+    private readonly IPricingService _pricingService;
     private readonly Lock _sessionsLock = new();
     private readonly object _debounceLock = new();
 
@@ -67,13 +94,19 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
     /// <param name="projectsDirectoryOverride">Override for test isolation. Defaults to %USERPROFILE%\.claude\projects.</param>
     /// <param name="cacheDirectoryOverride">Override for test isolation. Defaults to %LOCALAPPDATA%\CCInfoWindows.</param>
-    public JsonlService(string? projectsDirectoryOverride = null, string? cacheDirectoryOverride = null)
+    /// <param name="pricingService">Pricing service for cost calculation. Required for GetStatistics.</param>
+    public JsonlService(
+        string? projectsDirectoryOverride = null,
+        string? cacheDirectoryOverride = null,
+        IPricingService? pricingService = null)
     {
         _projectsDirectory = projectsDirectoryOverride
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", "projects");
 
         _cacheDirectory = cacheDirectoryOverride
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CCInfoWindows");
+
+        _pricingService = pricingService ?? new NullPricingService();
     }
 
     // -------------------------------------------------------------------------
@@ -160,6 +193,16 @@ public sealed class JsonlService : IJsonlService, IDisposable
         }
     }
 
+    public StatisticsSummary GetStatistics(TimePeriod period, string? sessionId = null)
+    {
+        lock (_sessionsLock)
+        {
+            return period == TimePeriod.Session
+                ? BuildSessionStatistics(sessionId)
+                : BuildTimePeriodStatistics(period);
+        }
+    }
+
     public async Task InitializeAsync()
     {
         _isScanning = true;
@@ -184,6 +227,137 @@ public sealed class JsonlService : IJsonlService, IDisposable
     }
 
     public void Dispose() => Stop();
+
+    // -------------------------------------------------------------------------
+    // Statistics aggregation
+    // -------------------------------------------------------------------------
+
+    private StatisticsSummary BuildSessionStatistics(string? sessionId)
+    {
+        if (sessionId is null || !_projectData.TryGetValue(sessionId, out var data))
+            return StatisticsSummary.Empty;
+
+        var burnRateEntries = data.EntryLog
+            .Select(e => (e.Timestamp, e.TotalTokens))
+            .ToList();
+
+        var models = data.EntryLog
+            .Where(e => e.ModelName is not null)
+            .Select(e => e.ModelName!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var (totalCost, hasEstimated) = ComputeCostFromEntryLog(data.EntryLog);
+
+        return new StatisticsSummary
+        {
+            InputTokens = data.TotalInputTokens,
+            OutputTokens = data.TotalOutputTokens,
+            CacheCreationTokens = data.TotalCacheCreationTokens,
+            CacheReadTokens = data.TotalCacheReadTokens,
+            TotalCostUsd = totalCost,
+            HasEstimatedCosts = hasEstimated,
+            Models = models,
+            BurnRateEntries = burnRateEntries
+        };
+    }
+
+    private StatisticsSummary BuildTimePeriodStatistics(TimePeriod period)
+    {
+        var cutoff = period switch
+        {
+            TimePeriod.Today => DateTimeOffset.UtcNow.AddDays(-1),
+            TimePeriod.Week => DateTimeOffset.UtcNow.AddDays(-7),
+            TimePeriod.Month => DateTimeOffset.UtcNow.AddDays(-30),
+            _ => DateTimeOffset.MinValue
+        };
+
+        long inputTokens = 0;
+        long outputTokens = 0;
+        long cacheCreation = 0;
+        long cacheRead = 0;
+        decimal totalCost = 0m;
+        bool hasEstimated = false;
+        var seenIds = new HashSet<string>(StringComparer.Ordinal);
+        var modelSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var burnRateEntries = new List<(DateTimeOffset Timestamp, long Tokens)>();
+
+        foreach (var data in _projectData.Values)
+        {
+            foreach (var logEntry in data.EntryLog)
+            {
+                if (logEntry.Timestamp < cutoff)
+                    continue;
+
+                // Deduplicate by uuid+requestId across projects (TOKS-04)
+                if (!string.IsNullOrEmpty(logEntry.DeduplicationKey)
+                    && !seenIds.Add(logEntry.DeduplicationKey))
+                {
+                    continue;
+                }
+
+                inputTokens += logEntry.InputTokens;
+                outputTokens += logEntry.OutputTokens;
+                cacheCreation += logEntry.CacheCreationTokens;
+                cacheRead += logEntry.CacheReadTokens;
+                burnRateEntries.Add((logEntry.Timestamp, logEntry.TotalTokens));
+
+                if (logEntry.ModelName is not null)
+                    modelSet.Add(logEntry.ModelName);
+
+                if (logEntry.CostUsd is > 0m)
+                {
+                    totalCost += logEntry.CostUsd.Value;
+                }
+                else
+                {
+                    var pricing = logEntry.ModelName is not null
+                        ? _pricingService.GetPrice(logEntry.ModelName)
+                        : null;
+
+                    if (pricing is null)
+                        hasEstimated = true;
+                }
+            }
+        }
+
+        return new StatisticsSummary
+        {
+            InputTokens = inputTokens,
+            OutputTokens = outputTokens,
+            CacheCreationTokens = cacheCreation,
+            CacheReadTokens = cacheRead,
+            TotalCostUsd = totalCost,
+            HasEstimatedCosts = hasEstimated,
+            Models = modelSet.ToList(),
+            BurnRateEntries = burnRateEntries
+        };
+    }
+
+    private (decimal cost, bool hasEstimated) ComputeCostFromEntryLog(List<EntryLogItem> entryLog)
+    {
+        decimal totalCost = 0m;
+        bool hasEstimated = false;
+
+        foreach (var log in entryLog)
+        {
+            if (log.CostUsd is > 0m)
+            {
+                totalCost += log.CostUsd.Value;
+            }
+            else
+            {
+                var pricing = log.ModelName is not null
+                    ? _pricingService.GetPrice(log.ModelName)
+                    : null;
+
+                if (pricing is null)
+                    hasEstimated = true;
+            }
+        }
+
+        return (totalCost, hasEstimated);
+    }
 
     // -------------------------------------------------------------------------
     // File reading — public for testability
@@ -363,12 +537,31 @@ public sealed class JsonlService : IJsonlService, IDisposable
         if (usage is null)
             return;
 
-        data.TotalInputTokens += usage.InputTokens ?? 0;
-        data.TotalOutputTokens += usage.OutputTokens ?? 0;
+        var inputTokens = usage.InputTokens ?? 0;
+        var outputTokens = usage.OutputTokens ?? 0;
+        var cacheCreation = usage.CacheCreationInputTokens ?? 0;
+        var cacheRead = usage.CacheReadInputTokens ?? 0;
+
+        data.TotalInputTokens += inputTokens;
+        data.TotalOutputTokens += outputTokens;
+        data.TotalCacheCreationTokens += cacheCreation;
+        data.TotalCacheReadTokens += cacheRead;
 
         var model = entry.Message?.Model;
         if (!string.IsNullOrEmpty(model))
             data.ModelName = model;
+
+        data.EntryLog.Add(new EntryLogItem
+        {
+            Timestamp = entry.Timestamp ?? DateTimeOffset.MinValue,
+            InputTokens = inputTokens,
+            OutputTokens = outputTokens,
+            CacheCreationTokens = cacheCreation,
+            CacheReadTokens = cacheRead,
+            CostUsd = entry.CostUsd,
+            ModelName = model,
+            DeduplicationKey = BuildDeduplicationKey(entry)
+        });
     }
 
     private static bool IsRelevantAssistantEntry(JsonlEntry entry) =>
@@ -682,5 +875,17 @@ public sealed class JsonlService : IJsonlService, IDisposable
             _debounceTimer?.Dispose();
             _debounceTimer = null;
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Null pricing service (used when no pricing service is injected)
+    // -------------------------------------------------------------------------
+
+    private sealed class NullPricingService : IPricingService
+    {
+        public ModelPricing? GetPrice(string modelName) => null;
+        public PricingSource Source => PricingSource.Unknown;
+        public DateTimeOffset? LastFetch => null;
+        public Task EnsurePricesLoadedAsync() => Task.CompletedTask;
     }
 }

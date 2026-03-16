@@ -2,6 +2,7 @@ using CCInfoWindows.Models;
 
 namespace CCInfoWindows.Services.Interfaces;
 
+
 /// <summary>
 /// Contract for reading and watching Claude Code JSONL session files.
 /// </summary>
@@ -30,4 +31,11 @@ public interface IJsonlService
 
     /// <summary>Stops the file watcher and releases resources.</summary>
     void Stop();
+
+    /// <summary>
+    /// Returns aggregated token counts, cost, and burn rate data for the given time period.
+    /// For Session: pass the sessionId (project directory name).
+    /// For Today/Week/Month: sessionId is ignored; all projects are aggregated.
+    /// </summary>
+    StatisticsSummary GetStatistics(TimePeriod period, string? sessionId = null);
 }
