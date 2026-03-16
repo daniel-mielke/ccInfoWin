@@ -61,7 +61,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **COST-02**: Costs primarily from costUSD field in JSONL; fallback to token count * model price
 - [x] **COST-03**: Estimated costs marked with tilde prefix (~) when model not in pricing database
 - [x] **COST-04**: Tiered pricing applied for 1M-context models (higher input price above 200K tokens)
-- [x] **COST-05**: Burn rate (token consumption speed) calculated and displayed
+- [ ] **COST-05**: ~~Burn rate (token consumption speed) calculated and displayed~~ — Removed: feature does not exist in macOS reference app
 - [x] **COST-06**: Settings show pricing data source (live API or fallback) and last fetch time
 
 ### Chart Export
@@ -190,7 +190,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COST-02 | Phase 5 | Complete |
 | COST-03 | Phase 5 | Complete |
 | COST-04 | Phase 5 | Complete |
-| COST-05 | Phase 5 | Complete |
+| COST-05 | Phase 5 | Removed (not in reference) |
 | COST-06 | Phase 5 | Complete |
 | EXPT-01 | Phase 6 | Pending |
 | EXPT-02 | Phase 6 | Pending |
