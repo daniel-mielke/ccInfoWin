@@ -71,4 +71,7 @@ public record JsonlEntry
 
     [JsonPropertyName("type")]
     public string? Type { get; init; }
+
+    [JsonPropertyName("costUSD")]
+    public decimal? CostUsd { get; init; }
 }

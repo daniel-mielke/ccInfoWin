@@ -97,11 +97,11 @@ Plans:
   2. Costs are calculated from JSONL costUSD field with fallback to token count * live LiteLLM price, and estimated costs are marked with tilde (~)
   3. Tiered pricing is applied for 1M-context models and burn rate (token consumption speed) is displayed
   4. Settings show pricing data source (live API or fallback) and last fetch time, with LiteLLM cache persisted locally
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md — Models, pricing service, cost calculation, burn rate, time-period aggregation, unit tests
+- [ ] 05-02-PLAN.md — STATISTIKEN UI (Segmented tab bar, data table, shimmer, settings pricing info, DI wiring)
 
 ### Phase 6: Export, Polish, and Distribution
 **Goal**: App is feature-complete, localized, accessible, and distributed as a standalone installer on GitHub

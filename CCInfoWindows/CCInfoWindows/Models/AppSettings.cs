@@ -26,4 +26,10 @@ public class AppSettings
 
     [JsonPropertyName("sessionActivityThresholdMinutes")]
     public int SessionActivityThresholdMinutes { get; set; } = 30;
+
+    [JsonPropertyName("pricingSource")]
+    public string PricingSource { get; set; } = "Unknown";
+
+    [JsonPropertyName("lastPricingFetch")]
+    public DateTimeOffset? LastPricingFetch { get; set; }
 }
