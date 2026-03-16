@@ -417,9 +417,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     {
         var history = _historyService.LoadHistory();
 
-        var windowResetDetected = history.ResetsAt.HasValue
-            && apiResetsAt.HasValue
-            && history.ResetsAt.Value != apiResetsAt.Value;
+        var windowResetDetected = IsWindowReset(history.ResetsAt, apiResetsAt);
 
         if (windowResetDetected)
         {
@@ -427,9 +425,15 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         }
 
         history.ResetsAt = apiResetsAt;
+
+        var now = DateTimeOffset.UtcNow;
+        var windowDuration = TimeSpan.FromHours(5);
+        var cutoff = now - windowDuration;
+        history.Points.RemoveAll(p => p.Timestamp < cutoff);
+
         history.Points.Add(new UsageHistoryPoint
         {
-            Timestamp = DateTimeOffset.UtcNow,
+            Timestamp = now,
             Utilization = utilization
         });
 
@@ -439,6 +443,16 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         _fiveHourResetsAt = apiResetsAt;
         UsageHistoryPoints = history.Points.AsReadOnly();
         ChartInvalidateCallback?.Invoke();
+    }
+
+    private static readonly TimeSpan WindowResetTolerance = TimeSpan.FromMinutes(2);
+
+    private static bool IsWindowReset(DateTimeOffset? storedResetsAt, DateTimeOffset? apiResetsAt)
+    {
+        if (!storedResetsAt.HasValue || !apiResetsAt.HasValue) return false;
+
+        var difference = (apiResetsAt.Value - storedResetsAt.Value).Duration();
+        return difference > WindowResetTolerance;
     }
 
     private void UpdateCountdowns()
