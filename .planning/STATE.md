@@ -3,8 +3,23 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-03-16T12:14:48.734Z"
+stopped_at: "05-02 checkpoint:human-verify Task 3"
+last_updated: "2026-03-16T12:30:36.272Z"
+last_activity: 2026-03-11 — Plan 04-01 executed (data contracts, helpers, IJsonlService, unit tests)
+progress:
+  total_phases: 6
+  completed_phases: 5
+  total_plans: 15
+  completed_plans: 15
+---
+
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: executing
+stopped_at: Phase 6 context gathered
+last_updated: "2026-03-16T12:16:52.156Z"
 last_activity: 2026-03-11 — Plan 04-01 executed (data contracts, helpers, IJsonlService, unit tests)
 progress:
   total_phases: 6
@@ -121,6 +136,8 @@ Recent decisions affecting current work:
 - [Phase 04-local-data-pipeline]: SelectedThresholdIndex in SettingsViewModel maps 0=15,1=30,2=60,3=120 minutes with default index 1 (30 min)
 - [Phase 05-01]: EntryLogItem stores full per-entry token breakdown in ProjectData.EntryLog for time-period aggregation without re-reading JSONL files
 - [Phase 05-01]: NullPricingService as inner class provides backward compatibility when IPricingService not injected into JsonlService
+- [Phase 05-02]: Backward compat: _inputTokensText kept in MainViewModel — XAML compiler crashes silently if x:Bind references missing properties
+- [Phase 05-02]: HttpClient registered as AddSingleton in App.xaml.cs DI — LiteLLMPricingService injected via factory lambda
 
 ### Pending Todos
 
@@ -139,6 +156,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-16T12:14:48.731Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-03-16T12:30:22.597Z
+Stopped at: 05-02 checkpoint:human-verify Task 3
 Resume file: None

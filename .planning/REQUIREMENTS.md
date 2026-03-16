@@ -51,18 +51,18 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Token Statistics
 
 - [x] **TOKS-01**: Input and output token counters aggregated by session, today, week, month
-- [ ] **TOKS-02**: Tab bar (segmented control) switches between the four time periods with loading indicator
-- [ ] **TOKS-03**: Subagent tokens included in all time period aggregations
-- [ ] **TOKS-04**: JSONL entries deduplicated by messageId and requestId to prevent double-counting
+- [x] **TOKS-02**: Tab bar (segmented control) switches between the four time periods with loading indicator
+- [x] **TOKS-03**: Subagent tokens included in all time period aggregations
+- [x] **TOKS-04**: JSONL entries deduplicated by messageId and requestId to prevent double-counting
 
 ### Cost Calculation
 
-- [ ] **COST-01**: Model prices fetched live from LiteLLM Pricing API with 12-hour cache
-- [ ] **COST-02**: Costs primarily from costUSD field in JSONL; fallback to token count * model price
-- [ ] **COST-03**: Estimated costs marked with tilde prefix (~) when model not in pricing database
-- [ ] **COST-04**: Tiered pricing applied for 1M-context models (higher input price above 200K tokens)
-- [ ] **COST-05**: Burn rate (token consumption speed) calculated and displayed
-- [ ] **COST-06**: Settings show pricing data source (live API or fallback) and last fetch time
+- [x] **COST-01**: Model prices fetched live from LiteLLM Pricing API with 12-hour cache
+- [x] **COST-02**: Costs primarily from costUSD field in JSONL; fallback to token count * model price
+- [x] **COST-03**: Estimated costs marked with tilde prefix (~) when model not in pricing database
+- [x] **COST-04**: Tiered pricing applied for 1M-context models (higher input price above 200K tokens)
+- [x] **COST-05**: Burn rate (token consumption speed) calculated and displayed
+- [x] **COST-06**: Settings show pricing data source (live API or fallback) and last fetch time
 
 ### Chart Export
 
@@ -103,7 +103,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **DATA-02**: Organization IDs percent-encoded in API URLs
 - [x] **DATA-03**: JSONL files read from %USERPROFILE%\.claude\projects\ with streaming (last ~1MB only)
 - [x] **DATA-04**: JSONL file changes detected via FileSystemWatcher with debouncing
-- [ ] **DATA-05**: LiteLLM pricing cache persisted locally with fallback to bundled prices
+- [x] **DATA-05**: LiteLLM pricing cache persisted locally with fallback to bundled prices
 
 ### Security
 
@@ -183,15 +183,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SESS-04 | Phase 4 | Complete |
 | SESS-05 | Phase 4 | Complete |
 | TOKS-01 | Phase 4 | Complete |
-| TOKS-02 | Phase 5 | Pending |
-| TOKS-03 | Phase 5 | Pending |
-| TOKS-04 | Phase 5 | Pending |
-| COST-01 | Phase 5 | Pending |
-| COST-02 | Phase 5 | Pending |
-| COST-03 | Phase 5 | Pending |
-| COST-04 | Phase 5 | Pending |
-| COST-05 | Phase 5 | Pending |
-| COST-06 | Phase 5 | Pending |
+| TOKS-02 | Phase 5 | Complete |
+| TOKS-03 | Phase 5 | Complete |
+| TOKS-04 | Phase 5 | Complete |
+| COST-01 | Phase 5 | Complete |
+| COST-02 | Phase 5 | Complete |
+| COST-03 | Phase 5 | Complete |
+| COST-04 | Phase 5 | Complete |
+| COST-05 | Phase 5 | Complete |
+| COST-06 | Phase 5 | Complete |
 | EXPT-01 | Phase 6 | Pending |
 | EXPT-02 | Phase 6 | Pending |
 | EXPT-03 | Phase 6 | Pending |
@@ -217,7 +217,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DATA-02 | Phase 2 | Complete |
 | DATA-03 | Phase 4 | Complete |
 | DATA-04 | Phase 4 | Complete |
-| DATA-05 | Phase 5 | Pending |
+| DATA-05 | Phase 5 | Complete |
 | SECU-01 | Phase 1 | Complete |
 | SECU-02 | Phase 1 | Complete |
 | SECU-03 | Phase 1 | Complete |
