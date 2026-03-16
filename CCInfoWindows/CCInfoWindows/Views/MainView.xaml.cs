@@ -13,6 +13,7 @@ using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.Web.WebView2.Core;
 using Windows.UI;
 
@@ -35,7 +36,19 @@ public sealed partial class MainView : Page
         FontSize = 10f
     };
 
+    private static readonly Color ShimmerBaseColor = Color.FromArgb(0xFF, 0x38, 0x38, 0x3A);
+    private static readonly Color ShimmerHighlightColor = Color.FromArgb(0xFF, 0x55, 0x55, 0x58);
+
+    private Storyboard? _shimmerStoryboard;
+
     public MainViewModel ViewModel { get; }
+
+    /// <summary>
+    /// Returns Collapsed when value is true, Visible when false.
+    /// Used by x:Bind to toggle visibility inverse of IsAggregating.
+    /// </summary>
+    public static Visibility InvertBool(bool value) =>
+        value ? Visibility.Collapsed : Visibility.Visible;
 
     public MainView()
     {
@@ -43,6 +56,37 @@ public sealed partial class MainView : Page
         InitializeComponent();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+    }
+
+    private void StartShimmerAnimation()
+    {
+        _shimmerStoryboard?.Stop();
+
+        var shimmerBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(ShimmerBaseColor);
+        BurnRateShimmer.Background = shimmerBrush;
+
+        var animation = new ColorAnimation
+        {
+            From = ShimmerBaseColor,
+            To = ShimmerHighlightColor,
+            Duration = new Duration(TimeSpan.FromSeconds(0.8)),
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EnableDependentAnimation = true
+        };
+
+        Storyboard.SetTarget(animation, shimmerBrush);
+        Storyboard.SetTargetProperty(animation, "Color");
+
+        _shimmerStoryboard = new Storyboard();
+        _shimmerStoryboard.Children.Add(animation);
+        _shimmerStoryboard.Begin();
+    }
+
+    private void StopShimmerAnimation()
+    {
+        _shimmerStoryboard?.Stop();
+        _shimmerStoryboard = null;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -272,6 +316,17 @@ public sealed partial class MainView : Page
             else
             {
                 SpinnerStoryboard.Stop();
+            }
+        }
+        else if (e.PropertyName == nameof(MainViewModel.IsAggregating))
+        {
+            if (ViewModel.IsAggregating)
+            {
+                StartShimmerAnimation();
+            }
+            else
+            {
+                StopShimmerAnimation();
             }
         }
     }

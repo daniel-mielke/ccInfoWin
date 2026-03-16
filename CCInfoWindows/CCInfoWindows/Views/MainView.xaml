@@ -7,6 +7,8 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
     xmlns:viewmodels="using:CCInfoWindows.ViewModels"
+    xmlns:controls="using:CommunityToolkit.WinUI.Controls"
+    xmlns:local="using:CCInfoWindows.Views"
     mc:Ignorable="d">
 
     <Page.Resources>
@@ -323,38 +325,146 @@
                     </ItemsRepeater>
                 </StackPanel>
 
-                <!-- Divider before TOKENS -->
+                <!-- Divider before STATISTIKEN -->
                 <Border Height="1" Background="{ThemeResource DividerBrush}" />
 
-                <!-- ==================== TOKENS ==================== -->
+                <!-- ==================== STATISTIKEN ==================== -->
                 <StackPanel Spacing="8">
-                    <TextBlock Text="TOKENS"
+                    <TextBlock Text="STATISTIKEN"
                                FontSize="11" FontWeight="SemiBold"
                                Foreground="{ThemeResource SectionHeaderBrush}"
                                CharacterSpacing="50" />
-                    <Grid>
+
+                    <!-- Tab Bar -->
+                    <controls:Segmented
+                        x:Name="StatisticsTabBar"
+                        HorizontalAlignment="Stretch"
+                        SelectedIndex="{x:Bind ViewModel.SelectedTabIndex, Mode=TwoWay}"
+                        SelectionMode="Single">
+                        <controls:SegmentedItem Content="Session" />
+                        <controls:SegmentedItem Content="Heute" />
+                        <controls:SegmentedItem Content="Woche" />
+                        <controls:SegmentedItem Content="Monat" />
+                    </controls:Segmented>
+
+                    <!-- Statistics Data Table -->
+                    <Grid RowSpacing="4">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <!-- Input tokens -->
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="Input"
-                                       FontSize="11"
-                                       Foreground="{ThemeResource TertiaryTextBrush}" />
-                            <TextBlock Text="{x:Bind ViewModel.InputTokensText, Mode=OneWay}"
-                                       FontSize="20" FontWeight="SemiBold"
-                                       Foreground="{ThemeResource PrimaryTextBrush}" />
-                        </StackPanel>
-                        <!-- Output tokens -->
-                        <StackPanel Grid.Column="1" Spacing="2">
-                            <TextBlock Text="Output"
-                                       FontSize="11"
-                                       Foreground="{ThemeResource TertiaryTextBrush}" />
-                            <TextBlock Text="{x:Bind ViewModel.OutputTokensText, Mode=OneWay}"
-                                       FontSize="20" FontWeight="SemiBold"
-                                       Foreground="{ThemeResource PrimaryTextBrush}" />
-                        </StackPanel>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Row 0: Modelle -->
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Modelle:" FontSize="13"
+                                   Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
+                        <TextBlock Grid.Row="0" Grid.Column="1"
+                                   Text="{x:Bind ViewModel.StatisticsModels, Mode=OneWay}"
+                                   FontSize="13" HorizontalAlignment="Right"
+                                   Foreground="{ThemeResource PrimaryTextBrush}"
+                                   TextTrimming="CharacterEllipsis" MaxLines="1"
+                                   Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
+                        <Border Grid.Row="0" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
+                                HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
+                                Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                        <!-- Row 1: Eingabe -->
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Eingabe:" FontSize="13"
+                                   Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
+                        <TextBlock Grid.Row="1" Grid.Column="1"
+                                   Text="{x:Bind ViewModel.StatisticsInput, Mode=OneWay}"
+                                   FontSize="13" FontWeight="Medium" HorizontalAlignment="Right"
+                                   Foreground="{ThemeResource PrimaryTextBrush}"
+                                   Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
+                        <Border Grid.Row="1" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
+                                HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
+                                Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                        <!-- Row 2: Ausgabe -->
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Ausgabe:" FontSize="13"
+                                   Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
+                        <TextBlock Grid.Row="2" Grid.Column="1"
+                                   Text="{x:Bind ViewModel.StatisticsOutput, Mode=OneWay}"
+                                   FontSize="13" FontWeight="Medium" HorizontalAlignment="Right"
+                                   Foreground="{ThemeResource PrimaryTextBrush}"
+                                   Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
+                        <Border Grid.Row="2" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
+                                HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
+                                Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                        <!-- Row 3: Cache-Schreiben -->
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Cache-Schreiben:" FontSize="13"
+                                   Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
+                        <TextBlock Grid.Row="3" Grid.Column="1"
+                                   Text="{x:Bind ViewModel.StatisticsCacheCreation, Mode=OneWay}"
+                                   FontSize="13" FontWeight="Medium" HorizontalAlignment="Right"
+                                   Foreground="{ThemeResource PrimaryTextBrush}"
+                                   Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
+                        <Border Grid.Row="3" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
+                                HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
+                                Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                        <!-- Row 4: Cache-Lesen -->
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Cache-Lesen:" FontSize="13"
+                                   Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
+                        <TextBlock Grid.Row="4" Grid.Column="1"
+                                   Text="{x:Bind ViewModel.StatisticsCacheRead, Mode=OneWay}"
+                                   FontSize="13" FontWeight="Medium" HorizontalAlignment="Right"
+                                   Foreground="{ThemeResource PrimaryTextBrush}"
+                                   Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
+                        <Border Grid.Row="4" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
+                                HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
+                                Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                        <!-- Row 5: Divider -->
+                        <Border Grid.Row="5" Grid.ColumnSpan="2" Height="1" Margin="0,4,0,4"
+                                Background="{ThemeResource DividerBrush}" />
+
+                        <!-- Row 6: Gesamt (bold) -->
+                        <TextBlock Grid.Row="6" Grid.Column="0" Text="Gesamt:" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{ThemeResource PrimaryTextBrush}" Margin="0,0,12,0" />
+                        <TextBlock Grid.Row="6" Grid.Column="1"
+                                   Text="{x:Bind ViewModel.StatisticsTotal, Mode=OneWay}"
+                                   FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right"
+                                   Foreground="{ThemeResource PrimaryTextBrush}"
+                                   Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
+                        <Border Grid.Row="6" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
+                                HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
+                                Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                        <!-- Row 7: Kosten (bold) -->
+                        <TextBlock Grid.Row="7" Grid.Column="0" Text="Kosten (API-Äqu.):" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{ThemeResource PrimaryTextBrush}" Margin="0,0,12,0" />
+                        <TextBlock Grid.Row="7" Grid.Column="1"
+                                   Text="{x:Bind ViewModel.StatisticsCost, Mode=OneWay}"
+                                   FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right"
+                                   Foreground="{ThemeResource PrimaryTextBrush}"
+                                   Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
+                        <Border Grid.Row="7" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
+                                HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
+                                Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                        <!-- Row 8: Burn Rate -->
+                        <TextBlock Grid.Row="8" Grid.Column="0" Text="Burn Rate:" FontSize="13"
+                                   Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
+                        <TextBlock Grid.Row="8" Grid.Column="1"
+                                   Text="{x:Bind ViewModel.StatisticsBurnRate, Mode=OneWay}"
+                                   FontSize="13" HorizontalAlignment="Right"
+                                   Foreground="{ThemeResource SecondaryTextBrush}"
+                                   Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
+                        <Border x:Name="BurnRateShimmer" Grid.Row="8" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
+                                HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
+                                Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
                     </Grid>
                 </StackPanel>
 

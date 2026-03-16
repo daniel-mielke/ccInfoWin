@@ -67,6 +67,32 @@
                               IsOn="{x:Bind ViewModel.IsDarkMode, Mode=TwoWay}"
                               OnContent="" OffContent="" />
             </Grid>
+            <!-- Divider before Pricing Info -->
+            <Border Height="1" Background="{ThemeResource DividerBrush}" />
+
+            <!-- Pricing Info (COST-06) -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Preisdaten:" FontSize="13"
+                           Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
+                <TextBlock Grid.Row="0" Grid.Column="1"
+                           Text="{x:Bind ViewModel.PricingSourceText}"
+                           FontSize="13" HorizontalAlignment="Right"
+                           Foreground="{ThemeResource PrimaryTextBrush}" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Zuletzt aktualisiert:" FontSize="13"
+                           Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,4,12,0" />
+                <TextBlock Grid.Row="1" Grid.Column="1"
+                           Text="{x:Bind ViewModel.LastPricingFetchText}"
+                           FontSize="13" HorizontalAlignment="Right"
+                           Foreground="{ThemeResource PrimaryTextBrush}" Margin="0,4,0,0" />
+            </Grid>
         </StackPanel>
 
         <!-- Logout button at bottom -->
