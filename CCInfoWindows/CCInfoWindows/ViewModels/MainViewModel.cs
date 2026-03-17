@@ -194,14 +194,6 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     [ObservableProperty]
     private ObservableCollection<SubagentDisplayData> _subagentContexts = [];
 
-    // --- Token counters (backward compat until Task 2 replaces TOKENS section in XAML) ---
-
-    [ObservableProperty]
-    private string _inputTokensText = "--";
-
-    [ObservableProperty]
-    private string _outputTokensText = "--";
-
     // --- Statistics (STATISTIKEN section) ---
 
     [ObservableProperty]
