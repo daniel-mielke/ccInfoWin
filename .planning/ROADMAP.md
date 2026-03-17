@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Cost Analytics** - LiteLLM pricing integration, cost calculation with tiered pricing, burn rate, token stats UI (completed 2026-03-16)
 - [x] **Phase 6: Export, Polish, and Distribution** - Chart export, localization, autostart, auto-update, accessibility, Inno Setup installer (completed 2026-03-17)
 - [x] **Phase 7: Security Fix & Dead Code Cleanup** - WebViewBridge.Reset() on logout, remove dead code (CostCalculator, unused messages, dead properties) (completed 2026-03-17)
-- [ ] **Phase 8: Documentation Hygiene & Verification** - Update stale REQUIREMENTS.md checkboxes, create missing VERIFICATION.md for Phase 02 and 04
+- [x] **Phase 8: Documentation Hygiene & Verification** - Update stale REQUIREMENTS.md checkboxes, create missing VERIFICATION.md for Phase 02 and 04 (completed 2026-03-17)
 
 ## Phase Details
 
@@ -169,4 +169,4 @@ Gap closure phases 7-8 added from milestone audit (2026-03-17).
 | 5. Cost Analytics | 2/2 | Complete   | 2026-03-16 |
 | 6. Export, Polish, and Distribution | 4/4 | Complete   | 2026-03-17 |
 | 7. Security Fix & Dead Code Cleanup | 1/1 | Complete   | 2026-03-17 |
-| 8. Documentation Hygiene & Verification | 0/1 | In Progress | — |
+| 8. Documentation Hygiene & Verification | 1/1 | Complete   | 2026-03-17 |
