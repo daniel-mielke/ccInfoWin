@@ -1,9 +1,11 @@
+using CCInfoWindows.Helpers;
 using CCInfoWindows.Messages;
 using CCInfoWindows.Services.Interfaces;
 using CCInfoWindows.Views;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using WinUI3Localizer;
 
 namespace CCInfoWindows.ViewModels;
 
@@ -41,6 +43,14 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private int _selectedThresholdIndex;
 
+    [ObservableProperty]
+    private bool _isAutostart;
+
+    [ObservableProperty]
+    private int _selectedLanguageIndex;
+
+    private static readonly string[] LanguageCodes = ["de-DE", "en-US"];
+
     public string PricingSourceText => _pricingService.Source switch
     {
         PricingSource.Live => "Live (LiteLLM API)",
@@ -77,10 +87,14 @@ public partial class SettingsViewModel : ObservableObject
                                  ?? RefreshOptions[1]; // default 60s
         _isDarkMode = settings.ColorMode != "light"; // default dark
         _selectedThresholdIndex = MapMinutesToThresholdIndex(settings.SessionActivityThresholdMinutes);
+        _isAutostart = RegistryHelper.GetAutostart();
+        _selectedLanguageIndex = settings.Language == "en-US" ? 1 : 0;
 
         OnPropertyChanged(nameof(SelectedRefreshOption));
         OnPropertyChanged(nameof(IsDarkMode));
         OnPropertyChanged(nameof(SelectedThresholdIndex));
+        OnPropertyChanged(nameof(IsAutostart));
+        OnPropertyChanged(nameof(SelectedLanguageIndex));
     }
 
     partial void OnSelectedRefreshOptionChanged(RefreshOption value)
@@ -97,6 +111,23 @@ public partial class SettingsViewModel : ObservableObject
         var settings = _settingsService.LoadSettings();
         settings.SessionActivityThresholdMinutes = MapThresholdIndexToMinutes(value);
         _settingsService.SaveSettings(settings);
+    }
+
+    partial void OnIsAutostartChanged(bool value)
+    {
+        RegistryHelper.SetAutostart(value);
+    }
+
+    partial void OnSelectedLanguageIndexChanged(int value)
+    {
+        if (value >= 0 && value < LanguageCodes.Length)
+        {
+            var code = LanguageCodes[value];
+            _ = Localizer.Get().SetLanguage(code);
+            var settings = _settingsService.LoadSettings();
+            settings.Language = code;
+            _settingsService.SaveSettings(settings);
+        }
     }
 
     private static int MapThresholdIndexToMinutes(int index)

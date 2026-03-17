@@ -30,7 +30,8 @@
             <StackPanel Spacing="8">
                 <TextBlock x:Uid="SettingsRefreshInterval"
                            FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}" />
-                <ComboBox ItemsSource="{x:Bind ViewModel.RefreshOptions}"
+                <ComboBox x:Uid="RefreshIntervalComboBox"
+                          ItemsSource="{x:Bind ViewModel.RefreshOptions}"
                           SelectedItem="{x:Bind ViewModel.SelectedRefreshOption, Mode=TwoWay}"
                           DisplayMemberPath="Label"
                           HorizontalAlignment="Stretch" />
@@ -43,7 +44,8 @@
             <StackPanel Spacing="8">
                 <TextBlock x:Uid="SettingsSessionTimeout"
                            FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}" />
-                <ComboBox SelectedIndex="{x:Bind ViewModel.SelectedThresholdIndex, Mode=TwoWay}"
+                <ComboBox x:Uid="SessionTimeoutComboBox"
+                          SelectedIndex="{x:Bind ViewModel.SelectedThresholdIndex, Mode=TwoWay}"
                           HorizontalAlignment="Stretch">
                     <ComboBoxItem x:Uid="Timeout15" />
                     <ComboBoxItem x:Uid="Timeout30" />
@@ -65,6 +67,7 @@
                            FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
                            VerticalAlignment="Center" />
                 <ToggleSwitch Grid.Column="1"
+                              x:Uid="DarkModeToggle"
                               IsOn="{x:Bind ViewModel.IsDarkMode, Mode=TwoWay}"
                               OnContent="" OffContent="" />
             </Grid>
@@ -94,6 +97,49 @@
                            FontSize="13" HorizontalAlignment="Right"
                            Foreground="{ThemeResource PrimaryTextBrush}" Margin="0,4,0,0" />
             </Grid>
+
+            <!-- Divider before ANWENDUNG -->
+            <Border Height="1" Background="{ThemeResource DividerBrush}" />
+
+            <!-- ANWENDUNG section -->
+            <StackPanel Spacing="8">
+                <TextBlock x:Uid="SectionHeaderApp"
+                           FontSize="11" FontWeight="SemiBold"
+                           Foreground="{ThemeResource SectionHeaderBrush}"
+                           CharacterSpacing="50" />
+
+                <!-- Autostart row -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Uid="SettingsAutostartLabel"
+                               FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
+                               VerticalAlignment="Center" />
+                    <ToggleSwitch Grid.Column="1"
+                                  x:Uid="AutostartToggle"
+                                  IsOn="{x:Bind ViewModel.IsAutostart, Mode=TwoWay}" />
+                </Grid>
+
+                <!-- Language row -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Uid="SettingsLanguageLabel"
+                               FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
+                               VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="1"
+                              x:Uid="LanguageComboBox"
+                              Width="120"
+                              SelectedIndex="{x:Bind ViewModel.SelectedLanguageIndex, Mode=TwoWay}">
+                        <ComboBoxItem Content="Deutsch" />
+                        <ComboBoxItem Content="English" />
+                    </ComboBox>
+                </Grid>
+            </StackPanel>
         </StackPanel>
 
         <!-- Logout button at bottom -->
