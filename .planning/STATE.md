@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Checkpoint 06-04: awaiting human verification of distribution package"
-last_updated: "2026-03-17T14:23:16.660Z"
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-03-17T18:51:43.219Z"
 last_activity: 2026-03-11 — Plan 04-01 executed (data contracts, helpers, IJsonlService, unit tests)
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 19
-  completed_plans: 19
+  total_phases: 8
+  completed_phases: 7
+  total_plans: 20
+  completed_plans: 20
 ---
 
 ---
@@ -108,6 +108,7 @@ Progress: [███████░░░] 78%
 | Phase 06 P02 | 18 | 2 tasks | 7 files |
 | Phase 06-export-polish-and-distribution P03 | 25 | 2 tasks | 8 files |
 | Phase 06-export-polish-and-distribution P04 | 15 | 2 tasks | 4 files |
+| Phase 07-security-fix-and-dead-code-cleanup P01 | 12 | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -162,6 +163,8 @@ Recent decisions affecting current work:
 - [Phase 06]: SessionComboBox uid replaces SessionPlaceholder — consolidates PlaceholderText and AutomationProperties.Name under one uid
 - [Phase 06-04]: Publish output path is bin/x64/Release due to Platforms=x64;ARM64 in .csproj — setup.iss source path updated accordingly
 - [Phase 06-04]: TrimMode=partial preserves WinRT interop and Win2D marshaling; PrivilegesRequired=lowest for per-user install; autostart uses triple-quoted path for spaces
+- [Phase 07-01]: Reset() called before AuthStateChangedMessage in Logout() so in-flight FetchJsonAsync returns null before navigation fires
+- [Phase 07-01]: CostCalculator deleted: logic fully replaced by JsonlService.AggregateEntryLog in Phase 05
 
 ### Pending Todos
 
@@ -180,6 +183,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-17T13:44:21.022Z
-Stopped at: Checkpoint 06-04: awaiting human verification of distribution package
+Last session: 2026-03-17T18:51:43.217Z
+Stopped at: Completed 07-01-PLAN.md
 Resume file: None
