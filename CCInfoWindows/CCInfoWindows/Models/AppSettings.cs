@@ -33,6 +33,9 @@ public class AppSettings
     [JsonPropertyName("lastPricingFetch")]
     public DateTimeOffset? LastPricingFetch { get; set; }
 
+    [JsonPropertyName("dismissedUpdateVersion")]
+    public string? DismissedUpdateVersion { get; set; }
+
     [JsonPropertyName("language")]
-    public string? Language { get; set; }
+    public string Language { get; set; } = "de-DE";
 }
