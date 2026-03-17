@@ -32,4 +32,7 @@ public class AppSettings
 
     [JsonPropertyName("lastPricingFetch")]
     public DateTimeOffset? LastPricingFetch { get; set; }
+
+    [JsonPropertyName("language")]
+    public string? Language { get; set; }
 }

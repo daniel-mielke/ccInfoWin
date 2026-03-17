@@ -36,15 +36,14 @@
 
         <!-- Row 0: Session expired InfoBar -->
         <InfoBar
+            x:Uid="SessionExpiredInfoBar"
             Grid.Row="0"
-            Title="Session Expired"
-            Message="Your session has expired. Please re-login to continue using ccInfo."
             Severity="Warning"
             IsOpen="{x:Bind ViewModel.IsSessionExpired, Mode=OneWay}"
             IsClosable="False"
             Margin="0,0,0,12">
             <InfoBar.ActionButton>
-                <Button Content="Re-Login" Command="{x:Bind ViewModel.ReLoginCommand}" />
+                <Button x:Uid="ReLoginButton" Command="{x:Bind ViewModel.ReLoginCommand}" />
             </InfoBar.ActionButton>
         </InfoBar>
 
@@ -54,10 +53,10 @@
 
                 <!-- ==================== SESSION DROPDOWN ==================== -->
                 <ComboBox x:Name="SessionComboBox"
+                          x:Uid="SessionPlaceholder"
                           ItemsSource="{x:Bind ViewModel.SortedSessions, Mode=OneWay}"
                           SelectedItem="{x:Bind ViewModel.SelectedSession, Mode=TwoWay}"
-                          HorizontalAlignment="Stretch"
-                          PlaceholderText="Keine aktive Session">
+                          HorizontalAlignment="Stretch">
                     <ComboBox.ItemTemplate>
                         <DataTemplate x:DataType="viewmodels:SessionDisplayItem">
                             <StackPanel Orientation="Horizontal" Spacing="6">
@@ -72,7 +71,7 @@
                 </ComboBox>
 
                 <!-- Scanning indicator -->
-                <TextBlock Text="Sitzungen werden gesucht..."
+                <TextBlock x:Uid="ScanningIndicator"
                            FontSize="12"
                            Foreground="{ThemeResource SecondaryTextBrush}"
                            HorizontalAlignment="Center"
@@ -80,7 +79,7 @@
 
                 <!-- "Aktualisiere..." indicator on startup -->
                 <TextBlock
-                    Text="Aktualisiere..."
+                    x:Uid="UpdatingIndicator"
                     FontSize="12"
                     Foreground="{ThemeResource SecondaryTextBrush}"
                     HorizontalAlignment="Center"
@@ -90,7 +89,7 @@
                 <StackPanel Spacing="8">
                     <!-- Section header -->
                     <TextBlock
-                        Text="5-STUNDEN-FENSTER"
+                        x:Uid="SectionHeaderFiveHour"
                         FontSize="11"
                         FontWeight="SemiBold"
                         Foreground="{ThemeResource SectionHeaderBrush}"
@@ -138,7 +137,7 @@
                 <StackPanel Spacing="8">
                     <!-- Section header -->
                     <TextBlock
-                        Text="WOCHENLIMIT"
+                        x:Uid="SectionHeaderWeekly"
                         FontSize="11"
                         FontWeight="SemiBold"
                         Foreground="{ThemeResource SectionHeaderBrush}"
@@ -198,7 +197,7 @@
                             Visibility="{x:Bind ViewModel.HasSonnetData, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <!-- Section header -->
                     <TextBlock
-                        Text="SONNET WOCHENLIMIT"
+                        x:Uid="SectionHeaderSonnetWeekly"
                         FontSize="11"
                         FontWeight="SemiBold"
                         Foreground="{ThemeResource SectionHeaderBrush}"
@@ -254,7 +253,7 @@
 
                 <!-- ==================== KONTEXTFENSTER ==================== -->
                 <StackPanel Spacing="8">
-                    <TextBlock Text="KONTEXTFENSTER"
+                    <TextBlock x:Uid="SectionHeaderContextWindow"
                                FontSize="11" FontWeight="SemiBold"
                                Foreground="{ThemeResource SectionHeaderBrush}"
                                CharacterSpacing="50" />
@@ -287,13 +286,13 @@
                     </Grid>
 
                     <!-- Autocompact warning -->
-                    <TextBlock Text="&#x26A0; Autocompact bald"
+                    <TextBlock x:Uid="AutocompactWarning"
                                FontSize="12"
                                Foreground="{ThemeResource ProgressOrangeBrush}"
                                Visibility="{x:Bind ViewModel.ShowAutocompactWarning, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                     <!-- No active session placeholder -->
-                    <TextBlock Text="Keine aktive Session"
+                    <TextBlock x:Uid="NoActiveSession"
                                FontSize="12"
                                Foreground="{ThemeResource TertiaryTextBrush}"
                                Visibility="{x:Bind ViewModel.HasActiveSession, Mode=OneWay, Converter={StaticResource InvertedBoolToVisibilityConverter}}" />
@@ -330,7 +329,7 @@
 
                 <!-- ==================== STATISTIKEN ==================== -->
                 <StackPanel Spacing="8">
-                    <TextBlock Text="STATISTIKEN"
+                    <TextBlock x:Uid="SectionHeaderStats"
                                FontSize="11" FontWeight="SemiBold"
                                Foreground="{ThemeResource SectionHeaderBrush}"
                                CharacterSpacing="50" />
@@ -341,10 +340,10 @@
                         HorizontalAlignment="Stretch"
                         SelectedIndex="{x:Bind ViewModel.SelectedTabIndex, Mode=TwoWay}"
                         SelectionMode="Single">
-                        <controls:SegmentedItem Content="Session" />
-                        <controls:SegmentedItem Content="Heute" />
-                        <controls:SegmentedItem Content="Woche" />
-                        <controls:SegmentedItem Content="Monat" />
+                        <controls:SegmentedItem x:Uid="TabSession" />
+                        <controls:SegmentedItem x:Uid="TabToday" />
+                        <controls:SegmentedItem x:Uid="TabWeek" />
+                        <controls:SegmentedItem x:Uid="TabMonth" />
                     </controls:Segmented>
 
                     <!-- Statistics Data Table -->
@@ -365,7 +364,7 @@
                         </Grid.RowDefinitions>
 
                         <!-- Row 0: Modelle -->
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Modelle:" FontSize="13"
+                        <TextBlock x:Uid="StatsModels" Grid.Row="0" Grid.Column="0" FontSize="13"
                                    Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
                         <TextBlock Grid.Row="0" Grid.Column="1"
                                    Text="{x:Bind ViewModel.StatisticsModels, Mode=OneWay}"
@@ -378,7 +377,7 @@
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                         <!-- Row 1: Eingabe -->
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Eingabe:" FontSize="13"
+                        <TextBlock x:Uid="StatsInput" Grid.Row="1" Grid.Column="0" FontSize="13"
                                    Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
                         <TextBlock Grid.Row="1" Grid.Column="1"
                                    Text="{x:Bind ViewModel.StatisticsInput, Mode=OneWay}"
@@ -390,7 +389,7 @@
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                         <!-- Row 2: Ausgabe -->
-                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Ausgabe:" FontSize="13"
+                        <TextBlock x:Uid="StatsOutput" Grid.Row="2" Grid.Column="0" FontSize="13"
                                    Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
                         <TextBlock Grid.Row="2" Grid.Column="1"
                                    Text="{x:Bind ViewModel.StatisticsOutput, Mode=OneWay}"
@@ -402,7 +401,7 @@
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                         <!-- Row 3: Cache-Schreiben -->
-                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Cache-Schreiben:" FontSize="13"
+                        <TextBlock x:Uid="StatsCacheWrite" Grid.Row="3" Grid.Column="0" FontSize="13"
                                    Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
                         <TextBlock Grid.Row="3" Grid.Column="1"
                                    Text="{x:Bind ViewModel.StatisticsCacheCreation, Mode=OneWay}"
@@ -414,7 +413,7 @@
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                         <!-- Row 4: Cache-Lesen -->
-                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Cache-Lesen:" FontSize="13"
+                        <TextBlock x:Uid="StatsCacheRead" Grid.Row="4" Grid.Column="0" FontSize="13"
                                    Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
                         <TextBlock Grid.Row="4" Grid.Column="1"
                                    Text="{x:Bind ViewModel.StatisticsCacheRead, Mode=OneWay}"
@@ -430,7 +429,7 @@
                                 Background="{ThemeResource DividerBrush}" />
 
                         <!-- Row 6: Gesamt (bold) -->
-                        <TextBlock Grid.Row="6" Grid.Column="0" Text="Gesamt:" FontSize="13" FontWeight="SemiBold"
+                        <TextBlock x:Uid="StatsTotal" Grid.Row="6" Grid.Column="0" FontSize="13" FontWeight="SemiBold"
                                    Foreground="{ThemeResource PrimaryTextBrush}" Margin="0,0,12,0" />
                         <TextBlock Grid.Row="6" Grid.Column="1"
                                    Text="{x:Bind ViewModel.StatisticsTotal, Mode=OneWay}"
@@ -442,7 +441,7 @@
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                         <!-- Row 7: Kosten (bold) -->
-                        <TextBlock Grid.Row="7" Grid.Column="0" Text="Kosten (API-Äqu.):" FontSize="13" FontWeight="SemiBold"
+                        <TextBlock x:Uid="StatsCost" Grid.Row="7" Grid.Column="0" FontSize="13" FontWeight="SemiBold"
                                    Foreground="{ThemeResource PrimaryTextBrush}" Margin="0,0,12,0" />
                         <TextBlock Grid.Row="7" Grid.Column="1"
                                    Text="{x:Bind ViewModel.StatisticsCost, Mode=OneWay}"
@@ -464,10 +463,10 @@
                     HorizontalAlignment="Center" Spacing="16"
                     Padding="0,8,0,4">
 
-            <!-- Aktualisieren button with spinning icon -->
+            <!-- Refresh button with spinning icon -->
             <Grid>
-                <Button Command="{x:Bind ViewModel.RefreshCommand}"
-                        ToolTipService.ToolTip="Aktualisieren"
+                <Button x:Uid="FooterRefreshButton"
+                        Command="{x:Bind ViewModel.RefreshCommand}"
                         Background="Transparent" BorderThickness="0"
                         Padding="8" CornerRadius="6">
                     <FontIcon x:Name="RefreshIcon" Glyph="&#xE895;" FontSize="16"
@@ -488,18 +487,18 @@
                          Visibility="{x:Bind ViewModel.HasApiError, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
             </Grid>
 
-            <!-- Einstellungen button -->
-            <Button Command="{x:Bind ViewModel.OpenSettingsCommand}"
-                    ToolTipService.ToolTip="Einstellungen"
+            <!-- Settings button -->
+            <Button x:Uid="FooterSettingsButton"
+                    Command="{x:Bind ViewModel.OpenSettingsCommand}"
                     Background="Transparent" BorderThickness="0"
                     Padding="8" CornerRadius="6">
                 <FontIcon Glyph="&#xE713;" FontSize="16"
                           Foreground="{ThemeResource SecondaryTextBrush}" />
             </Button>
 
-            <!-- Beenden button -->
-            <Button Command="{x:Bind ViewModel.ExitAppCommand}"
-                    ToolTipService.ToolTip="Beenden"
+            <!-- Quit button -->
+            <Button x:Uid="FooterQuitButton"
+                    Command="{x:Bind ViewModel.ExitAppCommand}"
                     Background="Transparent" BorderThickness="0"
                     Padding="8" CornerRadius="6">
                 <FontIcon Glyph="&#xE7E8;" FontSize="16"

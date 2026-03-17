@@ -5,6 +5,7 @@ using CCInfoWindows.ViewModels;
 using CCInfoWindows.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
+using WinUI3Localizer;
 
 namespace CCInfoWindows;
 
@@ -36,11 +37,39 @@ public partial class App : Application
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         Services = ConfigureServices();
+
+        await InitializeLocalizerAsync();
+
         _window = new MainWindow();
         _window.Activate();
 
         ApplyPersistedTheme();
         await RouteOnStartupAsync();
+    }
+
+    /// <summary>
+    /// Initializes WinUI3Localizer with the Strings folder and applies the persisted language preference.
+    /// Must be called before any Window is created.
+    /// </summary>
+    private async Task InitializeLocalizerAsync()
+    {
+        var stringsFolderPath = Path.Combine(AppContext.BaseDirectory, "Strings");
+
+        await new LocalizerBuilder()
+            .AddStringResourcesFolderForLanguageDictionaries(stringsFolderPath)
+            .SetOptions(options =>
+            {
+                options.DefaultLanguage = "en-US";
+            })
+            .Build();
+
+        var settingsService = Services.GetRequiredService<ISettingsService>();
+        var appSettings = settingsService.LoadSettings();
+
+        if (!string.IsNullOrEmpty(appSettings.Language))
+        {
+            await Localizer.Get().SetLanguage(appSettings.Language);
+        }
     }
 
     /// <summary>
