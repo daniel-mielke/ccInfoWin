@@ -18,6 +18,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Local Data Pipeline** - JSONL file watching, multi-session management, context window status, token counting (completed 2026-03-11)
 - [x] **Phase 5: Cost Analytics** - LiteLLM pricing integration, cost calculation with tiered pricing, burn rate, token stats UI (completed 2026-03-16)
 - [x] **Phase 6: Export, Polish, and Distribution** - Chart export, localization, autostart, auto-update, accessibility, Inno Setup installer (completed 2026-03-17)
+- [ ] **Phase 7: Security Fix & Dead Code Cleanup** - WebViewBridge.Reset() on logout, remove dead code (CostCalculator, unused messages, dead properties)
+- [ ] **Phase 8: Documentation Hygiene & Verification** - Update stale REQUIREMENTS.md checkboxes, create missing VERIFICATION.md for Phase 02 and 04
 
 ## Phase Details
 
@@ -121,11 +123,36 @@ Plans:
 - [ ] 06-03-PLAN.md — UI wiring: export button + MenuFlyout, update InfoBar, settings additions (autostart/language), accessibility labels
 - [ ] 06-04-PLAN.md — Distribution: dotnet publish config, Inno Setup installer, README.md, LICENSE (MIT)
 
+### Phase 7: Security Fix & Dead Code Cleanup
+**Goal**: Logout fully cleans up WebViewBridge state and all dead code is removed — the codebase matches what's actually wired
+**Depends on**: Phase 6
+**Requirements**: AUTH-04, SECU-03
+**Gap Closure:** Closes integration gap (WebViewBridge.Reset not called on logout), flow gap (Logout security cleanup), and dead code tech debt from audit
+**Success Criteria** (what must be TRUE):
+  1. Logout calls WebViewBridge.Reset() so CoreWebView2 reference and WebMessageReceived handler are released
+  2. CostCalculator.cs removed (logic already in JsonlService.AggregateEntryLog)
+  3. JsonlDataUpdatedMessage and SessionSelectedMessage removed (never sent/received)
+  4. _inputTokensText and _outputTokensText removed from MainViewModel (never bound)
+**Plans**: TBD
+
+### Phase 8: Documentation Hygiene & Verification
+**Goal**: All REQUIREMENTS.md checkboxes match actual implementation state and missing VERIFICATION.md files are created
+**Depends on**: Phase 7
+**Requirements**: CTXW-05, SETT-05, EXPT-01, EXPT-02, EXPT-03, SETT-02, UPDT-01, UIPF-05
+**Gap Closure:** Closes 8 stale requirement checkboxes and 2 missing phase verification reports from audit
+**Success Criteria** (what must be TRUE):
+  1. All 7 stale REQUIREMENTS.md checkboxes updated to [x] (EXPT-01/02/03, SETT-02, SETT-05, UPDT-01, UIPF-05)
+  2. CTXW-05 checkbox updated to [x] with evidence from code
+  3. Phase 02 VERIFICATION.md created with requirement cross-reference
+  4. Phase 04 VERIFICATION.md created with requirement cross-reference
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 Note: Phase 4 depends on Phase 1 (not Phase 3), so Phases 3 and 4 could theoretically execute in parallel.
+Gap closure phases 7-8 added from milestone audit (2026-03-17).
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -135,3 +162,5 @@ Note: Phase 4 depends on Phase 1 (not Phase 3), so Phases 3 and 4 could theoreti
 | 4. Local Data Pipeline | 3/3 | Complete   | 2026-03-11 |
 | 5. Cost Analytics | 2/2 | Complete   | 2026-03-16 |
 | 6. Export, Polish, and Distribution | 4/4 | Complete   | 2026-03-17 |
+| 7. Security Fix & Dead Code Cleanup | 0/0 | Not Started | — |
+| 8. Documentation Hygiene & Verification | 0/0 | Not Started | — |
