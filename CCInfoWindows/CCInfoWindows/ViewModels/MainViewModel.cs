@@ -56,6 +56,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     private readonly IJsonlService _jsonlService;
     private readonly IPricingService _pricingService;
     private readonly IUpdateService _updateService;
+    private readonly IWebViewBridge _bridge;
 
     private DispatcherQueueTimer? _pollTimer;
     private DispatcherQueueTimer? _countdownTimer;
@@ -257,7 +258,8 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         IUsageHistoryService historyService,
         IJsonlService jsonlService,
         IPricingService pricingService,
-        IUpdateService updateService)
+        IUpdateService updateService,
+        IWebViewBridge bridge)
     {
         _credentialService = credentialService;
         _navigationService = navigationService;
@@ -267,6 +269,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         _jsonlService = jsonlService;
         _pricingService = pricingService;
         _updateService = updateService;
+        _bridge = bridge;
 
         _updateService.UpdateAvailable += OnUpdateAvailable;
         WeakReferenceMessenger.Default.Register<AuthStateChangedMessage>(this);
@@ -783,6 +786,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     {
         _historyService.ClearHistory();
         _credentialService.ClearCredentials();
+        _bridge.Reset();
         WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
         IsSessionExpired = false;
         _navigationService.NavigateTo<LoginView>();

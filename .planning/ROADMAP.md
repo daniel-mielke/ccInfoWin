@@ -133,7 +133,10 @@ Plans:
   2. CostCalculator.cs removed (logic already in JsonlService.AggregateEntryLog)
   3. JsonlDataUpdatedMessage and SessionSelectedMessage removed (never sent/received)
   4. _inputTokensText and _outputTokensText removed from MainViewModel (never bound)
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 07-01-PLAN.md — WebViewBridge.Reset() on logout, pending TCS drain, dead code removal (CostCalculator, unused messages, dead properties)
 
 ### Phase 8: Documentation Hygiene & Verification
 **Goal**: All REQUIREMENTS.md checkboxes match actual implementation state and missing VERIFICATION.md files are created
@@ -162,5 +165,5 @@ Gap closure phases 7-8 added from milestone audit (2026-03-17).
 | 4. Local Data Pipeline | 3/3 | Complete   | 2026-03-11 |
 | 5. Cost Analytics | 2/2 | Complete   | 2026-03-16 |
 | 6. Export, Polish, and Distribution | 4/4 | Complete   | 2026-03-17 |
-| 7. Security Fix & Dead Code Cleanup | 0/0 | Not Started | — |
+| 7. Security Fix & Dead Code Cleanup | 0/1 | Not Started | — |
 | 8. Documentation Hygiene & Verification | 0/0 | Not Started | — |

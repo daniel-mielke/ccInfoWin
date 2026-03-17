@@ -141,7 +141,8 @@ public partial class App : Application
             sp.GetRequiredService<IUsageHistoryService>(),
             sp.GetRequiredService<IJsonlService>(),
             sp.GetRequiredService<IPricingService>(),
-            sp.GetRequiredService<IUpdateService>()));
+            sp.GetRequiredService<IUpdateService>(),
+            sp.GetRequiredService<IWebViewBridge>()));
         services.AddTransient<SettingsViewModel>();
 
         return services.BuildServiceProvider();

@@ -40,6 +40,14 @@ public class WebViewBridge : IWebViewBridge
         }
         _coreWebView = null;
         _dispatcherQueue = null;
+
+        foreach (var key in _pending.Keys)
+        {
+            if (_pending.TryRemove(key, out var tcs))
+            {
+                tcs.TrySetResult(null);
+            }
+        }
     }
 
     public async Task<string?> FetchJsonAsync(string url)

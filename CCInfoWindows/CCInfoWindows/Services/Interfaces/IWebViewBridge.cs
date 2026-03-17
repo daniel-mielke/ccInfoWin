@@ -16,4 +16,10 @@ public interface IWebViewBridge
     /// Returns null on network error or non-OK status. Throws on 401 (auth expired).
     /// </summary>
     Task<string?> FetchJsonAsync(string url);
+
+    /// <summary>
+    /// Releases the WebView2 reference and drains all pending requests on logout.
+    /// Prevents 30-second ghost hangs from in-flight fetch requests after navigation away.
+    /// </summary>
+    void Reset();
 }
