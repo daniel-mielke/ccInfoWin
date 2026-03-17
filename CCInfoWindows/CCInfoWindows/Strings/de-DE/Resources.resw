@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- MainView section headers -->
+  <data name="SectionHeaderFiveHour.Text" xml:space="preserve">
+    <value>5-STUNDEN-FENSTER</value>
+  </data>
+  <data name="SectionHeaderWeekly.Text" xml:space="preserve">
+    <value>WOCHENLIMIT</value>
+  </data>
+  <data name="SectionHeaderSonnetWeekly.Text" xml:space="preserve">
+    <value>SONNET WOCHENLIMIT</value>
+  </data>
+  <data name="SectionHeaderContextWindow.Text" xml:space="preserve">
+    <value>KONTEXTFENSTER</value>
+  </data>
+  <data name="SectionHeaderStats.Text" xml:space="preserve">
+    <value>STATISTIKEN</value>
+  </data>
+
+  <!-- MainView body text -->
+  <data name="SessionPlaceholder.PlaceholderText" xml:space="preserve">
+    <value>Keine aktive Session</value>
+  </data>
+  <data name="ScanningIndicator.Text" xml:space="preserve">
+    <value>Sitzungen werden gesucht...</value>
+  </data>
+  <data name="UpdatingIndicator.Text" xml:space="preserve">
+    <value>Aktualisiere...</value>
+  </data>
+  <data name="AutocompactWarning.Text" xml:space="preserve">
+    <value>&#x26A0; Autocompact bald</value>
+  </data>
+  <data name="NoActiveSession.Text" xml:space="preserve">
+    <value>Keine aktive Session</value>
+  </data>
+
+  <!-- MainView statistics tab labels -->
+  <data name="TabSession.Content" xml:space="preserve">
+    <value>Session</value>
+  </data>
+  <data name="TabToday.Content" xml:space="preserve">
+    <value>Heute</value>
+  </data>
+  <data name="TabWeek.Content" xml:space="preserve">
+    <value>Woche</value>
+  </data>
+  <data name="TabMonth.Content" xml:space="preserve">
+    <value>Monat</value>
+  </data>
+
+  <!-- MainView statistics row labels -->
+  <data name="StatsModels.Text" xml:space="preserve">
+    <value>Modelle:</value>
+  </data>
+  <data name="StatsInput.Text" xml:space="preserve">
+    <value>Eingabe:</value>
+  </data>
+  <data name="StatsOutput.Text" xml:space="preserve">
+    <value>Ausgabe:</value>
+  </data>
+  <data name="StatsCacheWrite.Text" xml:space="preserve">
+    <value>Cache-Schreiben:</value>
+  </data>
+  <data name="StatsCacheRead.Text" xml:space="preserve">
+    <value>Cache-Lesen:</value>
+  </data>
+  <data name="StatsTotal.Text" xml:space="preserve">
+    <value>Gesamt:</value>
+  </data>
+  <data name="StatsCost.Text" xml:space="preserve">
+    <value>Kosten (API-Äqu.):</value>
+  </data>
+
+  <!-- MainView footer buttons -->
+  <data name="FooterRefreshButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Aktualisieren</value>
+  </data>
+  <data name="FooterRefreshButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Aktualisieren</value>
+  </data>
+  <data name="FooterSettingsButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Einstellungen</value>
+  </data>
+  <data name="FooterSettingsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Einstellungen</value>
+  </data>
+  <data name="FooterQuitButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Beenden</value>
+  </data>
+  <data name="FooterQuitButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Beenden</value>
+  </data>
+
+  <!-- MainView Session Expired InfoBar -->
+  <data name="SessionExpiredInfoBar.Title" xml:space="preserve">
+    <value>Sitzung abgelaufen</value>
+  </data>
+  <data name="SessionExpiredInfoBar.Message" xml:space="preserve">
+    <value>Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.</value>
+  </data>
+  <data name="ReLoginButton.Content" xml:space="preserve">
+    <value>Erneut anmelden</value>
+  </data>
+
+  <!-- SettingsView -->
+  <data name="SettingsHeader.Text" xml:space="preserve">
+    <value>EINSTELLUNGEN</value>
+  </data>
+  <data name="SettingsBackButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Zurück</value>
+  </data>
+  <data name="SettingsRefreshInterval.Text" xml:space="preserve">
+    <value>Aktualisierungsintervall</value>
+  </data>
+  <data name="SettingsSessionTimeout.Text" xml:space="preserve">
+    <value>Sitzungs-Timeout</value>
+  </data>
+  <data name="SettingsDarkMode.Text" xml:space="preserve">
+    <value>Dark Mode</value>
+  </data>
+  <data name="SettingsPricingSource.Text" xml:space="preserve">
+    <value>Preisdaten:</value>
+  </data>
+  <data name="SettingsLastFetch.Text" xml:space="preserve">
+    <value>Zuletzt aktualisiert:</value>
+  </data>
+  <data name="SettingsLogoutButton.Content" xml:space="preserve">
+    <value>Abmelden</value>
+  </data>
+
+  <!-- SettingsView session timeout items -->
+  <data name="Timeout15.Content" xml:space="preserve">
+    <value>15 Minuten</value>
+  </data>
+  <data name="Timeout30.Content" xml:space="preserve">
+    <value>30 Minuten</value>
+  </data>
+  <data name="Timeout60.Content" xml:space="preserve">
+    <value>60 Minuten</value>
+  </data>
+  <data name="Timeout120.Content" xml:space="preserve">
+    <value>120 Minuten</value>
+  </data>
+
+  <!-- Phase 6 new elements -->
+  <data name="ExportButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Diagramm exportieren</value>
+  </data>
+  <data name="ExportButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Diagramm exportieren</value>
+  </data>
+  <data name="ExportMenuSave.Text" xml:space="preserve">
+    <value>Speichern als PNG...</value>
+  </data>
+  <data name="ExportMenuCopy.Text" xml:space="preserve">
+    <value>In Zwischenablage kopieren</value>
+  </data>
+  <data name="UpdateDownloadButton.Content" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="SectionHeaderApp.Text" xml:space="preserve">
+    <value>ANWENDUNG</value>
+  </data>
+  <data name="SettingsAutostartLabel.Text" xml:space="preserve">
+    <value>Autostart:</value>
+  </data>
+  <data name="SettingsLanguageLabel.Text" xml:space="preserve">
+    <value>Sprache:</value>
+  </data>
+  <data name="AutostartToggle.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Beim Start von Windows öffnen</value>
+  </data>
+  <data name="AutostartToggle.OnContent" xml:space="preserve">
+    <value>An</value>
+  </data>
+  <data name="AutostartToggle.OffContent" xml:space="preserve">
+    <value>Aus</value>
+  </data>
+  <data name="LanguageComboBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Sprache auswählen</value>
+  </data>
+
+</root>

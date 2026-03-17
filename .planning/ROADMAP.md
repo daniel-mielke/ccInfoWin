@@ -113,12 +113,13 @@ Plans:
   3. App checks hourly for updates and shows in-app banner with download link (no intrusive OS notifications), and can autostart at Windows login
   4. Window position is saved on close and restored on startup, all interactive elements have accessibility labels
   5. Inno Setup per-user installer (no admin) is available on GitHub with README, LICENSE (MIT), and screenshots
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
-- [ ] 06-03: TBD
+- [ ] 06-01-PLAN.md — ExportHelper (Win2D offscreen PNG), UpdateService (GitHub Releases), RegistryHelper (autostart), AppSettings extensions
+- [ ] 06-02-PLAN.md — WinUI3Localizer setup, .resw resource files (DE/EN), x:Uid conversion on all XAML
+- [ ] 06-03-PLAN.md — UI wiring: export button + MenuFlyout, update InfoBar, settings additions (autostart/language), accessibility labels
+- [ ] 06-04-PLAN.md — Distribution: dotnet publish config, Inno Setup installer, README.md, LICENSE (MIT)
 
 ## Progress
 
@@ -133,4 +134,4 @@ Note: Phase 4 depends on Phase 1 (not Phase 3), so Phases 3 and 4 could theoreti
 | 3. Area Chart | 3/3 | Complete   | 2026-03-11 |
 | 4. Local Data Pipeline | 3/3 | Complete   | 2026-03-11 |
 | 5. Cost Analytics | 2/2 | Complete   | 2026-03-16 |
-| 6. Export, Polish, and Distribution | 0/3 | Not started | - |
+| 6. Export, Polish, and Distribution | 0/4 | Not started | - |
