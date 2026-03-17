@@ -148,7 +148,10 @@ Plans:
   2. CTXW-05 checkbox updated to [x] with evidence from code
   3. Phase 02 VERIFICATION.md created with requirement cross-reference
   4. Phase 04 VERIFICATION.md created with requirement cross-reference
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 08-01-PLAN.md — Update REQUIREMENTS.md checkboxes, create Phase 02 and Phase 04 VERIFICATION.md
 
 ## Progress
 
@@ -166,4 +169,4 @@ Gap closure phases 7-8 added from milestone audit (2026-03-17).
 | 5. Cost Analytics | 2/2 | Complete   | 2026-03-16 |
 | 6. Export, Polish, and Distribution | 4/4 | Complete   | 2026-03-17 |
 | 7. Security Fix & Dead Code Cleanup | 1/1 | Complete   | 2026-03-17 |
-| 8. Documentation Hygiene & Verification | 0/0 | Not Started | — |
+| 8. Documentation Hygiene & Verification | 0/1 | In Progress | — |

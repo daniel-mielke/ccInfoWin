@@ -38,7 +38,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **CTXW-02**: Model badge displayed next to context bar (e.g. "Opus 4.6", "Sonnet 4.6")
 - [x] **CTXW-03**: Active subagent context windows shown with own model badge and progress bar
 - [x] **CTXW-04**: Autocompact warning displayed at >= 95% context utilization (>= 90% for 200K models)
-- [ ] **CTXW-05**: When no active session exists, show 0% bar with "No active session" message
+- [x] **CTXW-05**: When no active session exists, show 0% bar with "No active session" message
 
 ### Multi-Session Management
 
@@ -66,23 +66,23 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Chart Export
 
-- [ ] **EXPT-01**: 5-hour chart exportable as dark PNG via system save dialog
-- [ ] **EXPT-02**: Thumbnail preview shown during export
-- [ ] **EXPT-03**: Option to copy chart directly to clipboard
+- [x] **EXPT-01**: 5-hour chart exportable as dark PNG via system save dialog
+- [x] **EXPT-02**: Thumbnail preview shown during export
+- [x] **EXPT-03**: Option to copy chart directly to clipboard
 
 ### Settings
 
 - [x] **SETT-01**: Configurable refresh interval (manual or automatic: 30s to 10min)
-- [ ] **SETT-02**: Autostart option to launch app at Windows login
+- [x] **SETT-02**: Autostart option to launch app at Windows login
 - [x] **SETT-03**: Session activity threshold configuration
 - [x] **SETT-04**: Language support for German and English (follows system language or manual selection)
-- [ ] **SETT-05**: Manual dark/light mode toggle with immediate application
+- [x] **SETT-05**: Manual dark/light mode toggle with immediate application
 - [x] **SETT-06**: Color mode persisted locally, restored on startup (default: dark)
 - [x] **SETT-07**: Settings displayed in-app (same window, frame navigation) — no separate window
 
 ### Auto-Update
 
-- [ ] **UPDT-01**: Hourly check for new version via GitHub Releases API
+- [x] **UPDT-01**: Hourly check for new version via GitHub Releases API
 - [x] **UPDT-02**: In-app banner (InfoBar) shown when update available with download link
 - [x] **UPDT-03**: No intrusive OS toast notifications — banner only
 
@@ -92,7 +92,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **UIPF-02**: Opaque background following light/dark color scheme
 - [x] **UIPF-03**: Compact layout matching macOS MenuBar popup layout order
 - [x] **UIPF-04**: Unified color thresholds for all progress bars (green/yellow/orange/red)
-- [ ] **UIPF-05**: Window position saved on close and restored on startup
+- [x] **UIPF-05**: Window position saved on close and restored on startup
 - [x] **UIPF-06**: Fixed window width (~360px), not resizable, minimizable
 - [x] **UIPF-07**: All interactive elements screen-reader compatible (accessibility labels)
 - [x] **UIPF-08**: Runs on Windows 10 (19041+) and Windows 11 without admin rights
@@ -176,7 +176,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CTXW-02 | Phase 4 | Complete |
 | CTXW-03 | Phase 4 | Complete |
 | CTXW-04 | Phase 4 | Complete |
-| CTXW-05 | Phase 8 | Pending |
+| CTXW-05 | Phase 4 | Complete |
 | SESS-01 | Phase 4 | Complete |
 | SESS-02 | Phase 4 | Complete |
 | SESS-03 | Phase 4 | Complete |
@@ -192,24 +192,24 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COST-04 | Phase 5 | Complete |
 | COST-05 | Phase 5 | Removed (not in reference) |
 | COST-06 | Phase 5 | Complete |
-| EXPT-01 | Phase 8 | Pending |
-| EXPT-02 | Phase 8 | Pending |
-| EXPT-03 | Phase 8 | Pending |
+| EXPT-01 | Phase 6 | Complete |
+| EXPT-02 | Phase 6 | Complete |
+| EXPT-03 | Phase 6 | Complete |
 | SETT-01 | Phase 2 | Complete |
-| SETT-02 | Phase 8 | Pending |
+| SETT-02 | Phase 6 | Complete |
 | SETT-03 | Phase 4 | Complete |
 | SETT-04 | Phase 6 | Complete |
-| SETT-05 | Phase 8 | Pending |
+| SETT-05 | Phase 2 | Complete |
 | SETT-06 | Phase 2 | Complete |
 | SETT-07 | Phase 6 | Complete |
-| UPDT-01 | Phase 8 | Pending |
+| UPDT-01 | Phase 6 | Complete |
 | UPDT-02 | Phase 6 | Complete |
 | UPDT-03 | Phase 6 | Complete |
 | UIPF-01 | Phase 1 | Complete |
 | UIPF-02 | Phase 2 | Complete |
 | UIPF-03 | Phase 1 | Complete |
 | UIPF-04 | Phase 2 | Complete |
-| UIPF-05 | Phase 8 | Pending |
+| UIPF-05 | Phase 6 | Complete |
 | UIPF-06 | Phase 1 | Complete |
 | UIPF-07 | Phase 6 | Complete |
 | UIPF-08 | Phase 1 | Complete |
