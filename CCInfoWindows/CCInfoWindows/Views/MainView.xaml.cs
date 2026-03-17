@@ -304,6 +304,11 @@ public sealed partial class MainView : Page
         session.FillCircle(x, y, 4f, zoneColor);
     }
 
+    private void OnUpdateInfoBarClosing(InfoBar sender, InfoBarClosingEventArgs args)
+    {
+        ViewModel.DismissUpdate();
+    }
+
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(MainViewModel.IsRefreshing))

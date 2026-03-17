@@ -34,18 +34,35 @@
             Visibility="Collapsed"
             Width="0" Height="0" />
 
-        <!-- Row 0: Session expired InfoBar -->
-        <InfoBar
-            x:Uid="SessionExpiredInfoBar"
-            Grid.Row="0"
-            Severity="Warning"
-            IsOpen="{x:Bind ViewModel.IsSessionExpired, Mode=OneWay}"
-            IsClosable="False"
-            Margin="0,0,0,12">
-            <InfoBar.ActionButton>
-                <Button x:Uid="ReLoginButton" Command="{x:Bind ViewModel.ReLoginCommand}" />
-            </InfoBar.ActionButton>
-        </InfoBar>
+        <!-- Row 0: InfoBars (update + session expired) -->
+        <StackPanel Grid.Row="0">
+            <!-- Update available InfoBar -->
+            <InfoBar
+                x:Uid="UpdateInfoBar"
+                Severity="Informational"
+                IsOpen="{x:Bind ViewModel.IsUpdateAvailable, Mode=OneWay}"
+                Message="{x:Bind ViewModel.UpdateMessage, Mode=OneWay}"
+                IsClosable="True"
+                Closing="OnUpdateInfoBarClosing"
+                Margin="0,0,0,4">
+                <InfoBar.ActionButton>
+                    <Button x:Uid="UpdateDownloadButton"
+                            Command="{x:Bind ViewModel.OpenUpdateDownloadCommand}" />
+                </InfoBar.ActionButton>
+            </InfoBar>
+
+            <!-- Session expired InfoBar -->
+            <InfoBar
+                x:Uid="SessionExpiredInfoBar"
+                Severity="Warning"
+                IsOpen="{x:Bind ViewModel.IsSessionExpired, Mode=OneWay}"
+                IsClosable="False"
+                Margin="0,0,0,12">
+                <InfoBar.ActionButton>
+                    <Button x:Uid="ReLoginButton" Command="{x:Bind ViewModel.ReLoginCommand}" />
+                </InfoBar.ActionButton>
+            </InfoBar>
+        </StackPanel>
 
         <!-- Row 1: Dashboard content -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -53,7 +70,7 @@
 
                 <!-- ==================== SESSION DROPDOWN ==================== -->
                 <ComboBox x:Name="SessionComboBox"
-                          x:Uid="SessionPlaceholder"
+                          x:Uid="SessionComboBox"
                           ItemsSource="{x:Bind ViewModel.SortedSessions, Mode=OneWay}"
                           SelectedItem="{x:Bind ViewModel.SelectedSession, Mode=TwoWay}"
                           HorizontalAlignment="Stretch">
@@ -87,13 +104,44 @@
 
                 <!-- ==================== 5-STUNDEN-FENSTER ==================== -->
                 <StackPanel Spacing="8">
-                    <!-- Section header -->
-                    <TextBlock
-                        x:Uid="SectionHeaderFiveHour"
-                        FontSize="11"
-                        FontWeight="SemiBold"
-                        Foreground="{ThemeResource SectionHeaderBrush}"
-                        CharacterSpacing="50" />
+                    <!-- Section header with export button -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Uid="SectionHeaderFiveHour"
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource SectionHeaderBrush}"
+                            CharacterSpacing="50"
+                            VerticalAlignment="Center" />
+                        <Button Grid.Column="1"
+                                x:Uid="ExportButton"
+                                Background="Transparent" BorderThickness="0"
+                                Padding="8" CornerRadius="6"
+                                Width="32" Height="32">
+                            <Button.Flyout>
+                                <MenuFlyout>
+                                    <MenuFlyoutItem x:Uid="ExportMenuSave"
+                                                    Command="{x:Bind ViewModel.ExportChartAsPngCommand}">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon Glyph="&#xE792;" />
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutItem x:Uid="ExportMenuCopy"
+                                                    Command="{x:Bind ViewModel.CopyChartToClipboardCommand}">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon Glyph="&#xE8C8;" />
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                </MenuFlyout>
+                            </Button.Flyout>
+                            <FontIcon Glyph="&#xE898;" FontSize="16"
+                                      Foreground="{ThemeResource SecondaryTextBrush}" />
+                        </Button>
+                    </Grid>
 
                     <!-- Area chart replacing ProgressBar -->
                     <Border Background="{ThemeResource ChartBackgroundBrush}"

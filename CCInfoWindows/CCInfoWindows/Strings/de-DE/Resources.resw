@@ -35,8 +35,11 @@
   </data>
 
   <!-- MainView body text -->
-  <data name="SessionPlaceholder.PlaceholderText" xml:space="preserve">
+  <data name="SessionComboBox.PlaceholderText" xml:space="preserve">
     <value>Keine aktive Session</value>
+  </data>
+  <data name="SessionComboBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Sitzung auswählen</value>
   </data>
   <data name="ScanningIndicator.Text" xml:space="preserve">
     <value>Sitzungen werden gesucht...</value>
@@ -195,6 +198,22 @@
   </data>
   <data name="LanguageComboBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Sprache auswählen</value>
+  </data>
+
+  <!-- Accessibility labels for settings controls -->
+  <data name="DarkModeToggle.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Dark Mode umschalten</value>
+  </data>
+  <data name="RefreshIntervalComboBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Aktualisierungsintervall wählen</value>
+  </data>
+  <data name="SessionTimeoutComboBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Sitzungs-Timeout wählen</value>
+  </data>
+
+  <!-- Update InfoBar -->
+  <data name="UpdateInfoBar.Title" xml:space="preserve">
+    <value>Update verfügbar</value>
   </data>
 
 </root>

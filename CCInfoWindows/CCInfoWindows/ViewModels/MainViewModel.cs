@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Messages;
 using CCInfoWindows.Models;
@@ -54,10 +55,22 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     private readonly IUsageHistoryService _historyService;
     private readonly IJsonlService _jsonlService;
     private readonly IPricingService _pricingService;
+    private readonly IUpdateService _updateService;
 
     private DispatcherQueueTimer? _pollTimer;
     private DispatcherQueueTimer? _countdownTimer;
     private int _refreshIntervalSeconds;
+    private DispatcherQueue? _dispatcherQueue;
+
+    private string _updateDownloadUrl = string.Empty;
+
+    // --- Update state ---
+
+    [ObservableProperty]
+    private bool _isUpdateAvailable;
+
+    [ObservableProperty]
+    private string _updateMessage = string.Empty;
 
     // --- Auth state ---
 
@@ -243,7 +256,8 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         ISettingsService settingsService,
         IUsageHistoryService historyService,
         IJsonlService jsonlService,
-        IPricingService pricingService)
+        IPricingService pricingService,
+        IUpdateService updateService)
     {
         _credentialService = credentialService;
         _navigationService = navigationService;
@@ -252,7 +266,9 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         _historyService = historyService;
         _jsonlService = jsonlService;
         _pricingService = pricingService;
+        _updateService = updateService;
 
+        _updateService.UpdateAvailable += OnUpdateAvailable;
         WeakReferenceMessenger.Default.Register<AuthStateChangedMessage>(this);
     }
 
@@ -262,6 +278,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     public async Task InitializeAsync()
     {
         var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        _dispatcherQueue = dispatcherQueue;
 
         // Load settings
         var settings = _settingsService.LoadSettings();
@@ -340,6 +357,9 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         await PollUsageAsync();
         IsUpdatingFromCache = false;
 #endif
+
+        await _updateService.CheckForUpdateAsync();
+        _updateService.StartPeriodicCheck();
     }
 
     /// <summary>
@@ -519,6 +539,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         _pollTimer?.Stop();
         _countdownTimer?.Stop();
         _jsonlService.Stop();
+        _updateService.StopPeriodicCheck();
         WeakReferenceMessenger.Default.UnregisterAll(this);
     }
 
@@ -772,6 +793,48 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     {
         IsSessionExpired = false;
         _navigationService.NavigateTo<LoginView>();
+    }
+
+    [RelayCommand]
+    private async Task ExportChartAsPng()
+    {
+        var appWindow = App.MainWindow?.AppWindow;
+        if (appWindow == null) return;
+        await ExportHelper.ExportChartAsPngAsync(appWindow, UsageHistoryPoints, FiveHourWindowStart, FiveHourPercentageText, FiveHourCountdown);
+    }
+
+    [RelayCommand]
+    private async Task CopyChartToClipboard()
+    {
+        if (_dispatcherQueue == null) return;
+        await ExportHelper.CopyChartToClipboardAsync(_dispatcherQueue, UsageHistoryPoints, FiveHourWindowStart, FiveHourPercentageText, FiveHourCountdown);
+    }
+
+    [RelayCommand]
+    private void OpenUpdateDownload()
+    {
+        if (string.IsNullOrEmpty(_updateDownloadUrl)) return;
+        Process.Start(new ProcessStartInfo(_updateDownloadUrl) { UseShellExecute = true });
+    }
+
+    private void OnUpdateAvailable(string version, string downloadUrl)
+    {
+        _updateDownloadUrl = downloadUrl;
+        var dispatcherQueue = _dispatcherQueue ?? DispatcherQueue.GetForCurrentThread();
+        dispatcherQueue?.TryEnqueue(() =>
+        {
+            UpdateMessage = $"Update v{version} verfügbar";
+            IsUpdateAvailable = true;
+        });
+    }
+
+    public void DismissUpdate()
+    {
+        var settings = _settingsService.LoadSettings();
+        var version = UpdateMessage.Replace("Update v", "").Replace(" verfügbar", "");
+        settings.DismissedUpdateVersion = version;
+        _settingsService.SaveSettings(settings);
+        IsUpdateAvailable = false;
     }
 
     public void Receive(AuthStateChangedMessage message)

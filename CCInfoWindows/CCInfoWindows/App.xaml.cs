@@ -15,6 +15,7 @@ namespace CCInfoWindows;
 public partial class App : Application
 {
     public static IServiceProvider Services { get; private set; } = null!;
+    public static Window? MainWindow { get; private set; }
 
     private Window? _window;
 
@@ -41,6 +42,7 @@ public partial class App : Application
         await InitializeLocalizerAsync();
 
         _window = new MainWindow();
+        MainWindow = _window;
         _window.Activate();
 
         ApplyPersistedTheme();
@@ -126,10 +128,20 @@ public partial class App : Application
             new LiteLLMPricingService(sp.GetRequiredService<HttpClient>()));
         services.AddSingleton<IJsonlService>(sp =>
             new JsonlService(pricingService: sp.GetRequiredService<IPricingService>()));
+        services.AddSingleton<IUpdateService>(sp =>
+            new UpdateService(sp.GetRequiredService<HttpClient>(), sp.GetRequiredService<ISettingsService>()));
 
         // ViewModels
         services.AddTransient<LoginViewModel>();
-        services.AddTransient<MainViewModel>();
+        services.AddTransient<MainViewModel>(sp => new MainViewModel(
+            sp.GetRequiredService<ICredentialService>(),
+            sp.GetRequiredService<INavigationService>(),
+            sp.GetRequiredService<IClaudeApiService>(),
+            sp.GetRequiredService<ISettingsService>(),
+            sp.GetRequiredService<IUsageHistoryService>(),
+            sp.GetRequiredService<IJsonlService>(),
+            sp.GetRequiredService<IPricingService>(),
+            sp.GetRequiredService<IUpdateService>()));
         services.AddTransient<SettingsViewModel>();
 
         return services.BuildServiceProvider();
