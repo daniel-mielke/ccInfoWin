@@ -78,13 +78,13 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **SETT-04**: Language support for German and English (follows system language or manual selection)
 - [ ] **SETT-05**: Manual dark/light mode toggle with immediate application
 - [x] **SETT-06**: Color mode persisted locally, restored on startup (default: dark)
-- [ ] **SETT-07**: Settings displayed in-app (same window, frame navigation) — no separate window
+- [x] **SETT-07**: Settings displayed in-app (same window, frame navigation) — no separate window
 
 ### Auto-Update
 
 - [ ] **UPDT-01**: Hourly check for new version via GitHub Releases API
-- [ ] **UPDT-02**: In-app banner (InfoBar) shown when update available with download link
-- [ ] **UPDT-03**: No intrusive OS toast notifications — banner only
+- [x] **UPDT-02**: In-app banner (InfoBar) shown when update available with download link
+- [x] **UPDT-03**: No intrusive OS toast notifications — banner only
 
 ### UI & Platform
 
@@ -94,7 +94,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **UIPF-04**: Unified color thresholds for all progress bars (green/yellow/orange/red)
 - [ ] **UIPF-05**: Window position saved on close and restored on startup
 - [x] **UIPF-06**: Fixed window width (~360px), not resizable, minimizable
-- [ ] **UIPF-07**: All interactive elements screen-reader compatible (accessibility labels)
+- [x] **UIPF-07**: All interactive elements screen-reader compatible (accessibility labels)
 - [x] **UIPF-08**: Runs on Windows 10 (19041+) and Windows 11 without admin rights
 
 ### Data Sources
@@ -116,9 +116,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Distribution
 
-- [ ] **DIST-01**: Inno Setup EXE installer (per-user, no admin)
-- [ ] **DIST-02**: GitHub public repository with README, LICENSE (MIT), screenshots
-- [ ] **DIST-03**: Self-contained or framework-dependent publish with runtime prerequisite check
+- [x] **DIST-01**: Inno Setup EXE installer (per-user, no admin)
+- [x] **DIST-02**: GitHub public repository with README, LICENSE (MIT), screenshots
+- [x] **DIST-03**: Self-contained or framework-dependent publish with runtime prerequisite check
 
 ## v2 Requirements
 
@@ -201,17 +201,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SETT-04 | Phase 6 | Complete |
 | SETT-05 | Phase 2 | Pending |
 | SETT-06 | Phase 2 | Complete |
-| SETT-07 | Phase 6 | Pending |
+| SETT-07 | Phase 6 | Complete |
 | UPDT-01 | Phase 6 | Pending |
-| UPDT-02 | Phase 6 | Pending |
-| UPDT-03 | Phase 6 | Pending |
+| UPDT-02 | Phase 6 | Complete |
+| UPDT-03 | Phase 6 | Complete |
 | UIPF-01 | Phase 1 | Complete |
 | UIPF-02 | Phase 2 | Complete |
 | UIPF-03 | Phase 1 | Complete |
 | UIPF-04 | Phase 2 | Complete |
 | UIPF-05 | Phase 6 | Pending |
 | UIPF-06 | Phase 1 | Complete |
-| UIPF-07 | Phase 6 | Pending |
+| UIPF-07 | Phase 6 | Complete |
 | UIPF-08 | Phase 1 | Complete |
 | DATA-01 | Phase 2 | Complete |
 | DATA-02 | Phase 2 | Complete |
@@ -224,9 +224,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SECU-04 | Phase 1 | Complete |
 | SECU-05 | Phase 1 | Complete |
 | SECU-06 | Phase 1 | Complete |
-| DIST-01 | Phase 6 | Pending |
-| DIST-02 | Phase 6 | Pending |
-| DIST-03 | Phase 6 | Pending |
+| DIST-01 | Phase 6 | Complete |
+| DIST-02 | Phase 6 | Complete |
+| DIST-03 | Phase 6 | Complete |
 
 **Coverage:**
 - v1 requirements: 68 total

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Checkpoint 06-03: awaiting human verification of Phase 6 feature set"
-last_updated: "2026-03-17T11:24:09.504Z"
+stopped_at: "Checkpoint 06-04: awaiting human verification of distribution package"
+last_updated: "2026-03-17T13:44:21.026Z"
 last_activity: 2026-03-11 — Plan 04-01 executed (data contracts, helpers, IJsonlService, unit tests)
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 19
-  completed_plans: 18
+  completed_plans: 19
 ---
 
 ---
@@ -107,6 +107,7 @@ Progress: [███████░░░] 78%
 | Phase 05-cost-analytics P01 | 53 | 2 tasks | 16 files |
 | Phase 06 P02 | 18 | 2 tasks | 7 files |
 | Phase 06-export-polish-and-distribution P03 | 25 | 2 tasks | 8 files |
+| Phase 06-export-polish-and-distribution P04 | 15 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -159,6 +160,8 @@ Recent decisions affecting current work:
 - [Phase 06-02]: AppSettings.Language property added to persist language preference; DefaultLanguage set to en-US in WinUI3Localizer
 - [Phase 06]: App.MainWindow static property used for AppWindow access in ViewModel commands — WinUI 3 pattern
 - [Phase 06]: SessionComboBox uid replaces SessionPlaceholder — consolidates PlaceholderText and AutomationProperties.Name under one uid
+- [Phase 06-04]: Publish output path is bin/x64/Release due to Platforms=x64;ARM64 in .csproj — setup.iss source path updated accordingly
+- [Phase 06-04]: TrimMode=partial preserves WinRT interop and Win2D marshaling; PrivilegesRequired=lowest for per-user install; autostart uses triple-quoted path for spaces
 
 ### Pending Todos
 
@@ -177,6 +180,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-17T11:24:09.501Z
-Stopped at: Checkpoint 06-03: awaiting human verification of Phase 6 feature set
+Last session: 2026-03-17T13:44:21.022Z
+Stopped at: Checkpoint 06-04: awaiting human verification of distribution package
 Resume file: None

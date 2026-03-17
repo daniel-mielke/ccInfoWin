@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Area Chart** - Win2D interactive area chart with color zones, glow indicator, usage history persistence (gap closure in progress) (completed 2026-03-11)
 - [x] **Phase 4: Local Data Pipeline** - JSONL file watching, multi-session management, context window status, token counting (completed 2026-03-11)
 - [x] **Phase 5: Cost Analytics** - LiteLLM pricing integration, cost calculation with tiered pricing, burn rate, token stats UI (completed 2026-03-16)
-- [ ] **Phase 6: Export, Polish, and Distribution** - Chart export, localization, autostart, auto-update, accessibility, Inno Setup installer
+- [x] **Phase 6: Export, Polish, and Distribution** - Chart export, localization, autostart, auto-update, accessibility, Inno Setup installer (completed 2026-03-17)
 
 ## Phase Details
 
@@ -134,4 +134,4 @@ Note: Phase 4 depends on Phase 1 (not Phase 3), so Phases 3 and 4 could theoreti
 | 3. Area Chart | 3/3 | Complete   | 2026-03-11 |
 | 4. Local Data Pipeline | 3/3 | Complete   | 2026-03-11 |
 | 5. Cost Analytics | 2/2 | Complete   | 2026-03-16 |
-| 6. Export, Polish, and Distribution | 3/4 | In Progress|  |
+| 6. Export, Polish, and Distribution | 4/4 | Complete   | 2026-03-17 |
