@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:l="using:WinUI3Localizer"
     mc:Ignorable="d">
 
     <Grid Background="{ThemeResource AppBackgroundBrush}" Padding="16,12"
@@ -12,13 +13,13 @@
 
         <!-- Header row with back button and title -->
         <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,16">
-            <Button x:Uid="SettingsBackButton"
+            <Button l:Uids.Uid="SettingsBackButton"
                     Command="{x:Bind ViewModel.GoBackCommand}"
                     Background="Transparent" BorderThickness="0" Padding="4">
                 <FontIcon Glyph="&#xE72B;" FontSize="16"
                           Foreground="{ThemeResource PrimaryTextBrush}" />
             </Button>
-            <TextBlock x:Uid="SettingsHeader"
+            <TextBlock l:Uids.Uid="SettingsHeader"
                        FontSize="11" FontWeight="SemiBold"
                        Foreground="{ThemeResource SectionHeaderBrush}"
                        VerticalAlignment="Center" CharacterSpacing="50" />
@@ -28,9 +29,9 @@
         <StackPanel Grid.Row="1" Spacing="24">
             <!-- Refresh interval -->
             <StackPanel Spacing="8">
-                <TextBlock x:Uid="SettingsRefreshInterval"
+                <TextBlock l:Uids.Uid="SettingsRefreshInterval"
                            FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}" />
-                <ComboBox x:Uid="RefreshIntervalComboBox"
+                <ComboBox l:Uids.Uid="RefreshIntervalComboBox"
                           ItemsSource="{x:Bind ViewModel.RefreshOptions}"
                           SelectedItem="{x:Bind ViewModel.SelectedRefreshOption, Mode=TwoWay}"
                           DisplayMemberPath="Label"
@@ -42,15 +43,15 @@
 
             <!-- Session activity timeout -->
             <StackPanel Spacing="8">
-                <TextBlock x:Uid="SettingsSessionTimeout"
+                <TextBlock l:Uids.Uid="SettingsSessionTimeout"
                            FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}" />
-                <ComboBox x:Uid="SessionTimeoutComboBox"
+                <ComboBox l:Uids.Uid="SessionTimeoutComboBox"
                           SelectedIndex="{x:Bind ViewModel.SelectedThresholdIndex, Mode=TwoWay}"
                           HorizontalAlignment="Stretch">
-                    <ComboBoxItem x:Uid="Timeout15" />
-                    <ComboBoxItem x:Uid="Timeout30" />
-                    <ComboBoxItem x:Uid="Timeout60" />
-                    <ComboBoxItem x:Uid="Timeout120" />
+                    <ComboBoxItem l:Uids.Uid="Timeout15" />
+                    <ComboBoxItem l:Uids.Uid="Timeout30" />
+                    <ComboBoxItem l:Uids.Uid="Timeout60" />
+                    <ComboBoxItem l:Uids.Uid="Timeout120" />
                 </ComboBox>
             </StackPanel>
 
@@ -63,11 +64,11 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock x:Uid="SettingsDarkMode"
+                <TextBlock l:Uids.Uid="SettingsDarkMode"
                            FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
                            VerticalAlignment="Center" />
                 <ToggleSwitch Grid.Column="1"
-                              x:Uid="DarkModeToggle"
+                              l:Uids.Uid="DarkModeToggle"
                               IsOn="{x:Bind ViewModel.IsDarkMode, Mode=TwoWay}"
                               OnContent="" OffContent="" />
             </Grid>
@@ -84,13 +85,13 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <TextBlock x:Uid="SettingsPricingSource" Grid.Row="0" Grid.Column="0" FontSize="13"
+                <TextBlock l:Uids.Uid="SettingsPricingSource" Grid.Row="0" Grid.Column="0" FontSize="13"
                            Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
                 <TextBlock Grid.Row="0" Grid.Column="1"
                            Text="{x:Bind ViewModel.PricingSourceText}"
                            FontSize="13" HorizontalAlignment="Right"
                            Foreground="{ThemeResource PrimaryTextBrush}" />
-                <TextBlock x:Uid="SettingsLastFetch" Grid.Row="1" Grid.Column="0" FontSize="13"
+                <TextBlock l:Uids.Uid="SettingsLastFetch" Grid.Row="1" Grid.Column="0" FontSize="13"
                            Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,4,12,0" />
                 <TextBlock Grid.Row="1" Grid.Column="1"
                            Text="{x:Bind ViewModel.LastPricingFetchText}"
@@ -103,7 +104,7 @@
 
             <!-- ANWENDUNG section -->
             <StackPanel Spacing="8">
-                <TextBlock x:Uid="SectionHeaderApp"
+                <TextBlock l:Uids.Uid="SectionHeaderApp"
                            FontSize="11" FontWeight="SemiBold"
                            Foreground="{ThemeResource SectionHeaderBrush}"
                            CharacterSpacing="50" />
@@ -114,11 +115,11 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock x:Uid="SettingsAutostartLabel"
+                    <TextBlock l:Uids.Uid="SettingsAutostartLabel"
                                FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
                                VerticalAlignment="Center" />
                     <ToggleSwitch Grid.Column="1"
-                                  x:Uid="AutostartToggle"
+                                  l:Uids.Uid="AutostartToggle"
                                   IsOn="{x:Bind ViewModel.IsAutostart, Mode=TwoWay}" />
                 </Grid>
 
@@ -128,11 +129,11 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock x:Uid="SettingsLanguageLabel"
+                    <TextBlock l:Uids.Uid="SettingsLanguageLabel"
                                FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
                                VerticalAlignment="Center" />
                     <ComboBox Grid.Column="1"
-                              x:Uid="LanguageComboBox"
+                              l:Uids.Uid="LanguageComboBox"
                               Width="120"
                               SelectedIndex="{x:Bind ViewModel.SelectedLanguageIndex, Mode=TwoWay}">
                         <ComboBoxItem Content="Deutsch" />
@@ -143,7 +144,7 @@
         </StackPanel>
 
         <!-- Logout button at bottom -->
-        <Button x:Uid="SettingsLogoutButton"
+        <Button l:Uids.Uid="SettingsLogoutButton"
                 Grid.Row="2"
                 Command="{x:Bind ViewModel.LogoutCommand}"
                 HorizontalAlignment="Stretch"
