@@ -75,7 +75,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **SETT-01**: Configurable refresh interval (manual or automatic: 30s to 10min)
 - [ ] **SETT-02**: Autostart option to launch app at Windows login
 - [x] **SETT-03**: Session activity threshold configuration
-- [ ] **SETT-04**: Language support for German and English (follows system language or manual selection)
+- [x] **SETT-04**: Language support for German and English (follows system language or manual selection)
 - [ ] **SETT-05**: Manual dark/light mode toggle with immediate application
 - [x] **SETT-06**: Color mode persisted locally, restored on startup (default: dark)
 - [ ] **SETT-07**: Settings displayed in-app (same window, frame navigation) — no separate window
@@ -198,7 +198,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SETT-01 | Phase 2 | Complete |
 | SETT-02 | Phase 6 | Pending |
 | SETT-03 | Phase 4 | Complete |
-| SETT-04 | Phase 6 | Pending |
+| SETT-04 | Phase 6 | Complete |
 | SETT-05 | Phase 2 | Pending |
 | SETT-06 | Phase 2 | Complete |
 | SETT-07 | Phase 6 | Pending |

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 6 UI-SPEC approved
-last_updated: "2026-03-16T19:09:17.900Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-03-17T11:13:09.192Z"
 last_activity: 2026-03-11 — Plan 04-01 executed (data contracts, helpers, IJsonlService, unit tests)
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 15
-  completed_plans: 15
+  total_plans: 19
+  completed_plans: 16
 ---
 
 ---
@@ -105,6 +105,7 @@ Progress: [███████░░░] 78%
 | Phase 03-area-chart P03 | 10 | 2 tasks | 4 files |
 | Phase 04-local-data-pipeline P02 | 5 | 2 tasks | 3 files |
 | Phase 05-cost-analytics P01 | 53 | 2 tasks | 16 files |
+| Phase 06 P02 | 18 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -153,6 +154,8 @@ Recent decisions affecting current work:
 - [Phase 05-01]: NullPricingService as inner class provides backward compatibility when IPricingService not injected into JsonlService
 - [Phase 05-02]: Backward compat: _inputTokensText kept in MainViewModel — XAML compiler crashes silently if x:Bind references missing properties
 - [Phase 05-02]: HttpClient registered as AddSingleton in App.xaml.cs DI — LiteLLMPricingService injected via factory lambda
+- [Phase 06-02]: LoginView has no static text — only dynamic x:Bind and WebView2, no localization needed
+- [Phase 06-02]: AppSettings.Language property added to persist language preference; DefaultLanguage set to en-US in WinUI3Localizer
 
 ### Pending Todos
 
@@ -171,6 +174,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-03-16T13:10:29.644Z
-Stopped at: Phase 6 UI-SPEC approved
-Resume file: .planning/phases/06-export-polish-and-distribution/06-UI-SPEC.md
+Last session: 2026-03-17T11:13:09.189Z
+Stopped at: Completed 06-02-PLAN.md
+Resume file: None
