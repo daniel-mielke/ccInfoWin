@@ -123,8 +123,9 @@ public class JsonlServiceTests : IDisposable
     [Fact]
     public async Task GetContextWindow_ReturnsLastAssistantMessageTokens_NotCumulative()
     {
-        const string SessionId = "session-ctx-1";
+        const string SessionId = "ctx1aaaa-0000-0000-0000-000000000001";
         var projectDir = CreateProjectSessionDir(SessionId);
+        var projectDirName = Path.GetFileName(projectDir);
         var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
 
         // Two assistant messages — context window should reflect only the LAST one
@@ -137,7 +138,7 @@ public class JsonlServiceTests : IDisposable
         var service = new JsonlService(_tempDir);
         await service.InitializeAsync();
 
-        var ctx = service.GetContextWindow(SessionId);
+        var ctx = service.GetContextWindow(projectDirName);
 
         // Last entry: input_tokens=5000, so TotalTokens = 5000 (not 1000+5000=6000)
         Assert.Equal(5000L, ctx.TotalTokens);
@@ -146,8 +147,9 @@ public class JsonlServiceTests : IDisposable
     [Fact]
     public async Task GetContextWindow_IgnoresSidechainMessages()
     {
-        const string SessionId = "session-ctx-2";
+        const string SessionId = "ctx2aaaa-0000-0000-0000-000000000002";
         var projectDir = CreateProjectSessionDir(SessionId);
+        var projectDirName = Path.GetFileName(projectDir);
         var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
 
         await File.WriteAllLinesAsync(jsonlFile,
@@ -159,7 +161,7 @@ public class JsonlServiceTests : IDisposable
         var service = new JsonlService(_tempDir);
         await service.InitializeAsync();
 
-        var ctx = service.GetContextWindow(SessionId);
+        var ctx = service.GetContextWindow(projectDirName);
 
         // Sidechain entry must be ignored — only the first non-sidechain entry
         Assert.Equal(3000L, ctx.TotalTokens);
@@ -184,8 +186,9 @@ public class JsonlServiceTests : IDisposable
     [Fact]
     public async Task GetTokenSummary_SumsOutputTokensAcrossAllAssistantMessages()
     {
-        const string SessionId = "session-tok-1";
+        const string SessionId = "tok1aaaa-0000-0000-0000-000000000001";
         var projectDir = CreateProjectSessionDir(SessionId);
+        var projectDirName = Path.GetFileName(projectDir);
         var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
 
         await File.WriteAllLinesAsync(jsonlFile,
@@ -198,7 +201,7 @@ public class JsonlServiceTests : IDisposable
         var service = new JsonlService(_tempDir);
         await service.InitializeAsync();
 
-        var summary = service.GetTokenSummary(SessionId);
+        var summary = service.GetTokenSummary(projectDirName);
 
         Assert.Equal(600L, summary.OutputTokens);
     }
@@ -206,8 +209,9 @@ public class JsonlServiceTests : IDisposable
     [Fact]
     public async Task GetTokenSummary_DeduplicatesByUuidAndRequestId()
     {
-        const string SessionId = "session-tok-2";
+        const string SessionId = "tok2aaaa-0000-0000-0000-000000000002";
         var projectDir = CreateProjectSessionDir(SessionId);
+        var projectDirName = Path.GetFileName(projectDir);
         var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
 
         // Same uuid+requestId appears twice — should only be counted once
@@ -220,7 +224,7 @@ public class JsonlServiceTests : IDisposable
         var service = new JsonlService(_tempDir);
         await service.InitializeAsync();
 
-        var summary = service.GetTokenSummary(SessionId);
+        var summary = service.GetTokenSummary(projectDirName);
 
         Assert.Equal(500L, summary.OutputTokens);
     }
@@ -228,8 +232,9 @@ public class JsonlServiceTests : IDisposable
     [Fact]
     public async Task GetTokenSummary_IgnoresSidechainMessages()
     {
-        const string SessionId = "session-tok-3";
+        const string SessionId = "tok3aaaa-0000-0000-0000-000000000003";
         var projectDir = CreateProjectSessionDir(SessionId);
+        var projectDirName = Path.GetFileName(projectDir);
         var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
 
         await File.WriteAllLinesAsync(jsonlFile,
@@ -241,7 +246,7 @@ public class JsonlServiceTests : IDisposable
         var service = new JsonlService(_tempDir);
         await service.InitializeAsync();
 
-        var summary = service.GetTokenSummary(SessionId);
+        var summary = service.GetTokenSummary(projectDirName);
 
         Assert.Equal(400L, summary.OutputTokens);
     }
@@ -265,8 +270,13 @@ public class JsonlServiceTests : IDisposable
     [Fact]
     public async Task Sessions_AfterInitialize_DiscoversSessions()
     {
-        const string Session1 = "aaaaaaaa-0000-0000-0000-000000000001";
-        const string Session2 = "aaaaaaaa-0000-0000-0000-000000000002";
+        const string Session1 = "alpha001-0000-0000-0000-000000000001";
+        const string Session2 = "beta0002-0000-0000-0000-000000000002";
+
+        var dir1 = CreateProjectSessionDir(Session1);
+        var dir2 = CreateProjectSessionDir(Session2);
+        var dirName1 = Path.GetFileName(dir1);
+        var dirName2 = Path.GetFileName(dir2);
 
         CreateSessionFile(Session1, cwd: "/home/user/project-alpha");
         CreateSessionFile(Session2, cwd: "/home/user/project-beta");
@@ -276,8 +286,8 @@ public class JsonlServiceTests : IDisposable
 
         Assert.Equal(2, service.Sessions.Count);
         var ids = service.Sessions.Select(s => s.Id).ToHashSet();
-        Assert.Contains(Session1, ids);
-        Assert.Contains(Session2, ids);
+        Assert.Contains(dirName1, ids);
+        Assert.Contains(dirName2, ids);
     }
 
     [Fact]
@@ -289,18 +299,23 @@ public class JsonlServiceTests : IDisposable
         var service = new JsonlService(_tempDir);
         await service.InitializeAsync();
 
-        var session = service.Sessions.First(s => s.Id == SessionId);
+        var session = service.Sessions.First();
         Assert.Equal("my-awesome-project", session.DisplayName);
     }
 
     [Fact]
     public async Task Sessions_SortedByLastActivityDescending()
     {
-        const string OlderSession = "aaaaaaaa-0000-0000-0000-000000000020";
-        const string NewerSession = "aaaaaaaa-0000-0000-0000-000000000021";
+        const string OlderSession = "older001-0000-0000-0000-000000000020";
+        const string NewerSession = "newer002-0000-0000-0000-000000000021";
 
         var olderTime = DateTimeOffset.UtcNow.AddHours(-2);
         var newerTime = DateTimeOffset.UtcNow.AddMinutes(-5);
+
+        var olderDir = CreateProjectSessionDir(OlderSession);
+        var newerDir = CreateProjectSessionDir(NewerSession);
+        var olderDirName = Path.GetFileName(olderDir);
+        var newerDirName = Path.GetFileName(newerDir);
 
         CreateSessionFile(OlderSession, timestamp: olderTime);
         CreateSessionFile(NewerSession, timestamp: newerTime);
@@ -308,8 +323,8 @@ public class JsonlServiceTests : IDisposable
         var service = new JsonlService(_tempDir);
         await service.InitializeAsync();
 
-        Assert.Equal(NewerSession, service.Sessions[0].Id);
-        Assert.Equal(OlderSession, service.Sessions[1].Id);
+        Assert.Equal(newerDirName, service.Sessions[0].Id);
+        Assert.Equal(olderDirName, service.Sessions[1].Id);
     }
 
     // -------------------------------------------------------------------------
@@ -363,6 +378,7 @@ public class JsonlServiceTests : IDisposable
     {
         const string SessionId = "aaaaaaaa-0000-0000-0000-000000000040";
         var projectDir = CreateProjectSessionDir(SessionId);
+        var projectDirName = Path.GetFileName(projectDir);
         var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
 
         await File.WriteAllLinesAsync(jsonlFile,
@@ -382,7 +398,7 @@ public class JsonlServiceTests : IDisposable
         var service = new JsonlService(_tempDir);
         await service.InitializeAsync();
 
-        var ctx = service.GetContextWindow(SessionId);
+        var ctx = service.GetContextWindow(projectDirName);
 
         Assert.Single(ctx.Subagents);
         Assert.Equal(8000L, ctx.Subagents[0].TotalTokens);

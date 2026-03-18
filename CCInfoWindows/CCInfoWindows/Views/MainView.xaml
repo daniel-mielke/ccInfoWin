@@ -63,6 +63,15 @@
                     <Button l:Uids.Uid="ReLoginButton" Command="{x:Bind ViewModel.ReLoginCommand}" />
                 </InfoBar.ActionButton>
             </InfoBar>
+
+            <!-- API error InfoBar -->
+            <InfoBar
+                Severity="Error"
+                Title="API Error"
+                Message="{x:Bind ViewModel.ApiErrorMessage, Mode=OneWay}"
+                IsOpen="{x:Bind ViewModel.HasApiError, Mode=OneWay}"
+                IsClosable="True"
+                Margin="0,0,0,12" />
         </StackPanel>
 
         <!-- Row 1: Dashboard content -->

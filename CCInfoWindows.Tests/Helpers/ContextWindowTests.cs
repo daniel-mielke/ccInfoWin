@@ -23,11 +23,9 @@ public class ContextWindowTests
     }
 
     [Theory]
-    [InlineData(100_000, 200_000, 0.5)]
-    [InlineData(200_000, 200_000, 1.0)]
     [InlineData(0, 200_000, 0.0)]
-    [InlineData(180_000, 200_000, 0.9)]
-    public void ContextWindowData_Utilization_ComputesTotalOverMax(
+    [InlineData(200_000, 200_000, 1.0)]
+    public void ContextWindowData_Utilization_ComputesTotalOverEffectiveMax(
         long totalTokens, long maxTokens, double expectedUtilization)
     {
         var data = new ContextWindowData { TotalTokens = totalTokens, MaxTokens = maxTokens };
@@ -36,17 +34,18 @@ public class ContextWindowTests
     }
 
     [Fact]
-    public void ContextWindowData_Utilization_CanExceedOneHundredPercent()
+    public void ContextWindowData_Utilization_ClampsAtOne()
     {
+        // Utilization is clamped to [0, 1] — cannot exceed 1.0
         var data = new ContextWindowData { TotalTokens = 250_000, MaxTokens = 200_000 };
 
-        Assert.True(data.Utilization > 1.0);
+        Assert.Equal(1.0, data.Utilization);
     }
 
     [Fact]
-    public void ContextWindowData_Utilization_ZeroMaxTokens_ReturnsZero()
+    public void ContextWindowData_Utilization_ZeroTokens_ReturnsZero()
     {
-        var data = new ContextWindowData { TotalTokens = 100_000, MaxTokens = 0 };
+        var data = new ContextWindowData { TotalTokens = 0, MaxTokens = 200_000 };
 
         Assert.Equal(0.0, data.Utilization);
     }

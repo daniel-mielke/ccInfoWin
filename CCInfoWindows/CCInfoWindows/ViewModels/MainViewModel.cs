@@ -147,6 +147,9 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     private bool _hasApiError;
 
     [ObservableProperty]
+    private string _apiErrorMessage = string.Empty;
+
+    [ObservableProperty]
     private bool _isUpdatingFromCache;
 
     // --- Chart state ---
@@ -372,6 +375,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         if (IsRefreshing) return;
         IsRefreshing = true;
         HasApiError = false;
+        ApiErrorMessage = string.Empty;
 
         try
         {
@@ -383,11 +387,13 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             else
             {
                 HasApiError = true;
+                ApiErrorMessage = "API returned no data. Check your session token.";
             }
         }
-        catch
+        catch (Exception ex)
         {
             HasApiError = true;
+            ApiErrorMessage = ex.Message;
         }
         finally
         {
@@ -565,15 +571,15 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         // Guard: suppress OnSelectedSessionChanged while rebuilding
         _isRefreshingSessionList = true;
 
-        // Rebuild flat display list: active first, then inactive, both by last activity desc
+        // Only show sessions with recent activity; sort by last activity descending
         var displayItems = latestSessions
-            .OrderByDescending(s => s.IsActive(threshold))
-            .ThenByDescending(s => s.LastActivity)
+            .Where(s => s.IsActive(threshold))
+            .OrderByDescending(s => s.LastActivity)
             .Select(s => new SessionDisplayItem
             {
                 Session = s,
                 DisplayName = s.DisplayName,
-                IsActive = s.IsActive(threshold)
+                IsActive = true
             })
             .ToList();
 
