@@ -35,7 +35,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
         public string? Cwd { get; set; }
         public string? ModelName { get; set; }
         public DateTimeOffset LastActivity { get; set; }
-        public JsonlEntry? LastAssistantEntry { get; set; }
+
         public long TotalInputTokens { get; set; }
         public long TotalOutputTokens { get; set; }
         public long TotalCacheCreationTokens { get; set; }
@@ -134,7 +134,10 @@ public sealed class JsonlService : IJsonlService, IDisposable
             if (!_projectData.TryGetValue(projectDirName, out var data))
                 return ContextWindowData.Empty;
 
-            var entry = data.LastAssistantEntry;
+            if (string.IsNullOrEmpty(data.NewestSessionFile))
+                return ContextWindowData.Empty;
+
+            var entry = ReadLastAssistantEntryFromFile(data.NewestSessionFile);
             if (entry is null)
                 return ContextWindowData.Empty;
 
@@ -568,9 +571,6 @@ public sealed class JsonlService : IJsonlService, IDisposable
         if (!string.IsNullOrEmpty(deduplicationKey) && !data.SeenIds.Add(deduplicationKey))
             return; // Already counted this entry
 
-        // Track last assistant entry for context window (replaces previous)
-        data.LastAssistantEntry = entry;
-
         var usage = entry.Message?.Usage;
         if (usage is null)
             return;
@@ -687,6 +687,14 @@ public sealed class JsonlService : IJsonlService, IDisposable
         return fileName.StartsWith("agent-", StringComparison.OrdinalIgnoreCase)
             ? fileName["agent-".Length..]
             : fileName;
+    }
+
+    private static JsonlEntry? ReadLastAssistantEntryFromFile(string filePath)
+    {
+        var lines = ReadTailLines(filePath);
+        return ParseJsonlEntries(lines)
+            .Where(IsRelevantAssistantEntry)
+            .LastOrDefault();
     }
 
     private static long ComputeContextTokens(JsonlEntry entry)

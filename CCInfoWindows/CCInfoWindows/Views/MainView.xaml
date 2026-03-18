@@ -398,6 +398,24 @@
                         HorizontalAlignment="Stretch"
                         SelectedIndex="{x:Bind ViewModel.SelectedTabIndex, Mode=TwoWay}"
                         SelectionMode="Single">
+                        <controls:Segmented.Resources>
+                            <ResourceDictionary>
+                                <ResourceDictionary.ThemeDictionaries>
+                                    <ResourceDictionary x:Key="Default">
+                                        <SolidColorBrush x:Key="SegmentedBackground" Color="#38383A" />
+                                        <SolidColorBrush x:Key="SegmentedItemBackgroundSelected" Color="#3D5A9E" />
+                                        <SolidColorBrush x:Key="SegmentedItemForegroundSelected" Color="#FFFFFF" />
+                                        <SolidColorBrush x:Key="SegmentedPillBackground" Color="Transparent" />
+                                    </ResourceDictionary>
+                                    <ResourceDictionary x:Key="Light">
+                                        <SolidColorBrush x:Key="SegmentedBackground" Color="#DCDCE0" />
+                                        <SolidColorBrush x:Key="SegmentedItemBackgroundSelected" Color="#B8D0F5" />
+                                        <SolidColorBrush x:Key="SegmentedItemForegroundSelected" Color="#1C1C1E" />
+                                        <SolidColorBrush x:Key="SegmentedPillBackground" Color="Transparent" />
+                                    </ResourceDictionary>
+                                </ResourceDictionary.ThemeDictionaries>
+                            </ResourceDictionary>
+                        </controls:Segmented.Resources>
                         <controls:SegmentedItem l:Uids.Uid="TabSession" />
                         <controls:SegmentedItem l:Uids.Uid="TabToday" />
                         <controls:SegmentedItem l:Uids.Uid="TabWeek" />

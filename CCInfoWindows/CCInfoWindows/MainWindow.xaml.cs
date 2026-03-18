@@ -59,14 +59,14 @@ public sealed partial class MainWindow : Window, IRecipient<ThemeChangedMessage>
 
     private void ConfigureWindow()
     {
-        // Set initial size (360x900)
+        // Set initial size (340x900)
         var defaultSize = WindowHelper.GetDefaultWindowSize();
         AppWindow.Resize(defaultSize);
 
         // Set minimum size via OverlappedPresenter
         var presenter = OverlappedPresenter.Create();
-        presenter.PreferredMinimumWidth = 300;
-        presenter.PreferredMinimumHeight = 500;
+        presenter.PreferredMinimumWidth = 340;
+        presenter.PreferredMinimumHeight = 900;
         AppWindow.SetPresenter(presenter);
     }
 
