@@ -172,12 +172,9 @@ Recent decisions affecting current work:
 ### Pending Todos
 
 1. **Add filled area gradient to 5h chart** (ui) — `.planning/todos/pending/2026-03-11-add-filled-area-gradient-to-5h-chart.md`
-2. **Match font from original macOS ccInfo app** (ui) — `.planning/todos/pending/2026-03-11-match-font-from-original-macos-ccinfo-app.md`
-3. **Change dark mode background color to #1C1C1E** (ui) — `.planning/todos/pending/2026-03-11-change-dark-mode-background-color-to-1c1c1e.md`
-4. **Display API errors as red banner with technical details** (ui) — `.planning/todos/pending/2026-03-16-display-api-errors-as-red-banner-with-technical-details.md`
-5. **Filter inactive sessions from project dropdown** (ui) — `.planning/todos/pending/2026-03-16-filter-inactive-sessions-from-project-dropdown.md`
-6. **Force session dropdown to always open downward** (ui) — `.planning/todos/pending/2026-03-16-force-session-dropdown-to-always-open-downward.md`
-7. **Make vertical scrollbar always visible when content overflows** (ui) — `.planning/todos/pending/2026-03-16-make-vertical-scrollbar-always-visible-when-content-overflows.md`
+2. **Display API errors as red banner with technical details** (ui) — `.planning/todos/pending/2026-03-16-display-api-errors-as-red-banner-with-technical-details.md`
+3. **Filter inactive sessions from project dropdown** (ui) — `.planning/todos/pending/2026-03-16-filter-inactive-sessions-from-project-dropdown.md`
+4. **Fix 13 failing JsonlServiceTests parameter mismatch** (testing) — `.planning/todos/pending/2026-03-17-fix-13-failing-jsonlservicetests-parameter-mismatch.md`
 
 ### Blockers/Concerns
 

@@ -6,7 +6,7 @@
 
         <!-- Dark theme (default) -->
         <ResourceDictionary x:Key="Dark">
-            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#1E1E1E" />
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#1C1C1E" />
             <SolidColorBrush x:Key="SectionHeaderBrush" Color="#8E8E93" />
             <SolidColorBrush x:Key="DividerBrush" Color="#3A3A3A" />
             <SolidColorBrush x:Key="ProgressTrackBrush" Color="#38383A" />
