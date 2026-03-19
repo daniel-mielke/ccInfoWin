@@ -359,24 +359,50 @@
                     <ItemsRepeater ItemsSource="{x:Bind ViewModel.SubagentContexts, Mode=OneWay}">
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="viewmodels:SubagentDisplayData">
-                                <StackPanel Spacing="4" Margin="12,4,0,0">
-                                    <ProgressBar Value="{x:Bind Percentage}" Maximum="100"
+                                <!-- Layout: [↳] [Badge] [ProgressBar] [xx%] -->
+                                <Grid Margin="0,4,0,0" ColumnSpacing="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Arrow icon -->
+                                    <TextBlock Grid.Column="0"
+                                               Text="&#x21B3;"
+                                               FontSize="15"
+                                               Foreground="{ThemeResource TertiaryTextBrush}"
+                                               VerticalAlignment="Center" />
+
+                                    <!-- Model badge -->
+                                    <Border Grid.Column="1"
+                                            Background="{x:Bind BadgeColor}"
+                                            CornerRadius="6" Padding="8,0" Height="20"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind ModelBadge}"
+                                                   FontSize="10" FontWeight="SemiBold"
+                                                   Foreground="White"
+                                                   VerticalAlignment="Center" />
+                                    </Border>
+
+                                    <!-- Progress bar -->
+                                    <ProgressBar Grid.Column="2"
+                                                 Value="{x:Bind Percentage}" Maximum="100"
                                                  Background="{ThemeResource ProgressTrackBrush}"
-                                                 Height="4" CornerRadius="2" />
-                                    <Grid>
-                                        <TextBlock Text="{x:Bind PercentageText}"
-                                                   FontSize="12"
-                                                   Foreground="{ThemeResource SecondaryTextBrush}" />
-                                        <Border HorizontalAlignment="Right"
-                                                Background="{x:Bind BadgeColor}"
-                                                CornerRadius="6" Padding="8,0" Height="20">
-                                            <TextBlock Text="{x:Bind ModelBadge}"
-                                                       FontSize="10" FontWeight="SemiBold"
-                                                       Foreground="White"
-                                                       VerticalAlignment="Center" />
-                                        </Border>
-                                    </Grid>
-                                </StackPanel>
+                                                 Height="4" CornerRadius="2"
+                                                 Margin="6,0"
+                                                 VerticalAlignment="Center" />
+
+                                    <!-- Percentage text -->
+                                    <TextBlock Grid.Column="3"
+                                               Text="{x:Bind PercentageText}"
+                                               FontSize="12"
+                                               Margin="6,0,0,0"
+                                               Foreground="{ThemeResource SecondaryTextBrush}"
+                                               VerticalAlignment="Center" />
+                                </Grid>
                             </DataTemplate>
                         </ItemsRepeater.ItemTemplate>
                     </ItemsRepeater>

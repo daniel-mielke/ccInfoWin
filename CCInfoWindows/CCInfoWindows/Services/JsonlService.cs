@@ -651,8 +651,10 @@ public sealed class JsonlService : IJsonlService, IDisposable
             try
             {
                 var lines = ReadTailLines(file);
+                // Subagent files have isSidechain=true on all entries by design —
+                // do not apply the sidechain filter here.
                 var entries = ParseJsonlEntries(lines)
-                    .Where(e => IsRelevantAssistantEntry(e))
+                    .Where(e => string.Equals(e.Type, "assistant", StringComparison.OrdinalIgnoreCase))
                     .ToList();
 
                 if (entries.Count == 0)
@@ -776,8 +778,24 @@ public sealed class JsonlService : IJsonlService, IDisposable
         {
             lock (_sessionsLock)
             {
-                var projectDir = Path.GetDirectoryName(filePath);
-                var projectDirName = projectDir != null ? Path.GetFileName(projectDir) : null;
+                var isSubagent = IsSubagentFile(filePath);
+
+                // Subagent files live at: {projectDir}/{sessionUUID}/subagents/agent-*.jsonl
+                // Non-subagent session files live at: {projectDir}/{sessionUUID}.jsonl
+                // We need to walk up to the actual project directory in both cases.
+                string? projectDirName;
+                if (isSubagent)
+                {
+                    // Walk up: subagents/ -> sessionDir -> projectDir
+                    var subagentsDir = Path.GetDirectoryName(filePath);
+                    var sessionDir = subagentsDir != null ? Path.GetDirectoryName(subagentsDir) : null;
+                    projectDirName = sessionDir != null ? Path.GetFileName(sessionDir) : null;
+                }
+                else
+                {
+                    var projectDir = Path.GetDirectoryName(filePath);
+                    projectDirName = projectDir != null ? Path.GetFileName(projectDir) : null;
+                }
 
                 if (string.IsNullOrEmpty(projectDirName))
                     return;
@@ -788,13 +806,18 @@ public sealed class JsonlService : IJsonlService, IDisposable
                     _projectData[projectDirName] = data;
                 }
 
-                ParseFileIntoProject(filePath, data);
+                if (!isSubagent)
+                    ParseFileIntoProject(filePath, data);
 
-                var modTime = File.GetLastWriteTimeUtc(filePath);
-                if (modTime > data.NewestSessionModTime)
+                // Only non-subagent session files count as the "newest session"
+                if (!isSubagent)
                 {
-                    data.NewestSessionModTime = new DateTimeOffset(modTime, TimeSpan.Zero);
-                    data.NewestSessionFile = filePath;
+                    var modTime = File.GetLastWriteTimeUtc(filePath);
+                    if (modTime > data.NewestSessionModTime)
+                    {
+                        data.NewestSessionModTime = new DateTimeOffset(modTime, TimeSpan.Zero);
+                        data.NewestSessionFile = filePath;
+                    }
                 }
 
                 RebuildSessionsList();
