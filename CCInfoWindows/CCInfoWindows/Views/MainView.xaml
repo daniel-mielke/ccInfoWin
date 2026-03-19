@@ -79,7 +79,7 @@
 
         <!-- Row 1: Dashboard content -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="16" Padding="16,4,16,4">
+            <StackPanel Spacing="16" Padding="16,16,16,4">
 
                 <!-- ==================== AKTIVE SITZUNG ==================== -->
                 <TextBlock l:Uids.Uid="SectionHeaderActiveSession"
