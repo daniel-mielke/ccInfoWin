@@ -10,7 +10,8 @@
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
     xmlns:local="using:CCInfoWindows.Views"
     xmlns:l="using:WinUI3Localizer"
-    mc:Ignorable="d">
+    mc:Ignorable="d"
+    Padding="0">
 
     <Page.Resources>
         <!-- Spinner rotation storyboard -->
@@ -35,7 +36,7 @@
             Width="0" Height="0" />
 
         <!-- Row 0: InfoBars (update + session expired) -->
-        <StackPanel Grid.Row="0" Padding="16,12,16,0">
+        <StackPanel Grid.Row="0">
             <!-- Update available InfoBar -->
             <InfoBar
                 l:Uids.Uid="UpdateInfoBar"
