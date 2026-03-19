@@ -126,10 +126,10 @@ Requirements for the v1.1 UI Polish & UX Improvements milestone. Based on `spec/
 
 ### Layout & Structure
 
-- [ ] **LAYOUT-01**: User sees vertical padding of the main app matching the horizontal padding (equal spacing on all sides)
-- [ ] **LAYOUT-02**: User sees a localized "Active Session" / "Aktive Sitzung" label above the project dropdown, styled like other section headers
-- [ ] **LAYOUT-03**: User sees a horizontal separator below the project dropdown visually separating it from the next section
-- [ ] **LAYOUT-04**: User sees the "Context Window" section (including sub-agent row) positioned between "Active Session" and "5-Hour Window", with separators above and below
+- [x] **LAYOUT-01**: User sees vertical padding of the main app matching the horizontal padding (equal spacing on all sides)
+- [x] **LAYOUT-02**: User sees a localized "Active Session" / "Aktive Sitzung" label above the project dropdown, styled like other section headers
+- [x] **LAYOUT-03**: User sees a horizontal separator below the project dropdown visually separating it from the next section
+- [x] **LAYOUT-04**: User sees the "Context Window" section (including sub-agent row) positioned between "Active Session" and "5-Hour Window", with separators above and below
 - [ ] **LAYOUT-05**: User can scroll to reach the footer (footer is no longer fixed/sticky), with a horizontal separator above it
 - [ ] **LAYOUT-06**: User sees a horizontal separator between the "Models" row and the "Input" row in the Statistics section
 
@@ -269,30 +269,30 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 **Coverage (v1.1):**
 - v1.1 requirements: 18 total
-- Mapped to phases: 0
-- Unmapped: 18 ⚠️ (roadmap pending)
+- Mapped to phases: 18
+- Unmapped: 0 ✓
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LAYOUT-01 | — | Pending |
-| LAYOUT-02 | — | Pending |
-| LAYOUT-03 | — | Pending |
-| LAYOUT-04 | — | Pending |
-| LAYOUT-05 | — | Pending |
-| LAYOUT-06 | — | Pending |
-| STYLE-01 | — | Pending |
-| STYLE-02 | — | Pending |
-| STYLE-03 | — | Pending |
-| STYLE-04 | — | Pending |
-| STYLE-05 | — | Pending |
-| TEXT-01 | — | Pending |
-| TEXT-02 | — | Pending |
-| TEXT-03 | — | Pending |
-| TEXT-04 | — | Pending |
-| INTER-01 | — | Pending |
-| INTER-02 | — | Pending |
-| INTER-03 | — | Pending |
+| LAYOUT-01 | Phase 9 | Complete |
+| LAYOUT-02 | Phase 9 | Complete |
+| LAYOUT-03 | Phase 9 | Complete |
+| LAYOUT-04 | Phase 9 | Complete |
+| LAYOUT-05 | Phase 9 | Pending |
+| LAYOUT-06 | Phase 9 | Pending |
+| STYLE-01 | Phase 10 | Pending |
+| STYLE-02 | Phase 10 | Pending |
+| STYLE-03 | Phase 10 | Pending |
+| STYLE-04 | Phase 10 | Pending |
+| STYLE-05 | Phase 10 | Pending |
+| TEXT-01 | Phase 11 | Pending |
+| TEXT-02 | Phase 10 | Pending |
+| TEXT-03 | Phase 10 | Pending |
+| TEXT-04 | Phase 10 | Pending |
+| INTER-01 | Phase 11 | Pending |
+| INTER-02 | Phase 11 | Pending |
+| INTER-03 | Phase 11 | Pending |
 
 ---
 *Requirements defined: 2026-03-09*
-*Last updated: 2026-03-19 after v1.1 milestone start*
+*Last updated: 2026-03-19 after v1.1 roadmap created (Phases 9-11)*
