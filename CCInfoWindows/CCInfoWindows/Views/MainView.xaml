@@ -42,6 +42,7 @@
                 l:Uids.Uid="UpdateInfoBar"
                 Severity="Informational"
                 IsOpen="{x:Bind ViewModel.IsUpdateAvailable, Mode=OneWay}"
+                Visibility="{x:Bind ViewModel.IsUpdateAvailable, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                 Message="{x:Bind ViewModel.UpdateMessage, Mode=OneWay}"
                 IsClosable="True"
                 Closing="OnUpdateInfoBarClosing"
@@ -57,6 +58,7 @@
                 l:Uids.Uid="SessionExpiredInfoBar"
                 Severity="Warning"
                 IsOpen="{x:Bind ViewModel.IsSessionExpired, Mode=OneWay}"
+                Visibility="{x:Bind ViewModel.IsSessionExpired, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                 IsClosable="False"
                 Margin="0,0,0,12">
                 <InfoBar.ActionButton>
@@ -70,6 +72,7 @@
                 Title="API Error"
                 Message="{x:Bind ViewModel.ApiErrorMessage, Mode=OneWay}"
                 IsOpen="{x:Bind ViewModel.HasApiError, Mode=OneWay}"
+                Visibility="{x:Bind ViewModel.HasApiError, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                 IsClosable="True"
                 Margin="0,0,0,12" />
         </StackPanel>
