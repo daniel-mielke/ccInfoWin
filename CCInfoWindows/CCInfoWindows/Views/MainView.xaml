@@ -26,8 +26,7 @@
     </Page.Resources>
 
     <Grid Background="{ThemeResource AppBackgroundBrush}"
-          RowDefinitions="Auto,*"
-          Padding="16,16,16,16">
+          RowDefinitions="Auto,*">
 
         <!-- Hidden WebView2 for API calls via Chromium fetch() — bypasses Cloudflare -->
         <WebView2
@@ -36,7 +35,7 @@
             Width="0" Height="0" />
 
         <!-- Row 0: InfoBars (update + session expired) -->
-        <StackPanel Grid.Row="0">
+        <StackPanel Grid.Row="0" Padding="16,12,16,0">
             <!-- Update available InfoBar -->
             <InfoBar
                 l:Uids.Uid="UpdateInfoBar"
@@ -76,7 +75,7 @@
 
         <!-- Row 1: Dashboard content -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="16" Padding="0,4,0,4">
+            <StackPanel Spacing="16" Padding="16,4,16,4">
 
                 <!-- ==================== AKTIVE SITZUNG ==================== -->
                 <TextBlock l:Uids.Uid="SectionHeaderActiveSession"
