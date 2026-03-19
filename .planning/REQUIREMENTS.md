@@ -130,8 +130,8 @@ Requirements for the v1.1 UI Polish & UX Improvements milestone. Based on `spec/
 - [x] **LAYOUT-02**: User sees a localized "Active Session" / "Aktive Sitzung" label above the project dropdown, styled like other section headers
 - [x] **LAYOUT-03**: User sees a horizontal separator below the project dropdown visually separating it from the next section
 - [x] **LAYOUT-04**: User sees the "Context Window" section (including sub-agent row) positioned between "Active Session" and "5-Hour Window", with separators above and below
-- [ ] **LAYOUT-05**: User can scroll to reach the footer (footer is no longer fixed/sticky), with a horizontal separator above it
-- [ ] **LAYOUT-06**: User sees a horizontal separator between the "Models" row and the "Input" row in the Statistics section
+- [x] **LAYOUT-05**: User can scroll to reach the footer (footer is no longer fixed/sticky), with a horizontal separator above it
+- [x] **LAYOUT-06**: User sees a horizontal separator between the "Models" row and the "Input" row in the Statistics section
 
 ### Visual Styles
 
@@ -278,8 +278,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LAYOUT-02 | Phase 9 | Complete |
 | LAYOUT-03 | Phase 9 | Complete |
 | LAYOUT-04 | Phase 9 | Complete |
-| LAYOUT-05 | Phase 9 | Pending |
-| LAYOUT-06 | Phase 9 | Pending |
+| LAYOUT-05 | Phase 9 | Complete |
+| LAYOUT-06 | Phase 9 | Complete |
 | STYLE-01 | Phase 10 | Pending |
 | STYLE-02 | Phase 10 | Pending |
 | STYLE-03 | Phase 10 | Pending |

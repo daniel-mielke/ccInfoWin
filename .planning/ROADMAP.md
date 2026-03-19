@@ -27,7 +27,7 @@ Audit: `.planning/milestones/v1.0-MILESTONE-AUDIT.md`
 
 ### v1.1 UI Polish & UX Improvements
 
-- [ ] **Phase 9: Layout & Structure** — Restructure MainView.xaml section order, padding, and separators
+- [x] **Phase 9: Layout & Structure** — Restructure MainView.xaml section order, padding, and separators (completed 2026-03-19)
 - [ ] **Phase 10: Visual Styles** — Unify progress bars, badges, dropdown, tabs, and chart axis colors via AppTheme.xaml
 - [ ] **Phase 11: Behavior & Interaction** — Timer format logic, button icons, and refresh animation
 
@@ -90,6 +90,6 @@ Plans:
 | 6. Export, Polish, and Distribution | v1.0 | 4/4 | Complete | 2026-03-17 |
 | 7. Security Fix & Dead Code Cleanup | v1.0 | 1/1 | Complete | 2026-03-17 |
 | 8. Documentation Hygiene & Verification | v1.0 | 1/1 | Complete | 2026-03-17 |
-| 9. Layout & Structure | 1/2 | In Progress|  | — |
+| 9. Layout & Structure | 2/2 | Complete   | 2026-03-19 | — |
 | 10. Visual Styles | v1.1 | 0/? | Not started | — |
 | 11. Behavior & Interaction | v1.1 | 0/? | Not started | — |

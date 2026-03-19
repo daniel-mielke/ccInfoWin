@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: UI Polish & UX Improvements
 status: unknown
-last_updated: "2026-03-19T13:00:00.000Z"
+last_updated: "2026-03-19T13:24:20.903Z"
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -32,6 +32,7 @@ Plan: 2 of 2
 | Requirements | 68 | 18 |
 | Phases | 8 | 3 |
 | Plans | 21 | TBD |
+| Phase 09-layout-structure P09-02 | 45 | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -47,6 +48,8 @@ Key decisions from v1.0 still relevant:
 - CommunityToolkit.Mvvm source generators — MVVM patterns must be followed
 - l:Uids.Uid for runtime localization — new localizable strings must use this pattern
 - AppTheme.xaml for global theming — style changes go through ResourceDictionary
+- [Phase 09-02]: Footer moved into ScrollViewer — eliminates fixed bottom bar, matches macOS ccInfo scroll behavior
+- [Phase 09-02]: Padding reorganized: root Grid padding removed, ScrollViewer content gets Padding=16 all sides; InfoBar Visibility bound to IsOpen to suppress phantom height
 
 ### v1.1 Phase Grouping Rationale
 
