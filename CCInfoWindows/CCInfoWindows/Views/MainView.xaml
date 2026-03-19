@@ -26,7 +26,7 @@
     </Page.Resources>
 
     <Grid Background="{ThemeResource AppBackgroundBrush}"
-          RowDefinitions="Auto,*,Auto"
+          RowDefinitions="Auto,*"
           Padding="16,16,16,16">
 
         <!-- Hidden WebView2 for API calls via Chromium fetch() — bypasses Cloudflare -->
@@ -566,55 +566,59 @@
                     </Grid>
                 </StackPanel>
 
+                <!-- Divider above footer -->
+                <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="0,4,0,0" />
+
+                <!-- Footer toolbar -->
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Center" Spacing="16"
+                            Padding="0,8,0,4">
+
+                    <!-- Refresh button with spinning icon -->
+                    <Grid>
+                        <Button l:Uids.Uid="FooterRefreshButton"
+                                Command="{x:Bind ViewModel.RefreshCommand}"
+                                Background="Transparent" BorderThickness="0"
+                                Padding="8" CornerRadius="6">
+                            <FontIcon x:Name="RefreshIcon" Glyph="&#xE895;" FontSize="16"
+                                      Foreground="{ThemeResource SecondaryTextBrush}"
+                                      RenderTransformOrigin="0.5,0.5">
+                                <FontIcon.RenderTransform>
+                                    <RotateTransform x:Name="RefreshIconTransform" Angle="0" />
+                                </FontIcon.RenderTransform>
+                            </FontIcon>
+                        </Button>
+
+                        <!-- API error warning badge -->
+                        <Ellipse Width="8" Height="8"
+                                 Fill="{ThemeResource ProgressOrangeBrush}"
+                                 HorizontalAlignment="Right"
+                                 VerticalAlignment="Top"
+                                 Margin="0,2,2,0"
+                                 Visibility="{x:Bind ViewModel.HasApiError, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                    </Grid>
+
+                    <!-- Settings button -->
+                    <Button l:Uids.Uid="FooterSettingsButton"
+                            Command="{x:Bind ViewModel.OpenSettingsCommand}"
+                            Background="Transparent" BorderThickness="0"
+                            Padding="8" CornerRadius="6">
+                        <FontIcon Glyph="&#xE713;" FontSize="16"
+                                  Foreground="{ThemeResource SecondaryTextBrush}" />
+                    </Button>
+
+                    <!-- Quit button -->
+                    <Button l:Uids.Uid="FooterQuitButton"
+                            Command="{x:Bind ViewModel.ExitAppCommand}"
+                            Background="Transparent" BorderThickness="0"
+                            Padding="8" CornerRadius="6">
+                        <FontIcon Glyph="&#xE7E8;" FontSize="16"
+                                  Foreground="{ThemeResource SecondaryTextBrush}" />
+                    </Button>
+                </StackPanel>
+
             </StackPanel>
         </ScrollViewer>
 
-        <!-- Row 2: Footer toolbar -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal"
-                    HorizontalAlignment="Center" Spacing="16"
-                    Padding="0,8,0,4">
-
-            <!-- Refresh button with spinning icon -->
-            <Grid>
-                <Button l:Uids.Uid="FooterRefreshButton"
-                        Command="{x:Bind ViewModel.RefreshCommand}"
-                        Background="Transparent" BorderThickness="0"
-                        Padding="8" CornerRadius="6">
-                    <FontIcon x:Name="RefreshIcon" Glyph="&#xE895;" FontSize="16"
-                              Foreground="{ThemeResource SecondaryTextBrush}"
-                              RenderTransformOrigin="0.5,0.5">
-                        <FontIcon.RenderTransform>
-                            <RotateTransform x:Name="RefreshIconTransform" Angle="0" />
-                        </FontIcon.RenderTransform>
-                    </FontIcon>
-                </Button>
-
-                <!-- API error warning badge -->
-                <Ellipse Width="8" Height="8"
-                         Fill="{ThemeResource ProgressOrangeBrush}"
-                         HorizontalAlignment="Right"
-                         VerticalAlignment="Top"
-                         Margin="0,2,2,0"
-                         Visibility="{x:Bind ViewModel.HasApiError, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-            </Grid>
-
-            <!-- Settings button -->
-            <Button l:Uids.Uid="FooterSettingsButton"
-                    Command="{x:Bind ViewModel.OpenSettingsCommand}"
-                    Background="Transparent" BorderThickness="0"
-                    Padding="8" CornerRadius="6">
-                <FontIcon Glyph="&#xE713;" FontSize="16"
-                          Foreground="{ThemeResource SecondaryTextBrush}" />
-            </Button>
-
-            <!-- Quit button -->
-            <Button l:Uids.Uid="FooterQuitButton"
-                    Command="{x:Bind ViewModel.ExitAppCommand}"
-                    Background="Transparent" BorderThickness="0"
-                    Padding="8" CornerRadius="6">
-                <FontIcon Glyph="&#xE7E8;" FontSize="16"
-                          Foreground="{ThemeResource SecondaryTextBrush}" />
-            </Button>
-        </StackPanel>
     </Grid>
 </Page>
