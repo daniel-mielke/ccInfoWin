@@ -135,18 +135,18 @@ Requirements for the v1.1 UI Polish & UX Improvements milestone. Based on `spec/
 
 ### Visual Styles
 
-- [ ] **STYLE-01**: User sees all progress bars at a uniform height of 6 px (both foreground and background/track)
-- [ ] **STYLE-02**: User sees all progress bar backgrounds (track) in color rgba(128, 128, 128, 0.45), applied globally via style
-- [ ] **STYLE-03**: User sees the project dropdown and Statistics tab bar sharing the same background color and a CornerRadius of at least 8 px, in both light and dark mode
-- [ ] **STYLE-04**: User sees all model badges (e.g., "Sonnet 4.6", "Haiku 4.5") displayed as pill shapes with CornerRadius=999
-- [ ] **STYLE-05**: User sees the 5-hour chart axis labels (percentage and time values) in the same color as the timer text (clock icon label)
+- [x] **STYLE-01**: User sees all progress bars at a uniform height of 6 px (both foreground and background/track)
+- [x] **STYLE-02**: User sees all progress bar backgrounds (track) in color rgba(128, 128, 128, 0.45), applied globally via style
+- [x] **STYLE-03**: User sees the project dropdown and Statistics tab bar sharing the same background color and a CornerRadius of at least 8 px, in both light and dark mode
+- [x] **STYLE-04**: User sees all model badges (e.g., "Sonnet 4.6", "Haiku 4.5") displayed as pill shapes with CornerRadius=999
+- [x] **STYLE-05**: User sees the 5-hour chart axis labels (percentage and time values) in the same color as the timer text (clock icon label)
 
 ### Text & Formatting
 
 - [ ] **TEXT-01**: User sees timer values ≥ 24h displayed as "Xd Yh" format (e.g., "3d 22h") instead of hours/minutes, with localized unit abbreviations
-- [ ] **TEXT-02**: User sees the "Total" and "Cost (API equiv.)" labels in the Statistics section with the same text color as other statistic labels (e.g., "Cache Read", "Cache Write")
-- [ ] **TEXT-03**: User sees the "Cost (API equiv.)" label and its value with the same FontWeight as "Cache Read" (thinner weight)
-- [ ] **TEXT-04**: User sees consistent vertical spacing before "Total" row — matching the spacing between other statistic rows
+- [x] **TEXT-02**: User sees the "Total" and "Cost (API equiv.)" labels in the Statistics section with the same text color as other statistic labels (e.g., "Cache Read", "Cache Write")
+- [x] **TEXT-03**: User sees the "Cost (API equiv.)" label and its value with the same FontWeight as "Cache Read" (thinner weight)
+- [x] **TEXT-04**: User sees consistent vertical spacing before "Total" row — matching the spacing between other statistic rows
 
 ### Interaction
 
@@ -280,15 +280,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LAYOUT-04 | Phase 9 | Complete |
 | LAYOUT-05 | Phase 9 | Complete |
 | LAYOUT-06 | Phase 9 | Complete |
-| STYLE-01 | Phase 10 | Pending |
-| STYLE-02 | Phase 10 | Pending |
-| STYLE-03 | Phase 10 | Pending |
-| STYLE-04 | Phase 10 | Pending |
-| STYLE-05 | Phase 10 | Pending |
+| STYLE-01 | Phase 10 | Complete |
+| STYLE-02 | Phase 10 | Complete |
+| STYLE-03 | Phase 10 | Complete |
+| STYLE-04 | Phase 10 | Complete |
+| STYLE-05 | Phase 10 | Complete |
 | TEXT-01 | Phase 11 | Pending |
-| TEXT-02 | Phase 10 | Pending |
-| TEXT-03 | Phase 10 | Pending |
-| TEXT-04 | Phase 10 | Pending |
+| TEXT-02 | Phase 10 | Complete |
+| TEXT-03 | Phase 10 | Complete |
+| TEXT-04 | Phase 10 | Complete |
 | INTER-01 | Phase 11 | Pending |
 | INTER-02 | Phase 11 | Pending |
 | INTER-03 | Phase 11 | Pending |
