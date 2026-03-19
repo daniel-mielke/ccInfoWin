@@ -46,8 +46,8 @@ Audit: `.planning/milestones/v1.0-MILESTONE-AUDIT.md`
   6. A horizontal separator appears between the "Models" row and the "Input" row in the Statistics section
 **Plans**: 2 plans
 Plans:
-- [ ] 09-01-PLAN.md — Active Session header, padding, separators, Context Window reorder
-- [ ] 09-02-PLAN.md — Footer relocation into scroll area, Statistics grid separator
+- [x] 09-01-PLAN.md — Active Session header, padding, separators, Context Window reorder
+- [x] 09-02-PLAN.md — Footer relocation into scroll area, Statistics grid separator
 
 ### Phase 10: Visual Styles
 **Goal**: Users see a visually unified interface where progress bars, model badges, controls, and chart labels follow a consistent style system
@@ -61,8 +61,8 @@ Plans:
   5. The "Total" and "Cost (API equiv.)" labels in Statistics appear in the same text color and font weight as "Cache Read" / "Cache Write", with consistent vertical spacing before "Total"
 **Plans**: 2 plans
 Plans:
-- [ ] 09-01-PLAN.md — Active Session header, padding, separators, Context Window reorder
-- [ ] 09-02-PLAN.md — Footer relocation into scroll area, Statistics grid separator
+- [ ] 10-01-PLAN.md — XAML styling: progress bars, ComboBox, badges, statistics labels
+- [ ] 10-02-PLAN.md — Chart axis label colors to match SecondaryTextBrush
 
 ### Phase 11: Behavior & Interaction
 **Goal**: Users see correct timer formatting for long durations, icon-decorated buttons, and a smooth refresh animation that completes its cycle before stopping
@@ -75,8 +75,8 @@ Plans:
   4. The refresh icon rotates continuously (360°) while the API call is in flight, always completing the current full rotation before stopping — never snapping mid-turn
 **Plans**: 2 plans
 Plans:
-- [ ] 09-01-PLAN.md — Active Session header, padding, separators, Context Window reorder
-- [ ] 09-02-PLAN.md — Footer relocation into scroll area, Statistics grid separator
+- [ ] 11-01-PLAN.md — TBD
+- [ ] 11-02-PLAN.md — TBD
 
 ## Progress
 
@@ -90,6 +90,6 @@ Plans:
 | 6. Export, Polish, and Distribution | v1.0 | 4/4 | Complete | 2026-03-17 |
 | 7. Security Fix & Dead Code Cleanup | v1.0 | 1/1 | Complete | 2026-03-17 |
 | 8. Documentation Hygiene & Verification | v1.0 | 1/1 | Complete | 2026-03-17 |
-| 9. Layout & Structure | 2/2 | Complete   | 2026-03-19 | — |
-| 10. Visual Styles | v1.1 | 0/? | Not started | — |
+| 9. Layout & Structure | v1.1 | 2/2 | Complete | 2026-03-19 |
+| 10. Visual Styles | v1.1 | 0/2 | Not started | — |
 | 11. Behavior & Interaction | v1.1 | 0/? | Not started | — |

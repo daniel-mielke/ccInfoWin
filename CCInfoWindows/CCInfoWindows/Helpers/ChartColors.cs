@@ -17,7 +17,7 @@ public static class ChartColors
         { ("ProgressOrangeBrush", true), Color.FromArgb(255, 0xFF, 0x9F, 0x0A) },
         { ("ProgressRedBrush", true),    Color.FromArgb(255, 0xFF, 0x45, 0x3A) },
         { ("ThresholdBrush", true),      Color.FromArgb(255, 0x48, 0x48, 0x4A) },
-        { ("AxisLabelBrush", true),      Color.FromArgb(255, 0x63, 0x63, 0x66) },
+        { ("AxisLabelBrush", true),      Color.FromArgb(255, 0x8E, 0x8E, 0x93) },
 
         // Light theme colors
         { ("ProgressGreenBrush", false),  Color.FromArgb(255, 0x34, 0xC7, 0x59) },
@@ -25,7 +25,7 @@ public static class ChartColors
         { ("ProgressOrangeBrush", false), Color.FromArgb(255, 0xFF, 0x95, 0x00) },
         { ("ProgressRedBrush", false),    Color.FromArgb(255, 0xFF, 0x3B, 0x30) },
         { ("ThresholdBrush", false),      Color.FromArgb(255, 0x48, 0x48, 0x4A) },
-        { ("AxisLabelBrush", false),      Color.FromArgb(255, 0x63, 0x63, 0x66) },
+        { ("AxisLabelBrush", false),      Color.FromArgb(255, 0x6E, 0x6E, 0x73) },
     };
 
     /// <summary>
