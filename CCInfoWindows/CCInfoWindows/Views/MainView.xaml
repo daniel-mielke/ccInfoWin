@@ -27,7 +27,7 @@
 
     <Grid Background="{ThemeResource AppBackgroundBrush}"
           RowDefinitions="Auto,*,Auto"
-          Padding="16,12,16,12">
+          Padding="16,16,16,16">
 
         <!-- Hidden WebView2 for API calls via Chromium fetch() — bypasses Cloudflare -->
         <WebView2

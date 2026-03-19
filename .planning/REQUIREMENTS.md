@@ -120,6 +120,40 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **DIST-02**: GitHub public repository with README, LICENSE (MIT), screenshots
 - [x] **DIST-03**: Self-contained or framework-dependent publish with runtime prerequisite check
 
+## v1.1 Requirements
+
+Requirements for the v1.1 UI Polish & UX Improvements milestone. Based on `spec/ui-changes-after-v.1.7.1-macOS/instructions-ui-changes.md`.
+
+### Layout & Structure
+
+- [ ] **LAYOUT-01**: User sees vertical padding of the main app matching the horizontal padding (equal spacing on all sides)
+- [ ] **LAYOUT-02**: User sees a localized "Active Session" / "Aktive Sitzung" label above the project dropdown, styled like other section headers
+- [ ] **LAYOUT-03**: User sees a horizontal separator below the project dropdown visually separating it from the next section
+- [ ] **LAYOUT-04**: User sees the "Context Window" section (including sub-agent row) positioned between "Active Session" and "5-Hour Window", with separators above and below
+- [ ] **LAYOUT-05**: User can scroll to reach the footer (footer is no longer fixed/sticky), with a horizontal separator above it
+- [ ] **LAYOUT-06**: User sees a horizontal separator between the "Models" row and the "Input" row in the Statistics section
+
+### Visual Styles
+
+- [ ] **STYLE-01**: User sees all progress bars at a uniform height of 6 px (both foreground and background/track)
+- [ ] **STYLE-02**: User sees all progress bar backgrounds (track) in color rgba(128, 128, 128, 0.45), applied globally via style
+- [ ] **STYLE-03**: User sees the project dropdown and Statistics tab bar sharing the same background color and a CornerRadius of at least 8 px, in both light and dark mode
+- [ ] **STYLE-04**: User sees all model badges (e.g., "Sonnet 4.6", "Haiku 4.5") displayed as pill shapes with CornerRadius=999
+- [ ] **STYLE-05**: User sees the 5-hour chart axis labels (percentage and time values) in the same color as the timer text (clock icon label)
+
+### Text & Formatting
+
+- [ ] **TEXT-01**: User sees timer values ≥ 24h displayed as "Xd Yh" format (e.g., "3d 22h") instead of hours/minutes, with localized unit abbreviations
+- [ ] **TEXT-02**: User sees the "Total" and "Cost (API equiv.)" labels in the Statistics section with the same text color as other statistic labels (e.g., "Cache Read", "Cache Write")
+- [ ] **TEXT-03**: User sees the "Cost (API equiv.)" label and its value with the same FontWeight as "Cache Read" (thinner weight)
+- [ ] **TEXT-04**: User sees consistent vertical spacing before "Total" row — matching the spacing between other statistic rows
+
+### Interaction
+
+- [ ] **INTER-01**: User sees the logout button with a red background (from the existing error/100% progress bar color resource), white text, and a logout icon left of the label
+- [ ] **INTER-02**: User sees a login icon left of the login button label
+- [ ] **INTER-03**: User sees the refresh icon rotate 360° (not 180°) continuously until the API responds, always completing the current rotation before stopping
+
 ## v2 Requirements
 
 Deferred to future release. Tracked but not in current roadmap.
@@ -228,11 +262,37 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DIST-02 | Phase 6 | Complete |
 | DIST-03 | Phase 6 | Complete |
 
-**Coverage:**
+**Coverage (v1.0):**
 - v1 requirements: 68 total
 - Mapped to phases: 68
-- Unmapped: 0
+- Unmapped: 0 ✓
+
+**Coverage (v1.1):**
+- v1.1 requirements: 18 total
+- Mapped to phases: 0
+- Unmapped: 18 ⚠️ (roadmap pending)
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| LAYOUT-01 | — | Pending |
+| LAYOUT-02 | — | Pending |
+| LAYOUT-03 | — | Pending |
+| LAYOUT-04 | — | Pending |
+| LAYOUT-05 | — | Pending |
+| LAYOUT-06 | — | Pending |
+| STYLE-01 | — | Pending |
+| STYLE-02 | — | Pending |
+| STYLE-03 | — | Pending |
+| STYLE-04 | — | Pending |
+| STYLE-05 | — | Pending |
+| TEXT-01 | — | Pending |
+| TEXT-02 | — | Pending |
+| TEXT-03 | — | Pending |
+| TEXT-04 | — | Pending |
+| INTER-01 | — | Pending |
+| INTER-02 | — | Pending |
+| INTER-03 | — | Pending |
 
 ---
 *Requirements defined: 2026-03-09*
-*Last updated: 2026-03-09 after roadmap creation*
+*Last updated: 2026-03-19 after v1.1 milestone start*

@@ -33,6 +33,9 @@
   <data name="SectionHeaderStats.Text" xml:space="preserve">
     <value>STATISTIKEN</value>
   </data>
+  <data name="SectionHeaderActiveSession.Text" xml:space="preserve">
+    <value>AKTIVE SITZUNG</value>
+  </data>
 
   <!-- MainView body text -->
   <data name="SessionComboBox.PlaceholderText" xml:space="preserve">

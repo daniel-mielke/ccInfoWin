@@ -28,9 +28,36 @@ Developers can see their Claude usage limits (5-hour window, weekly quota, conte
 - ✓ Localization (German + English, follows system language) — v1.0
 - ✓ Open source release on GitHub with Inno Setup installer — v1.0
 
+## Current Milestone: v1.1 UI Polish & UX Improvements
+
+**Goal:** Refine the visual design and interaction patterns to match the updated macOS reference app, improving layout consistency, visual hierarchy, and interaction quality.
+
+**Target features:**
+- Layout restructuring (section order, padding, separators)
+- Visual style unification (progress bars, badges, dropdown, tabs)
+- Text/formatting improvements (timer format, statistics labels)
+- Interaction polish (refresh animation, logout button styling)
+
 ### Active
 
-(None — v1.0 complete, next milestone not yet planned)
+- [ ] LAYOUT-01: Vertikales Padding der Haupt-App entspricht dem horizontalen Padding
+- [ ] LAYOUT-02: Label „Aktive Sitzung" über dem Projekt-Dropdown (DE/EN lokalisiert)
+- [ ] LAYOUT-03: Trennlinie unterhalb des Projekt-Dropdowns
+- [ ] LAYOUT-04: Sektion „Kontextfenster" zwischen „Aktive Sitzung" und „5-Stunden-Fenster"
+- [ ] LAYOUT-05: Footer nicht fixiert, am Ende des Scroll-Inhalts mit Trennlinie
+- [ ] LAYOUT-06: Trennlinie zwischen „Modelle" und „Eingabe" in Statistiken
+- [ ] STYLE-01: Alle ProgressBars 6 px Höhe
+- [ ] STYLE-02: ProgressBar-Hintergrundfarbe rgba(128,128,128,0.45)
+- [ ] STYLE-03: Dropdown und Tab-Leiste: gleiche Hintergrundfarbe + CornerRadius ≥ 8 px
+- [ ] STYLE-04: Modell-Badges als Pill-Shape (CornerRadius=999)
+- [ ] STYLE-05: Achsenbeschriftungen 5h-Chart in Timer-Text-Farbe
+- [ ] TEXT-01: Timer ab ≥ 24h im Format „Xd Yh"
+- [ ] TEXT-02: Labels „Gesamt" und „Kosten (API-Äqu.)" in gleicher Farbe wie andere Labels
+- [ ] TEXT-03: Schriftstärke „Kosten (API-Äqu.)" wie „Cache-Lesen"
+- [ ] TEXT-04: Abstand vor „Gesamt" angeglichen
+- [ ] INTER-01: Abmelden-Button: rot, weiße Schrift, Logout-Icon
+- [ ] INTER-02: Login-Button: Login-Icon
+- [ ] INTER-03: Refresh-Icon 360°-Rotation, API-gesteuert
 
 ### Out of Scope
 
@@ -111,4 +138,4 @@ License: MIT
 | l:Uids.Uid for runtime localization | x:Uid only works at XAML load time, not runtime language switch | ✓ Good — DE/EN switch works |
 
 ---
-*Last updated: 2026-03-17 after v1.0 milestone*
+*Last updated: 2026-03-19 after v1.1 milestone start*
