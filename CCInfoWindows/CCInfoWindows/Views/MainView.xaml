@@ -78,6 +78,12 @@
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel Spacing="16" Padding="0,4,0,4">
 
+                <!-- ==================== AKTIVE SITZUNG ==================== -->
+                <TextBlock l:Uids.Uid="SectionHeaderActiveSession"
+                           FontSize="11" FontWeight="SemiBold"
+                           Foreground="{ThemeResource SectionHeaderBrush}"
+                           CharacterSpacing="50" />
+
                 <!-- ==================== SESSION DROPDOWN ==================== -->
                 <ComboBox x:Name="SessionComboBox"
                           l:Uids.Uid="SessionComboBox"
@@ -111,6 +117,111 @@
                     Foreground="{ThemeResource SecondaryTextBrush}"
                     HorizontalAlignment="Center"
                     Visibility="{x:Bind ViewModel.IsUpdatingFromCache, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                <!-- Divider below Active Session dropdown -->
+                <Border Height="1" Background="{ThemeResource DividerBrush}" />
+
+                <!-- ==================== KONTEXTFENSTER ==================== -->
+                <StackPanel Spacing="8">
+                    <TextBlock l:Uids.Uid="SectionHeaderContextWindow"
+                               FontSize="11" FontWeight="SemiBold"
+                               Foreground="{ThemeResource SectionHeaderBrush}"
+                               CharacterSpacing="50" />
+
+                    <!-- Main context progress bar -->
+                    <ProgressBar Value="{x:Bind ViewModel.ContextPercentage, Mode=OneWay}"
+                                 Maximum="100"
+                                 Foreground="{x:Bind ViewModel.ContextUtilization, Mode=OneWay, Converter={StaticResource PercentageToColorConverter}}"
+                                 Background="{ThemeResource ProgressTrackBrush}"
+                                 Height="6" CornerRadius="3" />
+
+                    <!-- Percentage + model badge row -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{x:Bind ViewModel.ContextPercentageText, Mode=OneWay}"
+                                   FontSize="28" FontWeight="Bold"
+                                   Foreground="{ThemeResource PrimaryTextBrush}" />
+                        <!-- Model badge chip -->
+                        <Border Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                Background="{x:Bind ViewModel.ContextModelBadgeColor, Mode=OneWay}"
+                                CornerRadius="6" Padding="8,0" Height="20">
+                            <TextBlock Text="{x:Bind ViewModel.ContextModelBadge, Mode=OneWay}"
+                                       FontSize="11" FontWeight="SemiBold"
+                                       Foreground="White"
+                                       VerticalAlignment="Center" />
+                        </Border>
+                    </Grid>
+
+                    <!-- Autocompact warning -->
+                    <TextBlock l:Uids.Uid="AutocompactWarning"
+                               FontSize="12"
+                               Foreground="{ThemeResource ProgressOrangeBrush}"
+                               Visibility="{x:Bind ViewModel.ShowAutocompactWarning, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                    <!-- No active session placeholder -->
+                    <TextBlock l:Uids.Uid="NoActiveSession"
+                               FontSize="12"
+                               Foreground="{ThemeResource TertiaryTextBrush}"
+                               Visibility="{x:Bind ViewModel.HasActiveSession, Mode=OneWay, Converter={StaticResource InvertedBoolToVisibilityConverter}}" />
+
+                    <!-- Subagent context bars (dynamic) -->
+                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.SubagentContexts, Mode=OneWay}">
+                        <ItemsRepeater.ItemTemplate>
+                            <DataTemplate x:DataType="viewmodels:SubagentDisplayData">
+                                <!-- Layout: [↳] [Badge] [ProgressBar] [xx%] -->
+                                <Grid Margin="0,4,0,0" ColumnSpacing="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Arrow icon -->
+                                    <TextBlock Grid.Column="0"
+                                               Text="&#x21B3;"
+                                               FontSize="15"
+                                               Foreground="{ThemeResource TertiaryTextBrush}"
+                                               VerticalAlignment="Center" />
+
+                                    <!-- Model badge -->
+                                    <Border Grid.Column="1"
+                                            Background="{x:Bind BadgeColor}"
+                                            CornerRadius="6" Padding="8,0" Height="20"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind ModelBadge}"
+                                                   FontSize="10" FontWeight="SemiBold"
+                                                   Foreground="White"
+                                                   VerticalAlignment="Center" />
+                                    </Border>
+
+                                    <!-- Progress bar -->
+                                    <ProgressBar Grid.Column="2"
+                                                 Value="{x:Bind Percentage}" Maximum="100"
+                                                 Background="{ThemeResource ProgressTrackBrush}"
+                                                 Height="4" CornerRadius="2"
+                                                 Margin="6,0"
+                                                 VerticalAlignment="Center" />
+
+                                    <!-- Percentage text -->
+                                    <TextBlock Grid.Column="3"
+                                               Text="{x:Bind PercentageText}"
+                                               FontSize="12"
+                                               Margin="6,0,0,0"
+                                               Foreground="{ThemeResource SecondaryTextBrush}"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
+                </StackPanel>
+
+                <!-- Divider after Context Window -->
+                <Border Height="1" Background="{ThemeResource DividerBrush}" />
 
                 <!-- ==================== 5-STUNDEN-FENSTER ==================== -->
                 <StackPanel Spacing="8">
@@ -304,108 +415,6 @@
                                 HorizontalAlignment="Right" />
                         </StackPanel>
                     </Grid>
-                </StackPanel>
-
-                <!-- Divider before KONTEXTFENSTER -->
-                <Border Height="1" Background="{ThemeResource DividerBrush}" />
-
-                <!-- ==================== KONTEXTFENSTER ==================== -->
-                <StackPanel Spacing="8">
-                    <TextBlock l:Uids.Uid="SectionHeaderContextWindow"
-                               FontSize="11" FontWeight="SemiBold"
-                               Foreground="{ThemeResource SectionHeaderBrush}"
-                               CharacterSpacing="50" />
-
-                    <!-- Main context progress bar -->
-                    <ProgressBar Value="{x:Bind ViewModel.ContextPercentage, Mode=OneWay}"
-                                 Maximum="100"
-                                 Foreground="{x:Bind ViewModel.ContextUtilization, Mode=OneWay, Converter={StaticResource PercentageToColorConverter}}"
-                                 Background="{ThemeResource ProgressTrackBrush}"
-                                 Height="6" CornerRadius="3" />
-
-                    <!-- Percentage + model badge row -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="{x:Bind ViewModel.ContextPercentageText, Mode=OneWay}"
-                                   FontSize="28" FontWeight="Bold"
-                                   Foreground="{ThemeResource PrimaryTextBrush}" />
-                        <!-- Model badge chip -->
-                        <Border Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                Background="{x:Bind ViewModel.ContextModelBadgeColor, Mode=OneWay}"
-                                CornerRadius="6" Padding="8,0" Height="20">
-                            <TextBlock Text="{x:Bind ViewModel.ContextModelBadge, Mode=OneWay}"
-                                       FontSize="11" FontWeight="SemiBold"
-                                       Foreground="White"
-                                       VerticalAlignment="Center" />
-                        </Border>
-                    </Grid>
-
-                    <!-- Autocompact warning -->
-                    <TextBlock l:Uids.Uid="AutocompactWarning"
-                               FontSize="12"
-                               Foreground="{ThemeResource ProgressOrangeBrush}"
-                               Visibility="{x:Bind ViewModel.ShowAutocompactWarning, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-
-                    <!-- No active session placeholder -->
-                    <TextBlock l:Uids.Uid="NoActiveSession"
-                               FontSize="12"
-                               Foreground="{ThemeResource TertiaryTextBrush}"
-                               Visibility="{x:Bind ViewModel.HasActiveSession, Mode=OneWay, Converter={StaticResource InvertedBoolToVisibilityConverter}}" />
-
-                    <!-- Subagent context bars (dynamic) -->
-                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.SubagentContexts, Mode=OneWay}">
-                        <ItemsRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="viewmodels:SubagentDisplayData">
-                                <!-- Layout: [↳] [Badge] [ProgressBar] [xx%] -->
-                                <Grid Margin="0,4,0,0" ColumnSpacing="4">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="16" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <!-- Arrow icon -->
-                                    <TextBlock Grid.Column="0"
-                                               Text="&#x21B3;"
-                                               FontSize="15"
-                                               Foreground="{ThemeResource TertiaryTextBrush}"
-                                               VerticalAlignment="Center" />
-
-                                    <!-- Model badge -->
-                                    <Border Grid.Column="1"
-                                            Background="{x:Bind BadgeColor}"
-                                            CornerRadius="6" Padding="8,0" Height="20"
-                                            HorizontalAlignment="Left"
-                                            VerticalAlignment="Center">
-                                        <TextBlock Text="{x:Bind ModelBadge}"
-                                                   FontSize="10" FontWeight="SemiBold"
-                                                   Foreground="White"
-                                                   VerticalAlignment="Center" />
-                                    </Border>
-
-                                    <!-- Progress bar -->
-                                    <ProgressBar Grid.Column="2"
-                                                 Value="{x:Bind Percentage}" Maximum="100"
-                                                 Background="{ThemeResource ProgressTrackBrush}"
-                                                 Height="4" CornerRadius="2"
-                                                 Margin="6,0"
-                                                 VerticalAlignment="Center" />
-
-                                    <!-- Percentage text -->
-                                    <TextBlock Grid.Column="3"
-                                               Text="{x:Bind PercentageText}"
-                                               FontSize="12"
-                                               Margin="6,0,0,0"
-                                               Foreground="{ThemeResource SecondaryTextBrush}"
-                                               VerticalAlignment="Center" />
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsRepeater.ItemTemplate>
-                    </ItemsRepeater>
                 </StackPanel>
 
                 <!-- Divider before STATISTIKEN -->
