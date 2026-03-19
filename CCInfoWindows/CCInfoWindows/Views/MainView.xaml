@@ -79,7 +79,7 @@
 
         <!-- Row 1: Dashboard content -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="16" Padding="16,16,16,4">
+            <StackPanel Spacing="16" Padding="16,16,16,16">
 
                 <!-- ==================== AKTIVE SITZUNG ==================== -->
                 <TextBlock l:Uids.Uid="SectionHeaderActiveSession"
@@ -92,7 +92,9 @@
                           l:Uids.Uid="SessionComboBox"
                           ItemsSource="{x:Bind ViewModel.SortedSessions, Mode=OneWay}"
                           SelectedItem="{x:Bind ViewModel.SelectedSession, Mode=TwoWay}"
-                          HorizontalAlignment="Stretch">
+                          HorizontalAlignment="Stretch"
+                          Background="{ThemeResource SegmentedBackgroundBrush}"
+                          CornerRadius="8">
                     <ComboBox.ItemTemplate>
                         <DataTemplate x:DataType="viewmodels:SessionDisplayItem">
                             <StackPanel Orientation="Horizontal" Spacing="6">
@@ -150,7 +152,7 @@
                         <!-- Model badge chip -->
                         <Border Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center"
                                 Background="{x:Bind ViewModel.ContextModelBadgeColor, Mode=OneWay}"
-                                CornerRadius="6" Padding="8,0" Height="20">
+                                CornerRadius="999" Padding="8,0" Height="20">
                             <TextBlock Text="{x:Bind ViewModel.ContextModelBadge, Mode=OneWay}"
                                        FontSize="11" FontWeight="SemiBold"
                                        Foreground="White"
@@ -193,7 +195,7 @@
                                     <!-- Model badge -->
                                     <Border Grid.Column="1"
                                             Background="{x:Bind BadgeColor}"
-                                            CornerRadius="6" Padding="8,0" Height="20"
+                                            CornerRadius="999" Padding="8,0" Height="20"
                                             HorizontalAlignment="Left"
                                             VerticalAlignment="Center">
                                         <TextBlock Text="{x:Bind ModelBadge}"
@@ -206,7 +208,7 @@
                                     <ProgressBar Grid.Column="2"
                                                  Value="{x:Bind Percentage}" Maximum="100"
                                                  Background="{ThemeResource ProgressTrackBrush}"
-                                                 Height="4" CornerRadius="2"
+                                                 Height="6" CornerRadius="3"
                                                  Margin="6,0"
                                                  VerticalAlignment="Center" />
 
@@ -548,8 +550,8 @@
                                 Background="{ThemeResource DividerBrush}" />
 
                         <!-- Row 7: Gesamt (bold) -->
-                        <TextBlock l:Uids.Uid="StatsTotal" Grid.Row="7" Grid.Column="0" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{ThemeResource PrimaryTextBrush}" Margin="0,0,12,0" />
+                        <TextBlock l:Uids.Uid="StatsTotal" Grid.Row="7" Grid.Column="0" FontSize="13" FontWeight="Normal"
+                                   Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,8,12,0" />
                         <TextBlock Grid.Row="7" Grid.Column="1"
                                    Text="{x:Bind ViewModel.StatisticsTotal, Mode=OneWay}"
                                    FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right"
@@ -560,8 +562,8 @@
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                         <!-- Row 8: Kosten (bold) -->
-                        <TextBlock l:Uids.Uid="StatsCost" Grid.Row="8" Grid.Column="0" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{ThemeResource PrimaryTextBrush}" Margin="0,0,12,0" />
+                        <TextBlock l:Uids.Uid="StatsCost" Grid.Row="8" Grid.Column="0" FontSize="13" FontWeight="Normal"
+                                   Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
                         <TextBlock Grid.Row="8" Grid.Column="1"
                                    Text="{x:Bind ViewModel.StatisticsCost, Mode=OneWay}"
                                    FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right"
