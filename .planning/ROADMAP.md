@@ -92,4 +92,4 @@ Plans:
 | 8. Documentation Hygiene & Verification | v1.0 | 1/1 | Complete | 2026-03-17 |
 | 9. Layout & Structure | v1.1 | 2/2 | Complete | 2026-03-19 |
 | 10. Visual Styles | v1.1 | 2/2 | Complete | 2026-03-19 |
-| 11. Behavior & Interaction | 2/2 | Complete   | 2026-03-20 | — |
+| 11. Behavior & Interaction | 2/2 | Complete    | 2026-03-20 | — |
