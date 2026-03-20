@@ -317,7 +317,10 @@ public sealed partial class MainView : Page
         if (_stopOnComplete)
         {
             _stopOnComplete = false;
-            SpinnerStoryboard.Stop();
+        }
+        else
+        {
+            SpinnerStoryboard.Begin();
         }
     }
 

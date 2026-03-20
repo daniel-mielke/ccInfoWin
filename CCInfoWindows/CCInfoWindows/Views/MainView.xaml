@@ -15,7 +15,7 @@
 
     <Page.Resources>
         <!-- Spinner rotation storyboard -->
-        <Storyboard x:Name="SpinnerStoryboard" RepeatBehavior="Forever">
+        <Storyboard x:Name="SpinnerStoryboard">
             <DoubleAnimation
                 Storyboard.TargetName="RefreshIconTransform"
                 Storyboard.TargetProperty="Angle"
