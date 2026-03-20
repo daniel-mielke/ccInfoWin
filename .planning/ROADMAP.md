@@ -75,8 +75,8 @@ Plans:
   4. The refresh icon rotates continuously (360°) while the API call is in flight, always completing the current full rotation before stopping — never snapping mid-turn
 **Plans**: 2 plans
 Plans:
-- [ ] 11-01-PLAN.md — TBD
-- [ ] 11-02-PLAN.md — TBD
+- [ ] 11-01-PLAN.md — Timer >=24h format, logout button red with icon, login button icon
+- [ ] 11-02-PLAN.md — Smooth refresh animation stop with _stopOnComplete flag
 
 ## Progress
 
@@ -91,5 +91,5 @@ Plans:
 | 7. Security Fix & Dead Code Cleanup | v1.0 | 1/1 | Complete | 2026-03-17 |
 | 8. Documentation Hygiene & Verification | v1.0 | 1/1 | Complete | 2026-03-17 |
 | 9. Layout & Structure | v1.1 | 2/2 | Complete | 2026-03-19 |
-| 10. Visual Styles | 2/2 | Complete   | 2026-03-19 | — |
-| 11. Behavior & Interaction | v1.1 | 0/? | Not started | — |
+| 10. Visual Styles | v1.1 | 2/2 | Complete | 2026-03-19 |
+| 11. Behavior & Interaction | v1.1 | 0/2 | Not started | — |

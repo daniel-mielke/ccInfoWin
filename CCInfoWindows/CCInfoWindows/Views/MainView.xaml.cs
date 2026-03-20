@@ -40,6 +40,7 @@ public sealed partial class MainView : Page
     private static readonly Color ShimmerHighlightColor = Color.FromArgb(0xFF, 0x55, 0x55, 0x58);
 
     private Storyboard? _shimmerStoryboard;
+    private bool _stopOnComplete = false;
 
     public MainViewModel ViewModel { get; }
 
@@ -91,6 +92,7 @@ public sealed partial class MainView : Page
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+        SpinnerStoryboard.Completed += OnSpinnerCompleted;
         ViewModel.ChartInvalidateCallback = () => UsageChart.Invalidate();
 
         var bridge = App.Services.GetRequiredService<WebViewBridge>();
@@ -106,6 +108,7 @@ public sealed partial class MainView : Page
     {
         UsageChart.RemoveFromVisualTree();
         ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        SpinnerStoryboard.Completed -= OnSpinnerCompleted;
         ViewModel.StopTimers();
     }
 
@@ -309,17 +312,27 @@ public sealed partial class MainView : Page
         ViewModel.DismissUpdate();
     }
 
+    private void OnSpinnerCompleted(object? sender, object e)
+    {
+        if (_stopOnComplete)
+        {
+            _stopOnComplete = false;
+            SpinnerStoryboard.Stop();
+        }
+    }
+
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(MainViewModel.IsRefreshing))
         {
             if (ViewModel.IsRefreshing)
             {
+                _stopOnComplete = false;
                 SpinnerStoryboard.Begin();
             }
             else
             {
-                SpinnerStoryboard.Stop();
+                _stopOnComplete = true;
             }
         }
         else if (e.PropertyName == nameof(MainViewModel.IsAggregating))
