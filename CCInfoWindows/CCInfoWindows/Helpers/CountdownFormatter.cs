@@ -10,7 +10,7 @@ public static class CountdownFormatter
     private static readonly CultureInfo GermanCulture = new("de-DE");
 
     /// <summary>
-    /// Formats the remaining time until reset as "Xh Ymin" or "Ymin".
+    /// Formats the remaining time until reset as "Xd Yh", "Xh Ymin", or "Ymin".
     /// Returns "--" if null or already past.
     /// </summary>
     public static string FormatCountdown(DateTimeOffset? resetsAt)
@@ -22,6 +22,13 @@ public static class CountdownFormatter
 
         if (remaining <= TimeSpan.Zero)
             return "--";
+
+        if (remaining.TotalHours >= 24)
+        {
+            var days = (int)remaining.TotalDays;
+            var hrs = remaining.Hours;
+            return $"{days}d {hrs}h";
+        }
 
         var hours = (int)remaining.TotalHours;
         var minutes = remaining.Minutes;

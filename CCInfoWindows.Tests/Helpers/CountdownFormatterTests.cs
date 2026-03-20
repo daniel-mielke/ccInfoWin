@@ -41,6 +41,46 @@ public class CountdownFormatterTests
     }
 
     [Fact]
+    public void FormatCountdown_ThreeDays22Hours_ReturnsDaysHoursFormat()
+    {
+        var future = DateTimeOffset.UtcNow.AddDays(3).AddHours(22).AddMinutes(15).AddSeconds(30);
+        var result = CountdownFormatter.FormatCountdown(future);
+        Assert.Equal("3d 22h", result);
+    }
+
+    [Fact]
+    public void FormatCountdown_ExactlyOneDay_ReturnsDaysHoursFormat()
+    {
+        var future = DateTimeOffset.UtcNow.AddHours(24).AddSeconds(30);
+        var result = CountdownFormatter.FormatCountdown(future);
+        Assert.Equal("1d 0h", result);
+    }
+
+    [Fact]
+    public void FormatCountdown_OneDayZeroMinutes_ReturnsDaysHoursFormat()
+    {
+        var future = DateTimeOffset.UtcNow.AddDays(1).AddMinutes(30).AddSeconds(30);
+        var result = CountdownFormatter.FormatCountdown(future);
+        Assert.Equal("1d 0h", result);
+    }
+
+    [Fact]
+    public void FormatCountdown_SevenDays_ReturnsDaysHoursFormat()
+    {
+        var future = DateTimeOffset.UtcNow.AddDays(7).AddSeconds(30);
+        var result = CountdownFormatter.FormatCountdown(future);
+        Assert.Equal("7d 0h", result);
+    }
+
+    [Fact]
+    public void FormatCountdown_JustUnder24Hours_ReturnsHoursMinutes()
+    {
+        var future = DateTimeOffset.UtcNow.AddHours(23).AddMinutes(59).AddSeconds(30);
+        var result = CountdownFormatter.FormatCountdown(future);
+        Assert.Equal("23h 59min", result);
+    }
+
+    [Fact]
     public void FormatResetDate_Null_ReturnsDash()
     {
         Assert.Equal("--", CountdownFormatter.FormatResetDate(null));
