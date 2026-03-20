@@ -152,7 +152,7 @@ Requirements for the v1.1 UI Polish & UX Improvements milestone. Based on `spec/
 
 - [ ] **INTER-01**: User sees the logout button with a red background (from the existing error/100% progress bar color resource), white text, and a logout icon left of the label
 - [ ] **INTER-02**: User sees a login icon left of the login button label
-- [ ] **INTER-03**: User sees the refresh icon rotate 360° (not 180°) continuously until the API responds, always completing the current rotation before stopping
+- [x] **INTER-03**: User sees the refresh icon rotate 360° (not 180°) continuously until the API responds, always completing the current rotation before stopping
 
 ## v2 Requirements
 
@@ -291,7 +291,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TEXT-04 | Phase 10 | Complete |
 | INTER-01 | Phase 11 | Pending |
 | INTER-02 | Phase 11 | Pending |
-| INTER-03 | Phase 11 | Pending |
+| INTER-03 | Phase 11 | Complete |
 
 ---
 *Requirements defined: 2026-03-09*

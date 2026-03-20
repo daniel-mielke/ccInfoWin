@@ -144,11 +144,16 @@
         </StackPanel>
 
         <!-- Logout button at bottom -->
-        <Button l:Uids.Uid="SettingsLogoutButton"
-                Grid.Row="2"
+        <Button Grid.Row="2"
                 Command="{x:Bind ViewModel.LogoutCommand}"
                 HorizontalAlignment="Stretch"
                 Margin="0,16,0,0"
-                Style="{ThemeResource AccentButtonStyle}" />
+                Background="{ThemeResource ProgressRedBrush}"
+                Foreground="White">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon Glyph="&#xE8FB;" FontSize="16" Foreground="White" />
+                <TextBlock l:Uids.Uid="SettingsLogoutButton" Foreground="White" />
+            </StackPanel>
+        </Button>
     </Grid>
 </Page>

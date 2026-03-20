@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: UI Polish & UX Improvements
 status: unknown
-last_updated: "2026-03-19T14:19:13.469Z"
+last_updated: "2026-03-20T10:21:53.634Z"
 progress:
   total_phases: 3
   completed_phases: 2
-  total_plans: 4
+  total_plans: 6
   completed_plans: 4
 ---
 
@@ -18,12 +18,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Developers can see their Claude usage limits (5-hour window, weekly quota, context window) at a glance in real-time, preventing unexpected throttling.
-**Current focus:** Phase 10 — Visual Styles
+**Current focus:** Phase 11 — behavior-interaction
 
 ## Current Position
 
-Phase: 10 (Visual Styles) — EXECUTING
-Plan: 1 of 2
+Phase: 11 (behavior-interaction) — COMPLETE
+Plan: 2 of 2 (COMPLETE)
 
 ## Performance Metrics
 
@@ -41,6 +41,8 @@ Plan: 1 of 2
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
+
+**11-02:** Deferred Storyboard.Stop() via _stopOnComplete flag — refresh icon always completes its current 360-degree rotation before halting; flag cleared before Begin() to handle rapid toggling.
 
 **09-01:** Context Window repositioned before 5-Hour Window (matches macOS ccInfo v1.7.1 reference layout). Redundant "Divider before KONTEXTFENSTER" removed — new separator above Context Window is sufficient.
 

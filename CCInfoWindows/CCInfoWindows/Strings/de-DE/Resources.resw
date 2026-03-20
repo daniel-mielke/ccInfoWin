@@ -147,7 +147,7 @@
   <data name="SettingsLastFetch.Text" xml:space="preserve">
     <value>Zuletzt aktualisiert:</value>
   </data>
-  <data name="SettingsLogoutButton.Content" xml:space="preserve">
+  <data name="SettingsLogoutButton.Text" xml:space="preserve">
     <value>Abmelden</value>
   </data>
 
