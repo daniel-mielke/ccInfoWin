@@ -151,7 +151,7 @@
                 Background="{ThemeResource ProgressRedBrush}"
                 Foreground="White">
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <FontIcon Glyph="&#xE8A9;" FontSize="16" Foreground="White" />
+                <FontIcon Glyph="&#xF3B1;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="White" />
                 <TextBlock l:Uids.Uid="SettingsLogoutButton" Foreground="White" />
             </StackPanel>
         </Button>
