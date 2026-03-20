@@ -62,7 +62,12 @@
                 IsClosable="False"
                 Margin="0,0,0,12">
                 <InfoBar.ActionButton>
-                    <Button l:Uids.Uid="ReLoginButton" Command="{x:Bind ViewModel.ReLoginCommand}" />
+                    <Button Command="{x:Bind ViewModel.ReLoginCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE77B;" FontSize="16" />
+                            <TextBlock l:Uids.Uid="ReLoginButton" />
+                        </StackPanel>
+                    </Button>
                 </InfoBar.ActionButton>
             </InfoBar>
 

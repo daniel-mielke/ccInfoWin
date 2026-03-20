@@ -121,7 +121,7 @@
   <data name="SessionExpiredInfoBar.Message" xml:space="preserve">
     <value>Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.</value>
   </data>
-  <data name="ReLoginButton.Content" xml:space="preserve">
+  <data name="ReLoginButton.Text" xml:space="preserve">
     <value>Erneut anmelden</value>
   </data>
 

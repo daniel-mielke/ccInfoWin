@@ -121,7 +121,7 @@
   <data name="SessionExpiredInfoBar.Message" xml:space="preserve">
     <value>Your session has expired. Please re-login to continue.</value>
   </data>
-  <data name="ReLoginButton.Content" xml:space="preserve">
+  <data name="ReLoginButton.Text" xml:space="preserve">
     <value>Re-Login</value>
   </data>
 
