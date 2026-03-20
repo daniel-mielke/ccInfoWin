@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: UI Polish & UX Improvements
 status: unknown
-last_updated: "2026-03-20T10:21:53.634Z"
+last_updated: "2026-03-20T10:27:44.614Z"
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 6
 ---
 
 # Project State
@@ -35,6 +35,7 @@ Plan: 2 of 2 (COMPLETE)
 | Phase 09-layout-structure P09-02 | 45 | 3 tasks | 1 files |
 | Phase 10-visual-styles P02 | 85 | 1 tasks | 1 files |
 | Phase 10-visual-styles P01 | 12 | 1 tasks | 2 files |
+| Phase 11-behavior-interaction P01 | 18 | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -57,6 +58,8 @@ Key decisions from v1.0 still relevant:
 - [Phase 10-visual-styles]: AxisLabelBrush now matches SecondaryTextBrush for visual consistency between chart axis labels and timer text
 - [Phase 10-01]: ProgressTrackBrush unified to #72808080 across both themes — semi-transparent gray adapts naturally to dark and light backgrounds
 - [Phase 10-01]: Model badge pill: CornerRadius=999 is the WinUI 3 idiom for fully rounded corners; secondary stats labels use SecondaryTextBrush + FontWeight=Normal
+- [Phase 11-01]: CountdownFormatter uses remaining.Hours (component, 0-23) for Xd Yh display — ensures hours 0-23 not 0-infinity
+- [Phase 11-01]: Icon+label buttons: l:Uids.Uid on inner TextBlock (resolves .Text) not on Button (resolves .Content) — WinUI3Localizer property matching
 
 ### v1.1 Phase Grouping Rationale
 

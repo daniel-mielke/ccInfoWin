@@ -29,7 +29,7 @@ Audit: `.planning/milestones/v1.0-MILESTONE-AUDIT.md`
 
 - [x] **Phase 9: Layout & Structure** — Restructure MainView.xaml section order, padding, and separators (completed 2026-03-19)
 - [x] **Phase 10: Visual Styles** — Unify progress bars, badges, dropdown, tabs, and chart axis colors via AppTheme.xaml (completed 2026-03-19)
-- [ ] **Phase 11: Behavior & Interaction** — Timer format logic, button icons, and refresh animation
+- [x] **Phase 11: Behavior & Interaction** — Timer format logic, button icons, and refresh animation (completed 2026-03-20)
 
 ## Phase Details
 
@@ -92,4 +92,4 @@ Plans:
 | 8. Documentation Hygiene & Verification | v1.0 | 1/1 | Complete | 2026-03-17 |
 | 9. Layout & Structure | v1.1 | 2/2 | Complete | 2026-03-19 |
 | 10. Visual Styles | v1.1 | 2/2 | Complete | 2026-03-19 |
-| 11. Behavior & Interaction | 1/2 | In Progress|  | — |
+| 11. Behavior & Interaction | 2/2 | Complete   | 2026-03-20 | — |

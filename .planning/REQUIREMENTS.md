@@ -143,15 +143,15 @@ Requirements for the v1.1 UI Polish & UX Improvements milestone. Based on `spec/
 
 ### Text & Formatting
 
-- [ ] **TEXT-01**: User sees timer values ≥ 24h displayed as "Xd Yh" format (e.g., "3d 22h") instead of hours/minutes, with localized unit abbreviations
+- [x] **TEXT-01**: User sees timer values ≥ 24h displayed as "Xd Yh" format (e.g., "3d 22h") instead of hours/minutes, with localized unit abbreviations
 - [x] **TEXT-02**: User sees the "Total" and "Cost (API equiv.)" labels in the Statistics section with the same text color as other statistic labels (e.g., "Cache Read", "Cache Write")
 - [x] **TEXT-03**: User sees the "Cost (API equiv.)" label and its value with the same FontWeight as "Cache Read" (thinner weight)
 - [x] **TEXT-04**: User sees consistent vertical spacing before "Total" row — matching the spacing between other statistic rows
 
 ### Interaction
 
-- [ ] **INTER-01**: User sees the logout button with a red background (from the existing error/100% progress bar color resource), white text, and a logout icon left of the label
-- [ ] **INTER-02**: User sees a login icon left of the login button label
+- [x] **INTER-01**: User sees the logout button with a red background (from the existing error/100% progress bar color resource), white text, and a logout icon left of the label
+- [x] **INTER-02**: User sees a login icon left of the login button label
 - [x] **INTER-03**: User sees the refresh icon rotate 360° (not 180°) continuously until the API responds, always completing the current rotation before stopping
 
 ## v2 Requirements
@@ -285,12 +285,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STYLE-03 | Phase 10 | Complete |
 | STYLE-04 | Phase 10 | Complete |
 | STYLE-05 | Phase 10 | Complete |
-| TEXT-01 | Phase 11 | Pending |
+| TEXT-01 | Phase 11 | Complete |
 | TEXT-02 | Phase 10 | Complete |
 | TEXT-03 | Phase 10 | Complete |
 | TEXT-04 | Phase 10 | Complete |
-| INTER-01 | Phase 11 | Pending |
-| INTER-02 | Phase 11 | Pending |
+| INTER-01 | Phase 11 | Complete |
+| INTER-02 | Phase 11 | Complete |
 | INTER-03 | Phase 11 | Complete |
 
 ---
