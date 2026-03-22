@@ -60,7 +60,7 @@ completed: 2026-03-19
 
 ## Accomplishments
 - ProgressTrackBrush changed from opaque (#38383A dark, #D1D1D6 light) to semi-transparent #72808080 in both themes
-- Subagent ProgressBar unified to 6px height (was 4px) with proportional CornerRadius 3 (was 2)
+- All ProgressBars unified to 6px height (was 4px) with proportional CornerRadius 3 (was 2) — applies to Context, Weekly, Sonnet, and Subagent bars
 - ComboBox receives SegmentedBackgroundBrush background and CornerRadius=8 to match tab bar aesthetic
 - Both model badge Borders (main context and subagent) changed from CornerRadius=6 to CornerRadius=999 for full pill shape
 - StatsTotal label: Foreground SecondaryTextBrush, FontWeight Normal, Margin 0,8,12,0 (8px top separation)

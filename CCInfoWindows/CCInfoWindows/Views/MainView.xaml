@@ -143,7 +143,7 @@
                                  Maximum="100"
                                  Foreground="{x:Bind ViewModel.ContextUtilization, Mode=OneWay, Converter={StaticResource PercentageToColorConverter}}"
                                  Background="{ThemeResource ProgressTrackBrush}"
-                                 Height="6" CornerRadius="3" />
+                                 Style="{StaticResource AppProgressBarStyle}" />
 
                     <!-- Percentage + model badge row -->
                     <Grid>
@@ -213,7 +213,7 @@
                                     <ProgressBar Grid.Column="2"
                                                  Value="{x:Bind Percentage}" Maximum="100"
                                                  Background="{ThemeResource ProgressTrackBrush}"
-                                                 Height="6" CornerRadius="3"
+                                                 Style="{StaticResource AppProgressBarStyle}"
                                                  Margin="6,0"
                                                  VerticalAlignment="Center" />
 
@@ -328,8 +328,7 @@
                         Maximum="100"
                         Foreground="{x:Bind ViewModel.WeeklyUtilization, Mode=OneWay, Converter={StaticResource PercentageToColorConverter}}"
                         Background="{ThemeResource ProgressTrackBrush}"
-                        Height="6"
-                        CornerRadius="3" />
+                        Style="{StaticResource AppProgressBarStyle}" />
 
                     <!-- Percentage and countdown/reset row -->
                     <Grid>
@@ -388,8 +387,7 @@
                         Maximum="100"
                         Foreground="{x:Bind ViewModel.SonnetUtilization, Mode=OneWay, Converter={StaticResource PercentageToColorConverter}}"
                         Background="{ThemeResource ProgressTrackBrush}"
-                        Height="6"
-                        CornerRadius="3" />
+                        Style="{StaticResource AppProgressBarStyle}" />
 
                     <!-- Percentage and countdown/reset row -->
                     <Grid>
