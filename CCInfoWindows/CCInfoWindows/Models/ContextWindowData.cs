@@ -11,6 +11,7 @@ public record SubagentContextData
     public long TotalTokens { get; init; }
     public long MaxTokens { get; init; }
     public string? ModelName { get; init; }
+    public DateTimeOffset LastActivity { get; init; }
 
     public double Utilization
     {

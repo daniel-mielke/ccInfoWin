@@ -44,7 +44,7 @@ public class ClaudeApiService : IClaudeApiService
     {
         if (!_bridge.IsInitialized)
         {
-            return null;
+            throw new InvalidOperationException("WebView2 bridge is not initialized. Restart the app or re-login.");
         }
 
         var orgId = _credentialService.GetOrganizationId();
@@ -53,12 +53,14 @@ public class ClaudeApiService : IClaudeApiService
             orgId = await TryMigrateOrgIdAsync(ct);
             if (orgId is null)
             {
-                return null;
+                throw new InvalidOperationException("Organization ID could not be retrieved. Try logging out and back in.");
             }
         }
 
         var encodedOrgId = Uri.EscapeDataString(orgId);
         var url = $"{BaseUrl}/api/organizations/{encodedOrgId}/usage";
+
+        Exception? lastException = null;
 
         for (int attempt = 1; attempt <= MaxAttempts; attempt++)
         {
@@ -67,18 +69,6 @@ public class ClaudeApiService : IClaudeApiService
             try
             {
                 var responseBody = await _bridge.FetchJsonAsync(url);
-
-                if (responseBody is null)
-                {
-                    // Non-success status or network error — retry
-                    if (attempt < MaxAttempts)
-                    {
-                        await Task.Delay(attempt * 1000, ct);
-                        continue;
-                    }
-                    return null;
-                }
-
                 var usage = JsonSerializer.Deserialize<UsageResponse>(responseBody);
 
                 if (usage is not null)
@@ -94,22 +84,32 @@ public class ClaudeApiService : IClaudeApiService
                 WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
                 return null;
             }
+            catch (HttpFetchException ex) when (ex.StatusCode is >= 400 and < 500)
+            {
+                // Client errors (4xx) are not transient — no retry
+                throw;
+            }
             catch (TaskCanceledException) when (!ct.IsCancellationRequested)
             {
+                lastException = new TimeoutException($"Request timed out on attempt {attempt}/{MaxAttempts}");
                 if (attempt < MaxAttempts)
                 {
                     await Task.Delay(attempt * 1000, ct);
                     continue;
                 }
-                return null;
             }
-            catch (Exception) when (attempt < MaxAttempts)
+            catch (Exception ex) when (attempt < MaxAttempts)
             {
+                lastException = ex;
                 await Task.Delay(attempt * 1000, ct);
+            }
+            catch (Exception ex)
+            {
+                lastException = ex;
             }
         }
 
-        return null;
+        throw lastException ?? new InvalidOperationException("API request failed after all retry attempts.");
     }
 
     public UsageResponse? GetCachedUsage() => _cachedUsage;

@@ -119,7 +119,7 @@ public class ClaudeApiServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task FetchUsageAsync_OnPersistentNullResponse_ReturnsNullAfterRetries()
+    public async Task FetchUsageAsync_OnPersistentNullResponse_ThrowsAfterRetries()
     {
         _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
         _credentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
@@ -130,9 +130,7 @@ public class ClaudeApiServiceTests : IDisposable
 
         var service = CreateService();
 
-        var result = await service.FetchUsageAsync();
-
-        Assert.Null(result);
+        await Assert.ThrowsAsync<ArgumentNullException>(() => service.FetchUsageAsync());
     }
 
     [Fact]
@@ -196,7 +194,7 @@ public class ClaudeApiServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task FetchUsageAsync_BridgeNotInitialized_ReturnsNull()
+    public async Task FetchUsageAsync_BridgeNotInitialized_ThrowsInvalidOperation()
     {
         _bridgeMock.Setup(b => b.IsInitialized).Returns(false);
         _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
@@ -204,9 +202,7 @@ public class ClaudeApiServiceTests : IDisposable
 
         var service = CreateService();
 
-        var result = await service.FetchUsageAsync();
-
-        Assert.Null(result);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.FetchUsageAsync());
         _bridgeMock.Verify(b => b.FetchJsonAsync(It.IsAny<string>()), Times.Never);
     }
 
@@ -238,7 +234,7 @@ public class ClaudeApiServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task FetchUsageAsync_OrgMigrationFails_ReturnsNull()
+    public async Task FetchUsageAsync_OrgMigrationFails_ThrowsInvalidOperation()
     {
         _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
         _credentialMock.Setup(x => x.GetOrganizationId()).Returns((string?)null);
@@ -249,9 +245,7 @@ public class ClaudeApiServiceTests : IDisposable
 
         var service = CreateService();
 
-        var result = await service.FetchUsageAsync();
-
-        Assert.Null(result);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.FetchUsageAsync());
     }
 
     private static string CreateUsageJson(double utilization)

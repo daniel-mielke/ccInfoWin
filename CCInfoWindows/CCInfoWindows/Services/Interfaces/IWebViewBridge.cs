@@ -13,7 +13,8 @@ public interface IWebViewBridge
 
     /// <summary>
     /// Executes a GET request via WebView2's fetch() and returns the response body as string.
-    /// Returns null on network error or non-OK status. Throws on 401 (auth expired).
+    /// Throws <see cref="HttpFetchException"/> on non-2xx status, <see cref="UnauthorizedAccessException"/> on 401,
+    /// and <see cref="TimeoutException"/> if no response arrives within 30 seconds.
     /// </summary>
     Task<string?> FetchJsonAsync(string url);
 

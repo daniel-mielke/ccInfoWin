@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: UI Polish & UX Improvements
-status: unknown
-last_updated: "2026-03-20T19:16:28.385Z"
+status: v1.1 milestone complete
+last_updated: "2026-04-01T13:24:14.811Z"
 progress:
   total_phases: 3
   completed_phases: 3
@@ -15,65 +15,25 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-19)
+See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** Developers can see their Claude usage limits (5-hour window, weekly quota, context window) at a glance in real-time, preventing unexpected throttling.
-**Current focus:** Phase 11 — behavior-interaction
+**Current focus:** v1.1 milestone complete — planning next milestone
 
-## Current Position
+## Milestone v1.1 Complete
 
-Phase: 11 (behavior-interaction) — COMPLETE
-Plan: 2 of 2 (COMPLETE)
+Shipped: 2026-04-01  
+Phases: 9, 10, 11 (3 phases, 6 plans, 10 tasks)  
+Requirements: 18/18 satisfied  
+Archive: `.planning/milestones/v1.1-ROADMAP.md`
 
-## Performance Metrics
-
-| Metric | v1.0 | v1.1 |
-|--------|------|------|
-| Requirements | 68 | 18 |
-| Phases | 8 | 3 |
-| Plans | 21 | TBD |
-| Phase 09-layout-structure P09-02 | 45 | 3 tasks | 1 files |
-| Phase 10-visual-styles P02 | 85 | 1 tasks | 1 files |
-| Phase 10-visual-styles P01 | 12 | 1 tasks | 2 files |
-| Phase 11-behavior-interaction P01 | 18 | 3 tasks | 6 files |
-
-## Accumulated Context
-
-### Decisions
-
-Decisions are logged in PROJECT.md Key Decisions table.
-
-**11-02:** Deferred Storyboard.Stop() via _stopOnComplete flag — refresh icon always completes its current 360-degree rotation before halting; flag cleared before Begin() to handle rapid toggling.
-
-**09-01:** Context Window repositioned before 5-Hour Window (matches macOS ccInfo v1.7.1 reference layout). Redundant "Divider before KONTEXTFENSTER" removed — new separator above Context Window is sufficient.
-
-Key decisions from v1.0 still relevant:
-
-- WebView2 bridge for API calls (Cloudflare bypass) — architecture must be preserved
-- CommunityToolkit.Mvvm source generators — MVVM patterns must be followed
-- l:Uids.Uid for runtime localization — new localizable strings must use this pattern
-- AppTheme.xaml for global theming — style changes go through ResourceDictionary
-- [Phase 09-02]: Footer moved into ScrollViewer — eliminates fixed bottom bar, matches macOS ccInfo scroll behavior
-- [Phase 09-02]: Padding reorganized: root Grid padding removed, ScrollViewer content gets Padding=16 all sides; InfoBar Visibility bound to IsOpen to suppress phantom height
-- [Phase 10-visual-styles]: AxisLabelBrush now matches SecondaryTextBrush for visual consistency between chart axis labels and timer text
-- [Phase 10-01]: ProgressTrackBrush unified to #72808080 across both themes — semi-transparent gray adapts naturally to dark and light backgrounds
-- [Phase 10-01]: Model badge pill: CornerRadius=999 is the WinUI 3 idiom for fully rounded corners; secondary stats labels use SecondaryTextBrush + FontWeight=Normal
-- [Phase 11-01]: CountdownFormatter uses remaining.Hours (component, 0-23) for Xd Yh display — ensures hours 0-23 not 0-infinity
-- [Phase 11-01]: Icon+label buttons: l:Uids.Uid on inner TextBlock (resolves .Text) not on Button (resolves .Content) — WinUI3Localizer property matching
-
-### v1.1 Phase Grouping Rationale
-
-- **Phase 9 (Layout)**: All 6 LAYOUT requirements touch MainView.xaml structure — ScrollViewer, Grid layout, Separator elements, padding. Grouped because changes are structurally interdependent.
-- **Phase 10 (Visual Styles)**: STYLE-01 through STYLE-05 all modify AppTheme.xaml global styles. TEXT-02/03/04 are pure XAML styling (color, weight, margin) with no C# code — co-located in Statistics section. Grouped to apply all style-only changes in one pass.
-- **Phase 11 (Behavior)**: TEXT-01 requires ViewModel/Helper C# logic (timer format). INTER-01/02 require XAML button templates. INTER-03 requires Storyboard animation logic. All have behavioral side effects beyond pure styling.
-
-### Pending Todos from v1.0
+## Pending Todos from v1.0
 
 1. **Add filled area gradient to 5h chart** — `.planning/todos/pending/2026-03-11-add-filled-area-gradient-to-5h-chart.md`
 2. **Fix 13 failing JsonlServiceTests parameter mismatch** — `.planning/todos/pending/2026-03-17-fix-13-failing-jsonlservicetests-parameter-mismatch.md`
 
-### Blockers/Concerns
+## Known Tech Debt
 
-- WinUI 3 ProgressBar track styling requires control template override — not a simple property (relevant for Phase 10, STYLE-02)
-- Footer scroll behavior may require ScrollViewer restructuring in MainView.xaml (relevant for Phase 9, LAYOUT-05)
-- INTER-03 refresh animation: WinUI 3 Storyboard must use RepeatBehavior="Forever" with completion detection — pattern needs careful implementation to avoid snapping mid-rotation
+- STYLE-04 badge CornerRadius: documented as 999, live value is 11 (visually equivalent)
+- ExportHelper.cs hardcoded isDark:true for chart export axis color (pre-existing)
+- 11-01-SUMMARY glyph value E8FB documented, F3B1 shipped (SUMMARY artifact is stale)

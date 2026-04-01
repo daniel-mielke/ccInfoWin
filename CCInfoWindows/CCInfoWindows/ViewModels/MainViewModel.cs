@@ -29,18 +29,14 @@ public class SubagentDisplayData
 }
 
 /// <summary>
-/// Flat display item for the session ComboBox with activity indicator color.
-/// Wraps a SessionInfo and adds a colored dot (green = active, gray = inactive).
+/// Flat display item for the session ComboBox.
+/// Wraps a SessionInfo and exposes display name and activity state.
 /// </summary>
 public class SessionDisplayItem
 {
-    private static readonly SolidColorBrush ActiveBrush = new(Colors.LimeGreen);
-    private static readonly SolidColorBrush InactiveBrush = new(Colors.Gray);
-
     public required SessionInfo Session { get; init; }
     public required string DisplayName { get; init; }
     public required bool IsActive { get; init; }
-    public Brush StatusColor => IsActive ? ActiveBrush : InactiveBrush;
 }
 
 /// <summary>
@@ -387,7 +383,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             else
             {
                 HasApiError = true;
-                ApiErrorMessage = "API returned no data. Check your session token.";
+                ApiErrorMessage = "API returned empty data. The response body could not be deserialized.";
             }
         }
         catch (Exception ex)

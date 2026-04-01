@@ -103,7 +103,7 @@ public class WebViewBridge : IWebViewBridge
         if (!enqueued)
         {
             _pending.TryRemove(requestId, out _);
-            return null;
+            throw new InvalidOperationException("WebView2 dispatcher queue is unavailable");
         }
 
         // Timeout after 30 seconds
@@ -112,7 +112,7 @@ public class WebViewBridge : IWebViewBridge
         {
             if (_pending.TryRemove(requestId, out var removed))
             {
-                removed.TrySetResult(null);
+                removed.TrySetException(new TimeoutException("Request timed out after 30 seconds"));
             }
         });
 
@@ -142,7 +142,13 @@ public class WebViewBridge : IWebViewBridge
                 return;
             }
 
-            tcs.TrySetResult(status is >= 200 and < 300 ? body : null);
+            if (status is < 200 or >= 300)
+            {
+                tcs.TrySetException(new HttpFetchException(status, body));
+                return;
+            }
+
+            tcs.TrySetResult(body);
         }
         catch (Exception)
         {

@@ -142,7 +142,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
                 return ContextWindowData.Empty;
 
             var totalTokens = ComputeContextTokens(entry);
-            var modelName = entry.Message?.Model;
+            var modelName = ResolveModelName(data.NewestSessionFile, entry);
             var maxTokens = ModelContextLimits.GetMaxContextTokens(modelName);
             var subagentFiles = FindSubagentFilesForNewestSession(data);
             var subagents = BuildSubagentContext(subagentFiles);
@@ -607,6 +607,10 @@ public sealed class JsonlService : IJsonlService, IDisposable
         string.Equals(entry.Type, "assistant", StringComparison.OrdinalIgnoreCase)
         && !entry.IsSidechain;
 
+    private static bool IsSyntheticModel(string? modelName) =>
+        string.Equals(modelName, "<synthetic>", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(modelName, "synthetic", StringComparison.OrdinalIgnoreCase);
+
     private static string BuildDeduplicationKey(JsonlEntry entry) =>
         entry.UniqueHash ?? string.Empty;
 
@@ -642,9 +646,12 @@ public sealed class JsonlService : IJsonlService, IDisposable
         return result;
     }
 
+    private const int SubagentActivityWindowSeconds = 30;
+
     private static IReadOnlyList<SubagentContextData> BuildSubagentContext(List<string> subagentFiles)
     {
         var result = new List<SubagentContextData>();
+        var cutoff = DateTimeOffset.UtcNow.AddSeconds(-SubagentActivityWindowSeconds);
 
         foreach (var file in subagentFiles)
         {
@@ -661,6 +668,11 @@ public sealed class JsonlService : IJsonlService, IDisposable
                     continue;
 
                 var lastEntry = entries[^1];
+                var lastActivity = lastEntry.Timestamp ?? DateTimeOffset.MinValue;
+
+                if (lastActivity < cutoff)
+                    continue;
+
                 var totalTokens = ComputeContextTokens(lastEntry);
                 var modelName = lastEntry.Message?.Model;
                 var maxTokens = ModelContextLimits.GetMaxContextTokens(modelName);
@@ -671,7 +683,8 @@ public sealed class JsonlService : IJsonlService, IDisposable
                     AgentId = agentId,
                     TotalTokens = totalTokens,
                     MaxTokens = maxTokens,
-                    ModelName = modelName
+                    ModelName = modelName,
+                    LastActivity = lastActivity
                 });
             }
             catch (Exception ex)
@@ -697,6 +710,19 @@ public sealed class JsonlService : IJsonlService, IDisposable
         return ParseJsonlEntries(lines)
             .Where(IsRelevantAssistantEntry)
             .LastOrDefault();
+    }
+
+    private static string? ResolveModelName(string filePath, JsonlEntry lastEntry)
+    {
+        var candidate = lastEntry.Message?.Model;
+        if (!IsSyntheticModel(candidate))
+            return candidate;
+
+        var lines = ReadTailLines(filePath);
+        return ParseJsonlEntries(lines)
+            .Where(IsRelevantAssistantEntry)
+            .Select(e => e.Message?.Model)
+            .LastOrDefault(m => !IsSyntheticModel(m));
     }
 
     private static long ComputeContextTokens(JsonlEntry entry)

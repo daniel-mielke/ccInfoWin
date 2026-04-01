@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A Windows 11 desktop application for real-time monitoring of Claude Code usage limits. Port of the macOS app [ccInfo](https://github.com/stefanlange/ccInfo) (v1.7.1) by Stefan Lange, adapted for Windows with WinUI 3. Shipped as v1.0 with full feature parity across all 10 functional areas.
+A Windows 11 desktop application for real-time monitoring of Claude Code usage limits. Port of the macOS app [ccInfo](https://github.com/stefanlange/ccInfo) (v1.7.1) by Stefan Lange, adapted for Windows with WinUI 3. Shipped as v1.0 with full feature parity across all 10 functional areas, and v1.1 with UI polish matching the updated macOS reference design.
 
 Target audience: Developers with active Claude Pro/Max subscriptions using Claude Code on Windows.
 
@@ -27,37 +27,18 @@ Developers can see their Claude usage limits (5-hour window, weekly quota, conte
 - ✓ Dark mode and light mode with manual toggle (default: dark) — v1.0
 - ✓ Localization (German + English, follows system language) — v1.0
 - ✓ Open source release on GitHub with Inno Setup installer — v1.0
-
-## Current Milestone: v1.1 UI Polish & UX Improvements
-
-**Goal:** Refine the visual design and interaction patterns to match the updated macOS reference app, improving layout consistency, visual hierarchy, and interaction quality.
-
-**Target features:**
-- Layout restructuring (section order, padding, separators)
-- Visual style unification (progress bars, badges, dropdown, tabs)
-- Text/formatting improvements (timer format, statistics labels)
-- Interaction polish (refresh animation, logout button styling)
+- ✓ Visually consistent layout: equal 16px padding, Active Session header, correct section order, scrollable footer, Statistics separator — v1.1
+- ✓ Unified visual style: 6px progress bars with semi-transparent gray track, rounded ComboBox, pill model badges, matching chart axis colors, consistent Statistics label styling — v1.1
+- ✓ Timer formatting: values ≥24h displayed as "Xd Yh" with localized units — v1.1
+- ✓ Interaction polish: logout button red with icon, login button with icon, smooth refresh animation completing full 360° rotation before stopping — v1.1
 
 ### Active
 
-- [ ] LAYOUT-01: Vertikales Padding der Haupt-App entspricht dem horizontalen Padding
-- [ ] LAYOUT-02: Label „Aktive Sitzung" über dem Projekt-Dropdown (DE/EN lokalisiert)
-- [ ] LAYOUT-03: Trennlinie unterhalb des Projekt-Dropdowns
-- [ ] LAYOUT-04: Sektion „Kontextfenster" zwischen „Aktive Sitzung" und „5-Stunden-Fenster"
-- [ ] LAYOUT-05: Footer nicht fixiert, am Ende des Scroll-Inhalts mit Trennlinie
-- [ ] LAYOUT-06: Trennlinie zwischen „Modelle" und „Eingabe" in Statistiken
-- [ ] STYLE-01: Alle ProgressBars 6 px Höhe
-- [ ] STYLE-02: ProgressBar-Hintergrundfarbe rgba(128,128,128,0.45)
-- [ ] STYLE-03: Dropdown und Tab-Leiste: gleiche Hintergrundfarbe + CornerRadius ≥ 8 px
-- [ ] STYLE-04: Modell-Badges als Pill-Shape (CornerRadius=999)
-- [ ] STYLE-05: Achsenbeschriftungen 5h-Chart in Timer-Text-Farbe
-- [ ] TEXT-01: Timer ab ≥ 24h im Format „Xd Yh"
-- [ ] TEXT-02: Labels „Gesamt" und „Kosten (API-Äqu.)" in gleicher Farbe wie andere Labels
-- [ ] TEXT-03: Schriftstärke „Kosten (API-Äqu.)" wie „Cache-Lesen"
-- [ ] TEXT-04: Abstand vor „Gesamt" angeglichen
-- [ ] INTER-01: Abmelden-Button: rot, weiße Schrift, Logout-Icon
-- [ ] INTER-02: Login-Button: Login-Icon
-- [ ] INTER-03: Refresh-Icon 360°-Rotation, API-gesteuert
+- [ ] V2-01: System tray icon with quick status overview
+- [ ] V2-02: Keyboard shortcuts for common actions
+- [ ] V2-03: Configurable color thresholds for progress bars
+- [ ] V2-04: Historical usage trends (daily/weekly graphs)
+- [ ] V2-05: Migration to .NET 10 LTS when WinAppSDK confirms compatibility
 
 ### Out of Scope
 
@@ -66,14 +47,24 @@ Developers can see their Claude usage limits (5-hour window, weekly quota, conte
 - macOS-specific integrations (Keychain, FSEvents, Share Sheet) — replaced by Windows equivalents
 - Separate settings window — settings displayed in-app (same window, frame navigation)
 - Transparent/blur background — opaque background by design
+- ML-based usage predictions — over-engineered for a desktop widget
+- Multi-account support — adds auth/UI complexity, target audience is single developer
+- Mobile companion app — Claude Code is a desktop tool
+- JSON/CSV data export — niche feature, chart PNG export covers sharing use case
+- SQLite database — overkill for few KB of data, JSON files sufficient
 
 ## Context
 
 ### Current State
 
-Shipped v1.0 with 6,244 LOC (5,417 C# + 827 XAML) across 75 commits in 9 days.
+Shipped v1.1 with UI polish across 3 phases (41 commits, ~1,470 net LOC changes from v1.0 baseline).
+Full v1.1 stats: 3 phases, 6 plans, 10 tasks, 18/18 requirements satisfied.
 Tech stack: C# 13 / .NET 9 / WinUI 3 (Windows App SDK 1.8) / Win2D / WebView2 / CommunityToolkit.Mvvm 8.4.
-Known tech debt: 13 pre-existing unit test failures in JsonlServiceTests (parameter naming mismatch, production unaffected).
+
+**Known tech debt:**
+- 13 pre-existing unit test failures in JsonlServiceTests (parameter naming mismatch, production unaffected)
+- STYLE-04 spec drift: CornerRadius=999 documented, CornerRadius=11 in live code (visually equivalent at 22px badge height)
+- ExportHelper.cs line 245 hardcodes isDark:true for chart export (pre-existing, not a v1.1 regression)
 
 ### Reference Implementation
 
@@ -136,6 +127,10 @@ License: MIT
 | JSON storage over SQLite | Data volumes tiny (few KB), no relational queries | ✓ Good — trivial I/O |
 | Full v1 scope (all 10 areas) | Complete feature parity with macOS original is the goal | ✓ Good — 67/67 requirements met |
 | l:Uids.Uid for runtime localization | x:Uid only works at XAML load time, not runtime language switch | ✓ Good — DE/EN switch works |
+| AppTheme.xaml for global theming (v1.1) | Single source of truth for visual styles; swap without touching view code | ✓ Good — all style changes via ResourceDictionary |
+| CornerRadius=11 for model badges (v1.1) | CornerRadius=999 causes WinUI 3 pill rendering issues at 22px height | ⚠️ Revisit — spec says 999, live is 11; visually equivalent now |
+| _stopOnComplete flag for refresh animation (v1.1) | WinUI 3 Storyboard must complete current rotation before Stop() — no built-in API | ✓ Good — smooth completion without snap |
+| Footer into ScrollViewer (v1.1) | Fixed footer created dead space; macOS reference scrolls footer with content | ✓ Good — matches macOS behavior |
 
 ---
-*Last updated: 2026-03-19 after v1.1 milestone start*
+*Last updated: 2026-04-01 after v1.1 milestone*
