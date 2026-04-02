@@ -30,25 +30,29 @@ public static class ExportHelper
         public static readonly Color ChartAreaColor = Color.FromArgb(255, 44, 44, 46);
         public static readonly Color LabelColor = Color.FromArgb(255, 142, 142, 147);
         public static readonly Color WatermarkColor = Color.FromArgb(255, 99, 99, 102);
-        public static readonly Color PercentageColor = Color.FromArgb(255, 255, 255, 255);
+        public static readonly Color SectionLabelColor = Color.FromArgb(255, 96, 165, 250);
+        public static readonly Color PrimaryTextColor = Color.FromArgb(255, 248, 248, 248);
 
-        public const float SectionLabelTopMargin = 12f;
-        public const float PercentageRowTopMargin = 8f;
-        public const float ChartAreaTopMargin = 8f;
-        public const float ChartAreaHeight = 120f;
+        public const float HeaderTopMargin = 12f;
+        public const float HeaderHorizontalPadding = 12f;
+        public const float ChartTopMargin = 18f;
+        public const float ChartAreaHeight = 140f;
         public const float ChartAreaHorizontalPadding = 8f;
-        public const float WatermarkBottomMargin = 8f;
+        public const float WatermarkBottomMargin = 6f;
         public const float WatermarkRightMargin = 8f;
+
+        public const float PercentageFontSize = 32f;
+        public const float ResetInLabelFontSize = 9f;
+        public const float CountdownFontSize = 16f;
+        public const float SectionLabelFontSize = 11f;
+        public const float WatermarkFontSize = 11f;
 
         public const string SectionLabel = "5-STUNDEN-FENSTER";
         public const string WatermarkText = "CCINFO";
-
-        public const float SectionLabelFontSize = 11f;
-        public const float PercentageFontSize = 28f;
-        public const float CountdownFontSize = 13f;
-        public const float WatermarkFontSize = 11f;
+        public const string ResetInText = "RESET IN";
 
         public const float ChartAreaCornerRadius = 8f;
+        public const float ExportCornerRadius = 20f;
     }
 
     /// <summary>
@@ -59,7 +63,8 @@ public static class ExportHelper
         IReadOnlyList<UsageHistoryPoint> points,
         DateTimeOffset? windowStart,
         string percentageText,
-        string countdownText)
+        string countdownText,
+        double utilization)
     {
         var device = CanvasDevice.GetSharedDevice();
         var renderTarget = new CanvasRenderTarget(
@@ -71,14 +76,8 @@ public static class ExportHelper
         using var session = renderTarget.CreateDrawingSession();
 
         DrawBackground(session);
-        DrawSectionLabel(session);
 
-        var sectionLabelBottom = ExportConstants.SectionLabelTopMargin + ExportConstants.SectionLabelFontSize;
-        var percentageRowTop = sectionLabelBottom + ExportConstants.PercentageRowTopMargin;
-        DrawPercentageRow(session, percentageText, countdownText, percentageRowTop);
-
-        var percentageRowBottom = percentageRowTop + ExportConstants.PercentageFontSize;
-        var chartAreaTop = percentageRowBottom + ExportConstants.ChartAreaTopMargin;
+        var chartAreaTop = DrawHeader(session, percentageText, countdownText, utilization);
         DrawChartArea(session, device, points, windowStart, chartAreaTop);
 
         DrawWatermark(session);
@@ -94,9 +93,10 @@ public static class ExportHelper
         IReadOnlyList<UsageHistoryPoint> points,
         DateTimeOffset? windowStart,
         string percentageText,
-        string countdownText)
+        string countdownText,
+        double utilization)
     {
-        using var renderTarget = RenderChartToPng(points, windowStart, percentageText, countdownText);
+        using var renderTarget = RenderChartToPng(points, windowStart, percentageText, countdownText, utilization);
 
         var picker = new Microsoft.Windows.Storage.Pickers.FileSavePicker(appWindow.Id);
         picker.SuggestedFileName = $"ccinfo-{DateTimeOffset.Now:yyyy-MM-dd-HHmm}";
@@ -119,9 +119,10 @@ public static class ExportHelper
         IReadOnlyList<UsageHistoryPoint> points,
         DateTimeOffset? windowStart,
         string percentageText,
-        string countdownText)
+        string countdownText,
+        double utilization)
     {
-        using var renderTarget = RenderChartToPng(points, windowStart, percentageText, countdownText);
+        using var renderTarget = RenderChartToPng(points, windowStart, percentageText, countdownText, utilization);
 
         var stream = new InMemoryRandomAccessStream();
         await renderTarget.SaveAsync(stream, CanvasBitmapFileFormat.Png);
@@ -136,61 +137,83 @@ public static class ExportHelper
 
     private static void DrawBackground(CanvasDrawingSession session)
     {
-        session.Clear(ExportConstants.BackgroundColor);
+        session.Clear(Color.FromArgb(0, 0, 0, 0));
+        var bounds = new Windows.Foundation.Rect(0, 0, ExportConstants.ExportWidth, ExportConstants.ExportHeight);
+        session.FillRoundedRectangle(bounds, ExportConstants.ExportCornerRadius, ExportConstants.ExportCornerRadius, ExportConstants.BackgroundColor);
     }
 
-    private static void DrawSectionLabel(CanvasDrawingSession session)
-    {
-        using var format = new CanvasTextFormat
-        {
-            FontFamily = "Segoe UI Variable",
-            FontSize = ExportConstants.SectionLabelFontSize,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            HorizontalAlignment = CanvasHorizontalAlignment.Center,
-            VerticalAlignment = CanvasVerticalAlignment.Top
-        };
-
-        session.DrawText(
-            ExportConstants.SectionLabel,
-            ExportConstants.ExportWidth / 2f,
-            ExportConstants.SectionLabelTopMargin,
-            ExportConstants.LabelColor,
-            format);
-    }
-
-    private static void DrawPercentageRow(
+    /// <summary>
+    /// Draws the header block (percentage, reset-in, section label) and returns the Y position
+    /// where the chart area should start.
+    /// Layout (top to bottom):
+    ///   Row 1: [Percentage%  left]  [RESET IN  right]
+    ///   Row 2:                      [countdown right]
+    ///   Row 3: [5-STUNDEN-FENSTER left]
+    ///   gap
+    ///   Chart
+    /// </summary>
+    private static float DrawHeader(
         CanvasDrawingSession session,
         string percentageText,
         string countdownText,
-        float topY)
+        double utilization)
     {
+        var percentageColor = ChartColors.GetZoneColor(utilization, isDark: true);
+        var leftX = ExportConstants.HeaderHorizontalPadding;
+        var rightX = ExportConstants.ExportWidth - ExportConstants.HeaderHorizontalPadding;
+        var currentY = ExportConstants.HeaderTopMargin;
+
+        // Row 1 left: large percentage
         using var percentFormat = new CanvasTextFormat
         {
             FontFamily = "Segoe UI Variable",
             FontSize = ExportConstants.PercentageFontSize,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            FontWeight = Microsoft.UI.Text.FontWeights.Bold,
             HorizontalAlignment = CanvasHorizontalAlignment.Left,
             VerticalAlignment = CanvasVerticalAlignment.Top
         };
+        session.DrawText(percentageText, leftX, currentY, percentageColor, percentFormat);
 
+        // Row 1 right: "RESET IN" label
+        using var resetLabelFormat = new CanvasTextFormat
+        {
+            FontFamily = "Segoe UI Variable",
+            FontSize = ExportConstants.ResetInLabelFontSize,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            HorizontalAlignment = CanvasHorizontalAlignment.Right,
+            VerticalAlignment = CanvasVerticalAlignment.Top,
+            WordWrapping = CanvasWordWrapping.NoWrap
+        };
+        session.DrawText(ExportConstants.ResetInText, rightX, currentY, ExportConstants.LabelColor, resetLabelFormat);
+
+        // Row 2 right: countdown value in white
+        var countdownTop = currentY + ExportConstants.ResetInLabelFontSize + 2f;
         using var countdownFormat = new CanvasTextFormat
         {
             FontFamily = "Segoe UI Variable",
             FontSize = ExportConstants.CountdownFontSize,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
             HorizontalAlignment = CanvasHorizontalAlignment.Right,
-            VerticalAlignment = CanvasVerticalAlignment.Bottom
+            VerticalAlignment = CanvasVerticalAlignment.Top,
+            WordWrapping = CanvasWordWrapping.NoWrap
         };
+        session.DrawText(countdownText, rightX, countdownTop, ExportConstants.PrimaryTextColor, countdownFormat);
 
-        const float horizontalPadding = 12f;
-        session.DrawText(percentageText, horizontalPadding, topY, ExportConstants.PercentageColor, percentFormat);
+        // Row 3 left: section label in accent blue, below the percentage number
+        var sectionLabelTop = currentY + ExportConstants.PercentageFontSize + 15f;
+        using var sectionLabelFormat = new CanvasTextFormat
+        {
+            FontFamily = "Segoe UI Variable",
+            FontSize = ExportConstants.SectionLabelFontSize,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            HorizontalAlignment = CanvasHorizontalAlignment.Left,
+            VerticalAlignment = CanvasVerticalAlignment.Top,
+            WordWrapping = CanvasWordWrapping.NoWrap
+        };
+        session.DrawText(ExportConstants.SectionLabel, leftX, sectionLabelTop, ExportConstants.SectionLabelColor, sectionLabelFormat);
 
-        var countdownBottom = topY + ExportConstants.PercentageFontSize;
-        session.DrawText(
-            countdownText,
-            ExportConstants.ExportWidth - horizontalPadding,
-            countdownBottom,
-            ExportConstants.LabelColor,
-            countdownFormat);
+        var chartAreaTop = sectionLabelTop + ExportConstants.SectionLabelFontSize + ExportConstants.ChartTopMargin;
+        return chartAreaTop;
     }
 
     private static void DrawChartArea(

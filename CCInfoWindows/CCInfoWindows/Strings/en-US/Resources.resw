@@ -21,6 +21,9 @@
   <data name="SectionHeaderFiveHour.Text" xml:space="preserve">
     <value>5-HOUR WINDOW</value>
   </data>
+  <data name="ResetInLabel.Text" xml:space="preserve">
+    <value>RESET IN</value>
+  </data>
   <data name="SectionHeaderWeekly.Text" xml:space="preserve">
     <value>WEEKLY LIMIT</value>
   </data>

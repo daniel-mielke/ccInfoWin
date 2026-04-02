@@ -798,14 +798,14 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     {
         var appWindow = App.MainWindow?.AppWindow;
         if (appWindow == null) return;
-        await ExportHelper.ExportChartAsPngAsync(appWindow, UsageHistoryPoints, FiveHourWindowStart, FiveHourPercentageText, FiveHourCountdown);
+        await ExportHelper.ExportChartAsPngAsync(appWindow, UsageHistoryPoints, FiveHourWindowStart, FiveHourPercentageText, FiveHourCountdown, FiveHourUtilization);
     }
 
     [RelayCommand]
     private async Task CopyChartToClipboard()
     {
         if (_dispatcherQueue == null) return;
-        await ExportHelper.CopyChartToClipboardAsync(_dispatcherQueue, UsageHistoryPoints, FiveHourWindowStart, FiveHourPercentageText, FiveHourCountdown);
+        await ExportHelper.CopyChartToClipboardAsync(_dispatcherQueue, UsageHistoryPoints, FiveHourWindowStart, FiveHourPercentageText, FiveHourCountdown, FiveHourUtilization);
     }
 
     [RelayCommand]
