@@ -190,6 +190,15 @@
   <data name="SettingsAutostartLabel.Text" xml:space="preserve">
     <value>Autostart:</value>
   </data>
+  <data name="SettingsResetWindowSizeLabel.Text" xml:space="preserve">
+    <value>Fenstergröße:</value>
+  </data>
+  <data name="SettingsResetWindowSizeButton.Content" xml:space="preserve">
+    <value>Zurücksetzen</value>
+  </data>
+  <data name="SettingsResetWindowSizeButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Fenster auf Standardgröße zurücksetzen</value>
+  </data>
   <data name="SettingsLanguageLabel.Text" xml:space="preserve">
     <value>Sprache:</value>
   </data>

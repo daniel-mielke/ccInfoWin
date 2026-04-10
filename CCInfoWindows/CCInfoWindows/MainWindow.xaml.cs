@@ -15,7 +15,7 @@ namespace CCInfoWindows;
 /// Sets initial size, minimum constraints, persists window state,
 /// and applies theme changes via ThemeChangedMessage.
 /// </summary>
-public sealed partial class MainWindow : Window, IRecipient<ThemeChangedMessage>
+public sealed partial class MainWindow : Window, IRecipient<ThemeChangedMessage>, IRecipient<ResetWindowSizeMessage>
 {
     /// <summary>
     /// WebView2 User Data Folder path for cookie/cache isolation.
@@ -42,6 +42,7 @@ public sealed partial class MainWindow : Window, IRecipient<ThemeChangedMessage>
         AppWindow.Closing += OnClosing;
 
         WeakReferenceMessenger.Default.Register<ThemeChangedMessage>(this);
+        WeakReferenceMessenger.Default.Register<ResetWindowSizeMessage>(this);
     }
 
     /// <summary>
@@ -57,17 +58,31 @@ public sealed partial class MainWindow : Window, IRecipient<ThemeChangedMessage>
         }
     }
 
+    /// <summary>
+    /// Resets the window to the default size when triggered via settings.
+    /// </summary>
+    public void Receive(ResetWindowSizeMessage message)
+    {
+        AppWindow.Resize(WindowHelper.GetDefaultWindowSize(GetDpiScale()));
+    }
+
     private void ConfigureWindow()
     {
-        // Set initial size (340x900)
-        var defaultSize = WindowHelper.GetDefaultWindowSize();
+        var defaultSize = WindowHelper.GetDefaultWindowSize(GetDpiScale());
         AppWindow.Resize(defaultSize);
 
         // Set minimum size via OverlappedPresenter
         var presenter = OverlappedPresenter.Create();
-        presenter.PreferredMinimumWidth = 340;
-        presenter.PreferredMinimumHeight = 900;
+        presenter.PreferredMinimumWidth = 300;
+        presenter.PreferredMinimumHeight = 300;
         AppWindow.SetPresenter(presenter);
+    }
+
+    private double GetDpiScale()
+    {
+        return Content is FrameworkElement fe && fe.XamlRoot != null
+            ? fe.XamlRoot.RasterizationScale
+            : 1.0;
     }
 
     private void RestoreWindowState()

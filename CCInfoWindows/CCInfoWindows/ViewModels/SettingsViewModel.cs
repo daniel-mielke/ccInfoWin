@@ -154,6 +154,12 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void ResetWindowSize()
+    {
+        WeakReferenceMessenger.Default.Send(new ResetWindowSizeMessage());
+    }
+
+    [RelayCommand]
     private void Logout()
     {
         _credentialService.ClearCredentials();

@@ -196,7 +196,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     // --- Statistics (STATISTIKEN section) ---
 
     [ObservableProperty]
-    private int _selectedTabIndex;
+    private int _selectedTabIndex = (int)TimePeriod.Today;
 
     [ObservableProperty]
     private bool _isAggregating;
@@ -737,8 +737,10 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             });
         }
 
-        if (SelectedTabIndex == 0) // Session tab
+        if (SelectedTabIndex == (int)TimePeriod.Session)
             UpdateStatisticsFromSession();
+        else
+            _ = AggregateStatisticsAsync((TimePeriod)SelectedTabIndex);
     }
 
     private static SolidColorBrush ParseHexBrush(string hex)

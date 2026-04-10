@@ -9,6 +9,9 @@ namespace CCInfoWindows.Helpers;
 /// </summary>
 public static class WindowHelper
 {
+    private const int DefaultWidthDips = 360;
+    private const int DefaultHeightDips = 980;
+
     /// <summary>
     /// Validates that a saved window position is visible on at least one connected display.
     /// Returns false if the window would be entirely off-screen (e.g., after monitor disconnect).
@@ -28,10 +31,13 @@ public static class WindowHelper
     }
 
     /// <summary>
-    /// Returns the default window size (360x900 pixels).
+    /// Returns the default window size (360x980 DIPs) scaled to physical pixels for the given DPI.
+    /// AppWindow.Resize() requires physical pixels, not DIPs.
     /// </summary>
-    public static SizeInt32 GetDefaultWindowSize()
+    public static SizeInt32 GetDefaultWindowSize(double dpiScale = 1.0)
     {
-        return new SizeInt32(360, 900);
+        return new SizeInt32(
+            (int)(DefaultWidthDips * dpiScale),
+            (int)(DefaultHeightDips * dpiScale));
     }
 }

@@ -140,6 +140,20 @@
                         <ComboBoxItem Content="English" />
                     </ComboBox>
                 </Grid>
+
+                <!-- Reset window size row -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock l:Uids.Uid="SettingsResetWindowSizeLabel"
+                               FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
+                               VerticalAlignment="Center" />
+                    <Button Grid.Column="1"
+                            l:Uids.Uid="SettingsResetWindowSizeButton"
+                            Command="{x:Bind ViewModel.ResetWindowSizeCommand}" />
+                </Grid>
             </StackPanel>
         </StackPanel>
 
