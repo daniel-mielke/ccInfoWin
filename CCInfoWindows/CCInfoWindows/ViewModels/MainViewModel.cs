@@ -687,9 +687,12 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         ApplyStatistics(stats);
     }
 
-    private async Task AggregateStatisticsAsync(TimePeriod period, CancellationToken ct = default)
+    private async Task AggregateStatisticsAsync(TimePeriod period, CancellationToken ct = default, bool showLoading = true)
     {
-        IsAggregating = true;
+        if (showLoading)
+        {
+            IsAggregating = true;
+        }
         try
         {
             await _pricingService.EnsurePricesLoadedAsync();
@@ -708,7 +711,17 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         }
         finally
         {
-            _dispatcherQueue?.TryEnqueue(() => IsAggregating = false);
+            if (showLoading)
+            {
+                if (_dispatcherQueue != null)
+                {
+                    _dispatcherQueue.TryEnqueue(() => IsAggregating = false);
+                }
+                else
+                {
+                    IsAggregating = false;
+                }
+            }
         }
     }
 
@@ -767,7 +780,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             _statisticsCts?.Cancel();
             var cts = new CancellationTokenSource();
             _statisticsCts = cts;
-            _ = AggregateStatisticsAsync((TimePeriod)SelectedTabIndex, cts.Token);
+            _ = AggregateStatisticsAsync((TimePeriod)SelectedTabIndex, cts.Token, showLoading: false);
         }
     }
 
