@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CCInfoWindows.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
@@ -23,8 +24,15 @@ public sealed partial class LoginView : Page
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        // NavigationCompleted handler is registered inside InitializeWebViewAsync
-        // BEFORE Navigate() is called, to avoid race condition with cached sessions
-        await ViewModel.InitializeWebViewAsync(LoginWebView);
+        try
+        {
+            // NavigationCompleted handler is registered inside InitializeWebViewAsync
+            // BEFORE Navigate() is called, to avoid race condition with cached sessions
+            await ViewModel.InitializeWebViewAsync(LoginWebView);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[LoginView] OnLoaded failed: {ex.Message}");
+        }
     }
 }

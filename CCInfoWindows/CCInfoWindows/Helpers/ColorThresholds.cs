@@ -6,11 +6,15 @@ namespace CCInfoWindows.Helpers;
 /// </summary>
 public static class ColorThresholds
 {
+    private const double GreenYellowThreshold = 0.50;
+    private const double YellowOrangeThreshold = 0.75;
+    private const double OrangeRedThreshold = 0.90;
+
     public static string GetThresholdKey(double utilization) => utilization switch
     {
-        < 0.50 => "ProgressGreenBrush",
-        < 0.75 => "ProgressYellowBrush",
-        < 0.90 => "ProgressOrangeBrush",
+        < GreenYellowThreshold => "ProgressGreenBrush",
+        < YellowOrangeThreshold => "ProgressYellowBrush",
+        < OrangeRedThreshold => "ProgressOrangeBrush",
         _ => "ProgressRedBrush"
     };
 }

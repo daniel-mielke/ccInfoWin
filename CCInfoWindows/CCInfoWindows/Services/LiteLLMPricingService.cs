@@ -19,6 +19,7 @@ public sealed class LiteLLMPricingService : IPricingService
     private const int CacheValidHours = 12;
     private const string AnthropicProvider = "anthropic";
     private const string EmbeddedResourceName = "CCInfoWindows.Resources.fallback-prices.json";
+    private const int MaxPricingJsonBytes = 10 * 1024 * 1024; // 10 MB safety limit
 
     private readonly HttpClient _httpClient;
     private readonly string _cacheDirectory;
@@ -62,6 +63,9 @@ public sealed class LiteLLMPricingService : IPricingService
         try
         {
             var json = await _httpClient.GetStringAsync(PricingUrl);
+            if (json.Length > MaxPricingJsonBytes)
+                throw new InvalidDataException($"Pricing JSON exceeds {MaxPricingJsonBytes} bytes safety limit");
+
             ParseAndStore(json);
             SaveToLocalCache(json);
             _source = PricingSource.Live;

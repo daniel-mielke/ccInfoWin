@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text.Json;
 using CCInfoWindows.Services.Interfaces;
 using Microsoft.UI.Dispatching;
@@ -50,8 +51,15 @@ public class WebViewBridge : IWebViewBridge
         }
     }
 
+    private const string AllowedUrlPrefix = "https://claude.ai";
+
     public async Task<string?> FetchJsonAsync(string url)
     {
+        if (!url.StartsWith(AllowedUrlPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException($"URL must start with {AllowedUrlPrefix}", nameof(url));
+        }
+
         if (_coreWebView is null || _dispatcherQueue is null)
         {
             return null;
@@ -61,35 +69,46 @@ public class WebViewBridge : IWebViewBridge
         var tcs = new TaskCompletionSource<string?>();
         _pending[requestId] = tcs;
 
+        // JS-safe escape: JsonSerializer.Serialize produces a quoted, escaped string literal
+        var safeUrl = JsonSerializer.Serialize(url);
+        var safeRequestId = JsonSerializer.Serialize(requestId);
+
         // Inject JS that does fetch() and posts result back via window.chrome.webview.postMessage.
         // Cannot use ExecuteScriptAsync with async/await JS — it returns the Promise object, not the resolved value.
-        var script = $$"""
-            (function() {
-                fetch('{{url}}', { credentials: 'include' })
-                    .then(function(r) {
-                        return r.text().then(function(body) {
-                            window.chrome.webview.postMessage(JSON.stringify({
-                                id: '{{requestId}}',
-                                status: r.status,
-                                body: body
-                            }));
-                        });
-                    })
-                    .catch(function(e) {
-                        window.chrome.webview.postMessage(JSON.stringify({
-                            id: '{{requestId}}',
-                            status: 0,
-                            body: e.message
-                        }));
-                    });
-            })();
-            """;
+        var script =
+            "(function() {" +
+            $"fetch({safeUrl}, {{ credentials: 'include' }})" +
+            ".then(function(r) {" +
+            "return r.text().then(function(body) {" +
+            "window.chrome.webview.postMessage(JSON.stringify({" +
+            $"id: {safeRequestId}," +
+            "status: r.status," +
+            "body: body" +
+            "}));" +
+            "});" +
+            "})" +
+            ".catch(function(e) {" +
+            "window.chrome.webview.postMessage(JSON.stringify({" +
+            $"id: {safeRequestId}," +
+            "status: 0," +
+            "body: e.message" +
+            "}));" +
+            "});" +
+            "})();";
+
 
         var enqueued = _dispatcherQueue.TryEnqueue(() =>
         {
             try
             {
-                _coreWebView?.ExecuteScriptAsync(script);
+                var asyncOp = _coreWebView?.ExecuteScriptAsync(script);
+                asyncOp?.AsTask().ContinueWith(t =>
+                {
+                    if (t.IsFaulted && _pending.TryRemove(requestId, out var faulted))
+                    {
+                        faulted.TrySetException(t.Exception!.InnerException!);
+                    }
+                }, TaskScheduler.Default);
             }
             catch (Exception)
             {
@@ -108,7 +127,7 @@ public class WebViewBridge : IWebViewBridge
 
         // Timeout after 30 seconds
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        cts.Token.Register(() =>
+        using var reg = cts.Token.Register(() =>
         {
             if (_pending.TryRemove(requestId, out var removed))
             {

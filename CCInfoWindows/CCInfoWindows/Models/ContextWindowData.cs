@@ -31,7 +31,7 @@ public record ContextWindowData
     public static readonly ContextWindowData Empty = new()
     {
         TotalTokens = 0,
-        MaxTokens = 200_000,
+        MaxTokens = ModelContextLimits.DefaultContextLimit,
         ModelName = null,
         ShouldWarnAutocompact = false,
         Subagents = []

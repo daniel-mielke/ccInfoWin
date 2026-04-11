@@ -11,10 +11,12 @@ public class CredentialService : ICredentialService
 {
     private const string CredentialTarget = "CCInfoWindows/claude-session";
     private const string OrgCredentialTarget = "CCInfoWindows/claude-org";
+    private const string SessionKeyUsername = "sessionKey";
+    private const string OrgIdUsername = "orgId";
 
     public void SaveSessionToken(string token)
     {
-        var cred = new NetworkCredential("sessionKey", token);
+        var cred = new NetworkCredential(SessionKeyUsername, token);
         CredentialManager.SaveCredentials(CredentialTarget, cred);
     }
 
@@ -47,7 +49,7 @@ public class CredentialService : ICredentialService
 
     public void SaveOrganizationId(string orgId)
     {
-        var cred = new NetworkCredential("orgId", orgId);
+        var cred = new NetworkCredential(OrgIdUsername, orgId);
         CredentialManager.SaveCredentials(OrgCredentialTarget, cred);
     }
 
@@ -55,5 +57,10 @@ public class CredentialService : ICredentialService
     {
         var cred = CredentialManager.GetCredentials(OrgCredentialTarget);
         return cred?.Password;
+    }
+
+    public bool HasValidToken()
+    {
+        return !string.IsNullOrEmpty(GetSessionToken());
     }
 }

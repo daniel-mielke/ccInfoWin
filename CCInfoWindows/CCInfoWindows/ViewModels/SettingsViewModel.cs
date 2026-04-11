@@ -24,6 +24,8 @@ public partial class SettingsViewModel : ObservableObject
     /// </summary>
     public record RefreshOption(string Label, int Seconds);
 
+    private const int DefaultRefreshSeconds = 60;
+
     public List<RefreshOption> RefreshOptions { get; } =
     [
         new("30 Sekunden", 30),
@@ -84,7 +86,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         var settings = _settingsService.LoadSettings();
         _selectedRefreshOption = RefreshOptions.FirstOrDefault(o => o.Seconds == settings.RefreshIntervalSeconds)
-                                 ?? RefreshOptions[1]; // default 60s
+                                 ?? RefreshOptions.First(o => o.Seconds == DefaultRefreshSeconds);
         _isDarkMode = settings.ColorMode != "light"; // default dark
         _selectedThresholdIndex = MapMinutesToThresholdIndex(settings.SessionActivityThresholdMinutes);
         _isAutostart = RegistryHelper.GetAutostart();
@@ -123,7 +125,11 @@ public partial class SettingsViewModel : ObservableObject
         if (value >= 0 && value < LanguageCodes.Length)
         {
             var code = LanguageCodes[value];
-            _ = Localizer.Get().SetLanguage(code);
+            _ = Task.Run(async () =>
+            {
+                try { await Localizer.Get().SetLanguage(code); }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Settings] SetLanguage failed: {ex.Message}"); }
+            });
             var settings = _settingsService.LoadSettings();
             settings.Language = code;
             _settingsService.SaveSettings(settings);

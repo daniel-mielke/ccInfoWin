@@ -3,6 +3,7 @@ using System.Diagnostics;
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Messages;
 using CCInfoWindows.Models;
+using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
 using CCInfoWindows.Views;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -58,8 +59,11 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     private DispatcherQueueTimer? _countdownTimer;
     private int _refreshIntervalSeconds;
     private DispatcherQueue? _dispatcherQueue;
+    private EventHandler? _dataUpdatedHandler;
+    private CancellationTokenSource? _statisticsCts;
 
     private string _updateDownloadUrl = string.Empty;
+    private string _updateVersion = string.Empty;
 
     // --- Update state ---
 
@@ -230,10 +234,9 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     private bool _isRefreshingSessionList;
 
     /// <summary>
-    /// Callback invoked after each data update to trigger Win2D canvas redraw.
-    /// Set by MainView.xaml.cs after the canvas is created.
+    /// Sends a ChartInvalidateMessage to trigger Win2D canvas redraw in MainView.
     /// </summary>
-    public Action? ChartInvalidateCallback { get; set; }
+    private void InvalidateChart() => WeakReferenceMessenger.Default.Send(new ChartInvalidateMessage());
 
     /// <summary>
     /// Start of the current 5-hour window, computed as ResetsAt minus 5 hours.
@@ -301,14 +304,12 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             {
                 _fiveHourResetsAt = history.ResetsAt;
             }
-            ChartInvalidateCallback?.Invoke();
+            InvalidateChart();
         }
 
         // Start JSONL service for local session data
-        _jsonlService.DataUpdated += (s, e) =>
-        {
-            dispatcherQueue.TryEnqueue(RefreshSessionList);
-        };
+        _dataUpdatedHandler = (s, e) => dispatcherQueue.TryEnqueue(RefreshSessionList);
+        _jsonlService.DataUpdated += _dataUpdatedHandler;
 
         IsJsonlScanning = _jsonlService.IsScanning;
 
@@ -322,7 +323,11 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         }
 
         // Load pricing in background — non-blocking, fallback activates on failure
-        _ = _pricingService.EnsurePricesLoadedAsync();
+        _ = Task.Run(async () =>
+        {
+            try { await _pricingService.EnsurePricesLoadedAsync(); }
+            catch (Exception ex) { Debug.WriteLine($"[MainViewModel] Pricing load failed: {ex.Message}"); }
+        });
 
         RefreshSessionList();
 
@@ -386,10 +391,17 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
                 ApiErrorMessage = "API returned empty data. The response body could not be deserialized.";
             }
         }
+        catch (HttpFetchException ex)
+        {
+            HasApiError = true;
+            ApiErrorMessage = $"API request failed (HTTP {ex.StatusCode}).";
+            Debug.WriteLine($"[MainViewModel] PollUsage: {ex.Message}");
+        }
         catch (Exception ex)
         {
             HasApiError = true;
-            ApiErrorMessage = ex.Message;
+            ApiErrorMessage = "API request failed. Please try again.";
+            Debug.WriteLine($"[MainViewModel] PollUsage: {ex.Message}");
         }
         finally
         {
@@ -421,46 +433,40 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
 
         // WOCHENLIMIT = SevenDayOpus (fallback to SevenDay)
         var weeklyWindow = data.SevenDayOpus ?? data.SevenDay;
-        if (weeklyWindow != null)
-        {
-            var util = weeklyWindow.NormalizedUtilization;
-            WeeklyUtilization = util;
-            WeeklyPercentage = Math.Min(util * 100, 100);
-            WeeklyPercentageText = $"{Math.Min(util * 100, 100):0}%";
-            WeeklyCountdown = CountdownFormatter.FormatCountdown(weeklyWindow.ResetsAt);
-            WeeklyResetDate = CountdownFormatter.FormatResetDate(weeklyWindow.ResetsAt);
-            _weeklyResetsAt = weeklyWindow.ResetsAt;
-        }
-        else
-        {
-            WeeklyUtilization = 0;
-            WeeklyPercentage = 0;
-            WeeklyPercentageText = "--";
-            WeeklyCountdown = "--";
-            WeeklyResetDate = "--";
-            _weeklyResetsAt = null;
-        }
+        ApplyWeeklyWindow(weeklyWindow,
+            v => WeeklyUtilization = v, v => WeeklyPercentage = v, v => WeeklyPercentageText = v,
+            v => WeeklyCountdown = v, v => WeeklyResetDate = v, v => _weeklyResetsAt = v);
 
         // SONNET WOCHENLIMIT = SevenDaySonnet
         HasSonnetData = data.SevenDaySonnet != null;
-        if (data.SevenDaySonnet != null)
+        ApplyWeeklyWindow(data.SevenDaySonnet,
+            v => SonnetUtilization = v, v => SonnetPercentage = v, v => SonnetPercentageText = v,
+            v => SonnetCountdown = v, v => SonnetResetDate = v, v => _sonnetResetsAt = v);
+    }
+
+    private static void ApplyWeeklyWindow(
+        UsageWindow? window,
+        Action<double> setUtilization, Action<double> setPercentage, Action<string> setPercentageText,
+        Action<string> setCountdown, Action<string> setResetDate, Action<DateTimeOffset?> setResetsAt)
+    {
+        if (window != null)
         {
-            var util = data.SevenDaySonnet.NormalizedUtilization;
-            SonnetUtilization = util;
-            SonnetPercentage = Math.Min(util * 100, 100);
-            SonnetPercentageText = $"{Math.Min(util * 100, 100):0}%";
-            SonnetCountdown = CountdownFormatter.FormatCountdown(data.SevenDaySonnet.ResetsAt);
-            SonnetResetDate = CountdownFormatter.FormatResetDate(data.SevenDaySonnet.ResetsAt);
-            _sonnetResetsAt = data.SevenDaySonnet.ResetsAt;
+            var util = window.NormalizedUtilization;
+            setUtilization(util);
+            setPercentage(Math.Min(util * 100, 100));
+            setPercentageText($"{Math.Min(util * 100, 100):0}%");
+            setCountdown(CountdownFormatter.FormatCountdown(window.ResetsAt));
+            setResetDate(CountdownFormatter.FormatResetDate(window.ResetsAt));
+            setResetsAt(window.ResetsAt);
         }
         else
         {
-            SonnetUtilization = 0;
-            SonnetPercentage = 0;
-            SonnetPercentageText = "--";
-            SonnetCountdown = "--";
-            SonnetResetDate = "--";
-            _sonnetResetsAt = null;
+            setUtilization(0);
+            setPercentage(0);
+            setPercentageText("--");
+            setCountdown("--");
+            setResetDate("--");
+            setResetsAt(null);
         }
     }
 
@@ -496,7 +502,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         // Set window timestamp BEFORE invalidating chart so FiveHourWindowStart is non-null when draw handler runs
         _fiveHourResetsAt = apiResetsAt;
         UsageHistoryPoints = history.Points.AsReadOnly();
-        ChartInvalidateCallback?.Invoke();
+        InvalidateChart();
     }
 
     private static readonly TimeSpan WindowResetTolerance = TimeSpan.FromMinutes(2);
@@ -535,6 +541,11 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     {
         _pollTimer?.Stop();
         _countdownTimer?.Stop();
+        if (_dataUpdatedHandler is not null)
+        {
+            _jsonlService.DataUpdated -= _dataUpdatedHandler;
+            _dataUpdatedHandler = null;
+        }
         _jsonlService.Stop();
         _updateService.StopPeriodicCheck();
         WeakReferenceMessenger.Default.UnregisterAll(this);
@@ -650,6 +661,8 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
 
     partial void OnSelectedTabIndexChanged(int value)
     {
+        _statisticsCts?.Cancel();
+
         var period = (TimePeriod)value;
         if (period == TimePeriod.Session)
         {
@@ -657,7 +670,9 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         }
         else
         {
-            _ = AggregateStatisticsAsync(period);
+            var cts = new CancellationTokenSource();
+            _statisticsCts = cts;
+            _ = AggregateStatisticsAsync(period, cts.Token);
         }
     }
 
@@ -672,22 +687,28 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         ApplyStatistics(stats);
     }
 
-    private async Task AggregateStatisticsAsync(TimePeriod period)
+    private async Task AggregateStatisticsAsync(TimePeriod period, CancellationToken ct = default)
     {
         IsAggregating = true;
         try
         {
             await _pricingService.EnsurePricesLoadedAsync();
-            var stats = await Task.Run(() => _jsonlService.GetStatistics(period));
-            DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() => ApplyStatistics(stats));
+            ct.ThrowIfCancellationRequested();
+            var stats = await Task.Run(() => _jsonlService.GetStatistics(period), ct);
+            _dispatcherQueue?.TryEnqueue(() => ApplyStatistics(stats));
         }
-        catch
+        catch (OperationCanceledException)
         {
-            DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() => ApplyStatistics(StatisticsSummary.Empty));
+            // Tab switched — discard stale result
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MainViewModel] AggregateStatistics failed: {ex.Message}");
+            _dispatcherQueue?.TryEnqueue(() => ApplyStatistics(StatisticsSummary.Empty));
         }
         finally
         {
-            DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() => IsAggregating = false);
+            _dispatcherQueue?.TryEnqueue(() => IsAggregating = false);
         }
     }
 
@@ -738,9 +759,16 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         }
 
         if (SelectedTabIndex == (int)TimePeriod.Session)
+        {
             UpdateStatisticsFromSession();
+        }
         else
-            _ = AggregateStatisticsAsync((TimePeriod)SelectedTabIndex);
+        {
+            _statisticsCts?.Cancel();
+            var cts = new CancellationTokenSource();
+            _statisticsCts = cts;
+            _ = AggregateStatisticsAsync((TimePeriod)SelectedTabIndex, cts.Token);
+        }
     }
 
     private static SolidColorBrush ParseHexBrush(string hex)
@@ -814,12 +842,14 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     private void OpenUpdateDownload()
     {
         if (string.IsNullOrEmpty(_updateDownloadUrl)) return;
+        if (!_updateDownloadUrl.StartsWith("https://github.com/", StringComparison.OrdinalIgnoreCase)) return;
         Process.Start(new ProcessStartInfo(_updateDownloadUrl) { UseShellExecute = true });
     }
 
     private void OnUpdateAvailable(string version, string downloadUrl)
     {
         _updateDownloadUrl = downloadUrl;
+        _updateVersion = version;
         var dispatcherQueue = _dispatcherQueue ?? DispatcherQueue.GetForCurrentThread();
         dispatcherQueue?.TryEnqueue(() =>
         {
@@ -831,8 +861,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     public void DismissUpdate()
     {
         var settings = _settingsService.LoadSettings();
-        var version = UpdateMessage.Replace("Update v", "").Replace(" verfügbar", "");
-        settings.DismissedUpdateVersion = version;
+        settings.DismissedUpdateVersion = _updateVersion;
         _settingsService.SaveSettings(settings);
         IsUpdateAvailable = false;
     }

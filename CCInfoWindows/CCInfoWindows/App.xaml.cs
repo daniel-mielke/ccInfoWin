@@ -31,22 +31,34 @@ public partial class App : Application
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "CCInfoWindows", "crash.log");
         Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
-        File.AppendAllText(logPath, $"[{DateTime.Now:O}] {e.Exception}\n\n");
+        File.AppendAllText(logPath, $"[{DateTime.Now:O}] {e.Exception.GetType().Name}: {e.Exception.Message}\n{e.Exception.StackTrace}\n\n");
         e.Handled = true;
     }
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
-        Services = ConfigureServices();
+        try
+        {
+            Services = ConfigureServices();
 
-        await InitializeLocalizerAsync();
+            await InitializeLocalizerAsync();
 
-        _window = new MainWindow();
-        MainWindow = _window;
-        _window.Activate();
+            _window = new MainWindow();
+            MainWindow = _window;
+            _window.Activate();
 
-        ApplyPersistedTheme();
-        await RouteOnStartupAsync();
+            ApplyPersistedTheme();
+            await RouteOnStartupAsync();
+        }
+        catch (Exception ex)
+        {
+            var logPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "CCInfoWindows", "crash.log");
+            Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+            File.AppendAllText(logPath, $"[{DateTime.Now:O}] OnLaunched failed: {ex.GetType().Name}: {ex.Message}\n\n");
+            Exit();
+        }
     }
 
     /// <summary>
@@ -92,14 +104,12 @@ public partial class App : Application
     /// <summary>
     /// Checks stored token validity and navigates to MainView or LoginView accordingly.
     /// </summary>
-    private static async Task RouteOnStartupAsync()
+    private static Task RouteOnStartupAsync()
     {
         var navigationService = Services.GetRequiredService<INavigationService>();
-        var mainViewModel = Services.GetRequiredService<MainViewModel>();
+        var credentialService = Services.GetRequiredService<ICredentialService>();
 
-        var isTokenValid = await mainViewModel.ValidateTokenAsync();
-
-        if (isTokenValid)
+        if (credentialService.HasValidToken())
         {
             navigationService.NavigateTo<MainView>();
         }
@@ -107,6 +117,8 @@ public partial class App : Application
         {
             navigationService.NavigateTo<LoginView>();
         }
+
+        return Task.CompletedTask;
     }
 
     private static IServiceProvider ConfigureServices()

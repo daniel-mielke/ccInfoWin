@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CCInfoWindows.Services.Interfaces;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Animation;
@@ -20,6 +21,7 @@ public class NavigationService : INavigationService
 
     public void NavigateTo<TPage>() where TPage : Page
     {
+        Debug.Assert(_frame is not null, "NavigationService.Initialize must be called before NavigateTo");
         _frame?.Navigate(
             typeof(TPage),
             null,

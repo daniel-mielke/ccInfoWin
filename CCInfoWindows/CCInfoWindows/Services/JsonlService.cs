@@ -212,7 +212,6 @@ public sealed class JsonlService : IJsonlService, IDisposable
         _isScanning = true;
 
         LoadCache();
-        SeedSessionDataFromCache();
         RaiseDataUpdated();
 
         await Task.Run(DiscoverSessions);
@@ -789,16 +788,21 @@ public sealed class JsonlService : IJsonlService, IDisposable
     {
         lock (_debounceLock)
         {
-            _debounceTimer?.Dispose();
+            if (_debounceTimer is not null)
+            {
+                // Stop without Dispose to avoid race with executing callback
+                _debounceTimer.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+                _debounceTimer.Dispose();
+            }
             _debounceTimer = new System.Threading.Timer(
-                _ => ProcessFileChangeAsync(e.FullPath),
+                _ => ProcessFileChange(e.FullPath),
                 state: null,
                 dueTime: DebounceMilliseconds,
                 period: System.Threading.Timeout.Infinite);
         }
     }
 
-    private void ProcessFileChangeAsync(string filePath)
+    private void ProcessFileChange(string filePath)
     {
         try
         {
@@ -906,12 +910,6 @@ public sealed class JsonlService : IJsonlService, IDisposable
         {
             Debug.WriteLine($"[JsonlService] Failed to load cache: {ex.Message}");
         }
-    }
-
-    private void SeedSessionDataFromCache()
-    {
-        // The cache file positions allow incremental reads.
-        // Session data will be rebuilt from the actual files during DiscoverSessions.
     }
 
     private void SaveCache()

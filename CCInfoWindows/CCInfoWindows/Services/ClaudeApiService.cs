@@ -14,6 +14,7 @@ public class ClaudeApiService : IClaudeApiService
 {
     private const string BaseUrl = "https://claude.ai";
     private const int MaxAttempts = 3;
+    private const int RetryBaseDelayMs = 1_000;
 
     private readonly IWebViewBridge _bridge;
     private readonly ICredentialService _credentialService;
@@ -50,6 +51,7 @@ public class ClaudeApiService : IClaudeApiService
         var orgId = _credentialService.GetOrganizationId();
         if (orgId is null)
         {
+            // Migration saves the UUID but does NOT retry the current API call — caller waits for next poll cycle
             orgId = await TryMigrateOrgIdAsync(ct);
             if (orgId is null)
             {
@@ -69,6 +71,8 @@ public class ClaudeApiService : IClaudeApiService
             try
             {
                 var responseBody = await _bridge.FetchJsonAsync(url);
+                if (responseBody is null) return null;
+
                 var usage = JsonSerializer.Deserialize<UsageResponse>(responseBody);
 
                 if (usage is not null)
@@ -94,14 +98,14 @@ public class ClaudeApiService : IClaudeApiService
                 lastException = new TimeoutException($"Request timed out on attempt {attempt}/{MaxAttempts}");
                 if (attempt < MaxAttempts)
                 {
-                    await Task.Delay(attempt * 1000, ct);
+                    await Task.Delay(attempt * RetryBaseDelayMs, ct);
                     continue;
                 }
             }
             catch (Exception ex) when (attempt < MaxAttempts)
             {
                 lastException = ex;
-                await Task.Delay(attempt * 1000, ct);
+                await Task.Delay(attempt * RetryBaseDelayMs, ct);
             }
             catch (Exception ex)
             {
@@ -140,8 +144,9 @@ public class ClaudeApiService : IClaudeApiService
             _cachedUsage = usage;
             return usage;
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is JsonException or IOException)
         {
+            // Corrupt or inaccessible cache file — safe to ignore
             return null;
         }
     }

@@ -17,7 +17,7 @@ public partial class LoginViewModel : ObservableObject
 {
     private readonly ICredentialService _credentialService;
     private readonly INavigationService _navigationService;
-    private readonly WebViewBridge _bridge;
+    private readonly IWebViewBridge _bridge;
 
     [ObservableProperty]
     private bool _isLoading;
@@ -31,14 +31,12 @@ public partial class LoginViewModel : ObservableObject
     /// <summary>
     /// User Data Folder path for WebView2 isolation (%LOCALAPPDATA%\CCInfoWindows\WebView2).
     /// </summary>
-    public static string UserDataFolderPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "CCInfoWindows", "WebView2");
+    public static string UserDataFolderPath => Helpers.AppPaths.WebView2UserDataFolder;
 
     public LoginViewModel(
         ICredentialService credentialService,
         INavigationService navigationService,
-        WebViewBridge bridge)
+        IWebViewBridge bridge)
     {
         _credentialService = credentialService;
         _navigationService = navigationService;
@@ -76,7 +74,8 @@ public partial class LoginViewModel : ObservableObject
             }
             catch (Exception retryEx)
             {
-                ErrorMessage = $"WebView2 initialization failed: {retryEx.Message}";
+                ErrorMessage = "WebView2 initialization failed. Please restart the application.";
+                System.Diagnostics.Debug.WriteLine($"[LoginViewModel] WebView2 init: {retryEx.Message}");
                 IsLoading = false;
                 return;
             }
@@ -105,14 +104,30 @@ public partial class LoginViewModel : ObservableObject
 
     private async void HandleSourceChanged(CoreWebView2 sender, CoreWebView2SourceChangedEventArgs args)
     {
-        if (_loginHandled) return;
-        await TryExtractSessionCookieAsync(sender, sender.Source ?? "");
+        try
+        {
+            if (_loginHandled) return;
+            await TryExtractSessionCookieAsync(sender, sender.Source ?? "");
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Login processing failed.";
+            System.Diagnostics.Debug.WriteLine($"[LoginViewModel] HandleSourceChanged: {ex.Message}");
+        }
     }
 
     private async void HandleHistoryChanged(CoreWebView2 sender, object args)
     {
-        if (_loginHandled) return;
-        await TryExtractSessionCookieAsync(sender, sender.Source ?? "");
+        try
+        {
+            if (_loginHandled) return;
+            await TryExtractSessionCookieAsync(sender, sender.Source ?? "");
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Login processing failed.";
+            System.Diagnostics.Debug.WriteLine($"[LoginViewModel] HandleHistoryChanged: {ex.Message}");
+        }
     }
 
     private bool _loginHandled;
@@ -122,8 +137,16 @@ public partial class LoginViewModel : ObservableObject
     /// </summary>
     public async void HandleNavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
     {
-        if (_loginHandled || sender.CoreWebView2 is null) return;
-        await TryExtractSessionCookieAsync(sender.CoreWebView2, sender.CoreWebView2.Source ?? "");
+        try
+        {
+            if (_loginHandled || sender.CoreWebView2 is null) return;
+            await TryExtractSessionCookieAsync(sender.CoreWebView2, sender.CoreWebView2.Source ?? "");
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Login processing failed.";
+            System.Diagnostics.Debug.WriteLine($"[LoginViewModel] HandleNavigationCompleted: {ex.Message}");
+        }
     }
 
     /// <summary>

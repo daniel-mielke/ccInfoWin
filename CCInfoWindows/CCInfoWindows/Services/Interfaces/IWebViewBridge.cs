@@ -19,6 +19,12 @@ public interface IWebViewBridge
     Task<string?> FetchJsonAsync(string url);
 
     /// <summary>
+    /// Binds the bridge to a WebView2 instance that has already navigated to claude.ai.
+    /// Must be called from UI thread after WebView2 initialization.
+    /// </summary>
+    void Initialize(Microsoft.Web.WebView2.Core.CoreWebView2 coreWebView, Microsoft.UI.Dispatching.DispatcherQueue dispatcherQueue);
+
+    /// <summary>
     /// Releases the WebView2 reference and drains all pending requests on logout.
     /// Prevents 30-second ghost hangs from in-flight fetch requests after navigation away.
     /// </summary>

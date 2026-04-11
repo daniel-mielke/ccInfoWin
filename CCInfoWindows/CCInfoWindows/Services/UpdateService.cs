@@ -14,7 +14,7 @@ namespace CCInfoWindows.Services;
 public class UpdateService : IUpdateService
 {
     private const string GitHubApiUrl = "https://api.github.com/repos/daniel-mielke/ccInfoWin/releases/latest";
-    private const int CheckIntervalMs = 3_600_000;
+    private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(1);
 
     private readonly HttpClient _httpClient;
     private readonly ISettingsService _settingsService;
@@ -51,6 +51,9 @@ public class UpdateService : IUpdateService
                 if (remoteVersion <= dismissedVersion) return;
             }
 
+            if (!release.HtmlUrl.StartsWith("https://github.com/", StringComparison.OrdinalIgnoreCase))
+                return;
+
             UpdateAvailable?.Invoke(release.TagName, release.HtmlUrl);
         }
         catch
@@ -62,6 +65,7 @@ public class UpdateService : IUpdateService
     public void StartPeriodicCheck()
     {
         _cancellationTokenSource?.Cancel();
+        _cancellationTokenSource?.Dispose();
         _cancellationTokenSource = new CancellationTokenSource();
         var token = _cancellationTokenSource.Token;
 
@@ -71,6 +75,7 @@ public class UpdateService : IUpdateService
     public void StopPeriodicCheck()
     {
         _cancellationTokenSource?.Cancel();
+        _cancellationTokenSource?.Dispose();
         _cancellationTokenSource = null;
     }
 
@@ -93,7 +98,7 @@ public class UpdateService : IUpdateService
 
     private async Task RunPeriodicCheckLoopAsync(CancellationToken token)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(CheckIntervalMs));
+        using var timer = new PeriodicTimer(CheckInterval);
         while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
         {
             await CheckForUpdateAsync().ConfigureAwait(false);

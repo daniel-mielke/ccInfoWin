@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using CCInfoWindows.Models;
 using CCInfoWindows.Services.Interfaces;
@@ -34,9 +35,9 @@ public class SettingsService : ISettingsService
             var json = File.ReadAllText(SettingsFilePath);
             return JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
         }
-        catch
+        catch (Exception ex)
         {
-            // Corrupt file -- return defaults
+            Debug.WriteLine($"[SettingsService] LoadSettings failed: {ex.Message}");
             return new AppSettings();
         }
     }
@@ -49,9 +50,9 @@ public class SettingsService : ISettingsService
             var json = JsonSerializer.Serialize(settings, JsonOptions);
             File.WriteAllText(SettingsFilePath, json);
         }
-        catch
+        catch (Exception ex)
         {
-            // Best-effort save -- don't crash the app
+            Debug.WriteLine($"[SettingsService] SaveSettings failed: {ex.Message}");
         }
     }
 

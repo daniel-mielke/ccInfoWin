@@ -15,4 +15,9 @@ public interface ICredentialService
     void SaveOrganizationId(string orgId);
 
     string? GetOrganizationId();
+
+    /// <summary>
+    /// Returns true if a session token is stored.
+    /// </summary>
+    bool HasValidToken();
 }
