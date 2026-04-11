@@ -24,6 +24,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
     private const string SubagentsDirectoryName = "subagents";
     private const string AgentFilePattern = "agent-*.jsonl";
     private const string JsonlFilePattern = "*.jsonl";
+    private const long TierBreakpointTokens = 200_000;
 
     // -------------------------------------------------------------------------
     // Internal per-project aggregation (keyed by project directory name)
@@ -291,8 +292,6 @@ public sealed class JsonlService : IJsonlService, IDisposable
         return new DateTimeOffset(date.Date.AddDays(-diff), date.Offset);
     }
 
-    private const long TierBreakpointTokens = 200_000;
-
     private StatisticsSummary AggregateEntryLog(IEnumerable<EntryLogItem> entries)
     {
         long inputTokens = 0;
@@ -302,8 +301,6 @@ public sealed class JsonlService : IJsonlService, IDisposable
         decimal totalCost = 0m;
         bool hasEstimated = false;
         var modelSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        // Cumulative input tracker per model for tiered pricing (matches macOS reference)
         var cumulativeInputByModel = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var logEntry in entries)
@@ -322,41 +319,9 @@ public sealed class JsonlService : IJsonlService, IDisposable
             }
             else
             {
-                var modelKey = logEntry.ModelName ?? "unknown";
-                var pricing = logEntry.ModelName is not null
-                    ? _pricingService.GetPrice(logEntry.ModelName)
-                    : null;
-
-                if (pricing is not null)
-                {
-                    // Track cumulative input for tiered pricing
-                    cumulativeInputByModel.TryGetValue(modelKey, out var cumulativeBefore);
-                    var entryInput = logEntry.InputTokens + logEntry.CacheCreationTokens;
-                    cumulativeInputByModel[modelKey] = cumulativeBefore + entryInput;
-
-                    var useExtended = cumulativeBefore >= TierBreakpointTokens;
-
-                    var inputPrice = useExtended && pricing.InputCostAbove200k.HasValue
-                        ? pricing.InputCostAbove200k.Value
-                        : pricing.InputCostPerToken;
-                    var outputPrice = pricing.OutputCostPerToken;
-                    var cacheCreatePrice = useExtended && pricing.CacheCreationCostAbove200k.HasValue
-                        ? pricing.CacheCreationCostAbove200k.Value
-                        : pricing.CacheCreationCost ?? 0.0;
-                    var cacheReadPrice = useExtended && pricing.CacheReadCostAbove200k.HasValue
-                        ? pricing.CacheReadCostAbove200k.Value
-                        : pricing.CacheReadCost ?? 0.0;
-
-                    var entryCost = (logEntry.InputTokens * inputPrice)
-                                  + (logEntry.OutputTokens * outputPrice)
-                                  + (logEntry.CacheCreationTokens * cacheCreatePrice)
-                                  + (logEntry.CacheReadTokens * cacheReadPrice);
-                    totalCost += (decimal)entryCost;
-                }
-                else
-                {
-                    hasEstimated = true;
-                }
+                var (cost, estimated) = CalculateEntryCost(logEntry, cumulativeInputByModel);
+                totalCost += cost;
+                hasEstimated |= estimated;
             }
         }
 
@@ -370,6 +335,43 @@ public sealed class JsonlService : IJsonlService, IDisposable
             HasEstimatedCosts = hasEstimated,
             Models = modelSet.ToList()
         };
+    }
+
+    private (decimal Cost, bool Estimated) CalculateEntryCost(
+        EntryLogItem entry,
+        Dictionary<string, long> cumulativeInputByModel)
+    {
+        var pricing = entry.ModelName is not null
+            ? _pricingService.GetPrice(entry.ModelName)
+            : null;
+
+        if (pricing is null)
+            return (0m, true);
+
+        var modelKey = entry.ModelName ?? "unknown";
+        cumulativeInputByModel.TryGetValue(modelKey, out var cumulativeBefore);
+        var entryInput = entry.InputTokens + entry.CacheCreationTokens;
+        cumulativeInputByModel[modelKey] = cumulativeBefore + entryInput;
+
+        var useExtended = cumulativeBefore >= TierBreakpointTokens;
+
+        var inputPrice = useExtended && pricing.InputCostAbove200k.HasValue
+            ? pricing.InputCostAbove200k.Value
+            : pricing.InputCostPerToken;
+        var outputPrice = pricing.OutputCostPerToken;
+        var cacheCreatePrice = useExtended && pricing.CacheCreationCostAbove200k.HasValue
+            ? pricing.CacheCreationCostAbove200k.Value
+            : pricing.CacheCreationCost ?? 0.0;
+        var cacheReadPrice = useExtended && pricing.CacheReadCostAbove200k.HasValue
+            ? pricing.CacheReadCostAbove200k.Value
+            : pricing.CacheReadCost ?? 0.0;
+
+        var cost = (entry.InputTokens * inputPrice)
+                 + (entry.OutputTokens * outputPrice)
+                 + (entry.CacheCreationTokens * cacheCreatePrice)
+                 + (entry.CacheReadTokens * cacheReadPrice);
+
+        return ((decimal)cost, false);
     }
 
     // -------------------------------------------------------------------------
