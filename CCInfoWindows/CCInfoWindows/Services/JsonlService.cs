@@ -19,12 +19,17 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
     private const int TailWindowBytes = 1_048_576; // 1 MB
     private const int WatcherInternalBufferSize = 65_536; // 64 KB
-    private const int DebounceMilliseconds = 300;
+    private const int DebounceMilliseconds = 2_000;
     private const string CacheFileName = "jsonl-cache.json";
     private const string SubagentsDirectoryName = "subagents";
     private const string AgentFilePattern = "agent-*.jsonl";
     private const string JsonlFilePattern = "*.jsonl";
     private const long TierBreakpointTokens = 200_000;
+    private const int MaxWatcherRestarts = 5;
+    private const long MaxCacheFileSizeBytes = 10 * 1_048_576; // 10 MB
+    private const int SubagentActivityWindowSeconds = 30; // Only show subagents active within this window
+
+    private static readonly JsonSerializerOptions CacheSerializerOptions = new() { WriteIndented = false };
 
     // -------------------------------------------------------------------------
     // Internal per-project aggregation (keyed by project directory name)
@@ -79,16 +84,15 @@ public sealed class JsonlService : IJsonlService, IDisposable
     private readonly IPricingService _pricingService;
     private readonly Lock _sessionsLock = new();
     private readonly object _debounceLock = new();
+    private readonly HashSet<string> _pendingChangedFiles = new(StringComparer.OrdinalIgnoreCase);
 
     private List<SessionInfo> _sessions = [];
     private Dictionary<string, ProjectData> _projectData = [];
     private Dictionary<string, FilePositionMarker> _filePositions = [];
     private FileSystemWatcher? _watcher;
     private System.Threading.Timer? _debounceTimer;
-    private bool _isScanning;
+    private int _isScanning; // 0 = idle, 1 = scanning; use Interlocked for atomic CAS
     private int _watcherRestartCount;
-
-    private const int MaxWatcherRestarts = 5;
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -124,7 +128,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
         }
     }
 
-    public bool IsScanning => _isScanning;
+    public bool IsScanning => Interlocked.CompareExchange(ref _isScanning, 0, 0) == 1;
 
     public event EventHandler? DataUpdated;
 
@@ -210,16 +214,27 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
     public async Task InitializeAsync()
     {
-        _isScanning = true;
+        // Atomic CAS: only one scan at a time (prevents double-init race)
+        if (Interlocked.CompareExchange(ref _isScanning, 1, 0) != 0)
+            return;
 
-        LoadCache();
-        RaiseDataUpdated();
+        try
+        {
+            LoadCache();
+            RaiseDataUpdated();
 
-        await Task.Run(DiscoverSessions);
+            await Task.Run(DiscoverSessions);
 
-        _isScanning = false;
-        SaveCache();
-        RaiseDataUpdated();
+            lock (_sessionsLock)
+            {
+                SaveCache();
+            }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _isScanning, 0);
+            RaiseDataUpdated();
+        }
 
         StartWatching();
     }
@@ -348,7 +363,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
         if (pricing is null)
             return (0m, true);
 
-        var modelKey = entry.ModelName ?? "unknown";
+        var modelKey = entry.ModelName!;
         cumulativeInputByModel.TryGetValue(modelKey, out var cumulativeBefore);
         var entryInput = entry.InputTokens + entry.CacheCreationTokens;
         cumulativeInputByModel[modelKey] = cumulativeBefore + entryInput;
@@ -405,8 +420,9 @@ public sealed class JsonlService : IJsonlService, IDisposable
     /// <summary>
     /// Reads all lines from a JSONL file. Used for initial session discovery
     /// where we need the complete file content for accurate statistics.
+    /// Returns lines and the stream end position for consistent file position tracking.
     /// </summary>
-    private static List<string> ReadAllLines(string filePath)
+    private static (List<string> Lines, long EndPosition) ReadAllLines(string filePath)
     {
         using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         using var reader = new StreamReader(stream);
@@ -417,7 +433,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
             if (!string.IsNullOrWhiteSpace(line))
                 lines.Add(line);
         }
-        return lines;
+        return (lines, stream.Length);
     }
 
     /// <summary>
@@ -458,7 +474,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
             {
                 entry = JsonSerializer.Deserialize<JsonlEntry>(line, JsonlEntry.DefaultOptions);
             }
-            catch
+            catch (JsonException)
             {
                 // Skip malformed JSONL lines — tolerant parsing is a must-have
             }
@@ -530,9 +546,9 @@ public sealed class JsonlService : IJsonlService, IDisposable
         }
         else if (forceFullRead)
         {
-            var allLines = ReadAllLines(filePath);
+            var (allLines, endPos) = ReadAllLines(filePath);
             lines = allLines;
-            newPosition = new FileInfo(filePath).Length;
+            newPosition = endPos;
         }
         else
         {
@@ -599,7 +615,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
             CacheReadTokens = cacheRead,
             CostUsd = entry.CostUsd,
             ModelName = model,
-            DeduplicationKey = BuildDeduplicationKey(entry),
+            DeduplicationKey = deduplicationKey,
             SourceFile = sourceFile
         });
     }
@@ -647,8 +663,6 @@ public sealed class JsonlService : IJsonlService, IDisposable
         return result;
     }
 
-    private const int SubagentActivityWindowSeconds = 30;
-
     private static IReadOnlyList<SubagentContextData> BuildSubagentContext(List<string> subagentFiles)
     {
         var result = new List<SubagentContextData>();
@@ -688,9 +702,13 @@ public sealed class JsonlService : IJsonlService, IDisposable
                     LastActivity = lastActivity
                 });
             }
-            catch (Exception ex)
+            catch (IOException ex)
             {
                 Debug.WriteLine($"[JsonlService] Failed to parse subagent file {file}: {ex.Message}");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Debug.WriteLine($"[JsonlService] Access denied for subagent file {file}: {ex.Message}");
             }
         }
 
@@ -790,77 +808,107 @@ public sealed class JsonlService : IJsonlService, IDisposable
     {
         lock (_debounceLock)
         {
-            if (_debounceTimer is not null)
+            _pendingChangedFiles.Add(e.FullPath);
+
+            if (_debounceTimer is null)
             {
-                // Stop without Dispose to avoid race with executing callback
-                _debounceTimer.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
-                _debounceTimer.Dispose();
+                _debounceTimer = new System.Threading.Timer(
+                    _ => ProcessPendingFileChanges(),
+                    state: null,
+                    dueTime: DebounceMilliseconds,
+                    period: System.Threading.Timeout.Infinite);
             }
-            _debounceTimer = new System.Threading.Timer(
-                _ => ProcessFileChange(e.FullPath),
-                state: null,
-                dueTime: DebounceMilliseconds,
-                period: System.Threading.Timeout.Infinite);
+            else
+            {
+                try
+                {
+                    _debounceTimer.Change(DebounceMilliseconds, System.Threading.Timeout.Infinite);
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Timer was disposed between null-check and Change() — safe to ignore
+                }
+            }
         }
     }
 
-    private void ProcessFileChange(string filePath)
+    private void ProcessPendingFileChanges()
     {
+        // Skip if initial scan is still running — avoid double-processing
+        if (Interlocked.CompareExchange(ref _isScanning, 0, 0) == 1)
+            return;
+
+        List<string> filesToProcess;
+        lock (_debounceLock)
+        {
+            filesToProcess = [.. _pendingChangedFiles];
+            _pendingChangedFiles.Clear();
+        }
+
         try
         {
             lock (_sessionsLock)
             {
-                var isSubagent = IsSubagentFile(filePath);
-
-                // Subagent files live at: {projectDir}/{sessionUUID}/subagents/agent-*.jsonl
-                // Non-subagent session files live at: {projectDir}/{sessionUUID}.jsonl
-                // We need to walk up to the actual project directory in both cases.
-                string? projectDirName;
-                if (isSubagent)
+                foreach (var filePath in filesToProcess)
                 {
-                    // Walk up: subagents/ -> sessionDir -> projectDir
-                    var subagentsDir = Path.GetDirectoryName(filePath);
-                    var sessionDir = subagentsDir != null ? Path.GetDirectoryName(subagentsDir) : null;
-                    projectDirName = sessionDir != null ? Path.GetFileName(sessionDir) : null;
-                }
-                else
-                {
-                    var projectDir = Path.GetDirectoryName(filePath);
-                    projectDirName = projectDir != null ? Path.GetFileName(projectDir) : null;
-                }
-
-                if (string.IsNullOrEmpty(projectDirName))
-                    return;
-
-                if (!_projectData.TryGetValue(projectDirName, out var data))
-                {
-                    data = new ProjectData { ProjectDirName = projectDirName };
-                    _projectData[projectDirName] = data;
-                }
-
-                if (!isSubagent)
-                    ParseFileIntoProject(filePath, data);
-
-                // Only non-subagent session files count as the "newest session"
-                if (!isSubagent)
-                {
-                    var modTime = File.GetLastWriteTimeUtc(filePath);
-                    if (modTime > data.NewestSessionModTime)
-                    {
-                        data.NewestSessionModTime = new DateTimeOffset(modTime, TimeSpan.Zero);
-                        data.NewestSessionFile = filePath;
-                    }
+                    ProcessSingleFile(filePath);
                 }
 
                 RebuildSessionsList();
+                SaveCache();
             }
 
-            SaveCache();
             RaiseDataUpdated();
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[JsonlService] Error processing file change for {filePath}: {ex.Message}");
+            Debug.WriteLine($"[JsonlService] Error processing pending file changes: {ex.Message}");
+        }
+    }
+
+    private void ProcessSingleFile(string filePath)
+    {
+        if (!IsPathWithinProjectsDirectory(filePath))
+            return;
+
+        var isSubagent = IsSubagentFile(filePath);
+
+        // Subagent files live at: {projectDir}/{sessionUUID}/subagents/agent-*.jsonl
+        // Non-subagent session files live at: {projectDir}/{sessionUUID}.jsonl
+        // We need to walk up to the actual project directory in both cases.
+        string? projectDirName;
+        if (isSubagent)
+        {
+            // Walk up: subagents/ -> sessionDir -> projectDir
+            var subagentsDir = Path.GetDirectoryName(filePath);
+            var sessionDir = subagentsDir != null ? Path.GetDirectoryName(subagentsDir) : null;
+            projectDirName = sessionDir != null ? Path.GetFileName(sessionDir) : null;
+        }
+        else
+        {
+            var projectDir = Path.GetDirectoryName(filePath);
+            projectDirName = projectDir != null ? Path.GetFileName(projectDir) : null;
+        }
+
+        if (string.IsNullOrEmpty(projectDirName))
+            return;
+
+        if (!_projectData.TryGetValue(projectDirName, out var data))
+        {
+            data = new ProjectData { ProjectDirName = projectDirName };
+            _projectData[projectDirName] = data;
+        }
+
+        if (!isSubagent)
+        {
+            ParseFileIntoProject(filePath, data);
+
+            var modTime = File.GetLastWriteTimeUtc(filePath);
+            if (modTime > data.NewestSessionModTime)
+            {
+                data.NewestSessionModTime = new DateTimeOffset(modTime, TimeSpan.Zero);
+                data.NewestSessionFile = filePath;
+            }
         }
     }
 
@@ -868,13 +916,13 @@ public sealed class JsonlService : IJsonlService, IDisposable
     {
         Debug.WriteLine($"[JsonlService] Watcher error: {e.GetException()?.Message}");
 
-        if (_watcherRestartCount >= MaxWatcherRestarts)
+        if (Interlocked.CompareExchange(ref _watcherRestartCount, 0, 0) >= MaxWatcherRestarts)
         {
             Debug.WriteLine("[JsonlService] Max watcher restarts reached — giving up.");
             return;
         }
 
-        _watcherRestartCount++;
+        Interlocked.Increment(ref _watcherRestartCount);
         DisposeWatcher();
 
         try
@@ -900,15 +948,38 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
         try
         {
+            var fileInfo = new FileInfo(cacheFile);
+            if (fileInfo.Length > MaxCacheFileSizeBytes)
+            {
+                Debug.WriteLine($"[JsonlService] Cache file exceeds {MaxCacheFileSizeBytes} bytes — ignoring.");
+                return;
+            }
+
             var json = File.ReadAllText(cacheFile);
             var cache = JsonSerializer.Deserialize<JsonlCache>(json);
 
             if (cache is null)
                 return;
 
-            _filePositions = cache.FilePositions ?? [];
+            var positions = cache.FilePositions ?? [];
+
+            // Validate deserialized values — reject negative positions
+            foreach (var (key, marker) in positions)
+            {
+                if (marker.LastReadPosition < 0)
+                {
+                    Debug.WriteLine($"[JsonlService] Invalid cache position for {key} — discarding cache.");
+                    return;
+                }
+            }
+
+            _filePositions = positions;
         }
-        catch (Exception ex)
+        catch (JsonException ex)
+        {
+            Debug.WriteLine($"[JsonlService] Corrupt cache file: {ex.Message}");
+        }
+        catch (IOException ex)
         {
             Debug.WriteLine($"[JsonlService] Failed to load cache: {ex.Message}");
         }
@@ -926,7 +997,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
                 FilePositions = _filePositions
             };
 
-            var json = JsonSerializer.Serialize(cache, new JsonSerializerOptions { WriteIndented = false });
+            var json = JsonSerializer.Serialize(cache, CacheSerializerOptions);
             File.WriteAllText(CacheFilePath(), json);
         }
         catch (Exception ex)
@@ -953,6 +1024,18 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
     private void RaiseDataUpdated() =>
         DataUpdated?.Invoke(this, EventArgs.Empty);
+
+    // -------------------------------------------------------------------------
+    // Path validation
+    // -------------------------------------------------------------------------
+
+    private bool IsPathWithinProjectsDirectory(string fullPath)
+    {
+        var normalized = Path.GetFullPath(fullPath);
+        var root = Path.GetFullPath(_projectsDirectory);
+        return normalized.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, root, StringComparison.OrdinalIgnoreCase);
+    }
 
     // -------------------------------------------------------------------------
     // Dispose helpers
