@@ -73,6 +73,8 @@ Developers can see their Claude usage limits (5-hour window, weekly quota, conte
 Shipped v1.1 with UI polish across 3 phases (41 commits, ~1,470 net LOC changes from v1.0 baseline).
 Full v1.1 stats: 3 phases, 6 plans, 10 tasks, 18/18 requirements satisfied.
 Phase 12 complete — model-based context detection (Opus=1M, Haiku=200K, Sonnet=configurable default 200K, flat 33K buffer, 20K warning).
+Phase 13 complete — Sonnet context window setting (200K/1M ComboBox picker in Settings, live refresh via messenger, persisted to settings.json).
+Phase 14 complete — Session management polish (orphaned session filter with UNC guard, alphabetical subagent sort).
 Tech stack: C# 13 / .NET 9 / WinUI 3 (Windows App SDK 1.8) / Win2D / WebView2 / CommunityToolkit.Mvvm 8.4.
 Detailed upgrade spec available: `spec-release-from-1.7.1-to-1.8.3.md` (5 phases, dependency chain documented).
 
@@ -165,4 +167,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-12 after Phase 12 completion*
+*Last updated: 2026-04-12 after Phase 14 completion*

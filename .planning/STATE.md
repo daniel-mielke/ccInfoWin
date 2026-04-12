@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: macOS v1.8.3 Feature Parity
-status: verifying
-stopped_at: Completed 14-01-PLAN.md
-last_updated: "2026-04-12T17:35:28.977Z"
-last_activity: 2026-04-12
+status: complete
+stopped_at: Completed 15-01-PLAN.md
+last_updated: "2026-04-12T17:49:06Z"
+last_activity: 2026-04-12 -- Phase 15 complete (ACC-01, ACC-02, ACC-03 verified)
 progress:
   total_phases: 4
-  completed_phases: 3
-  total_plans: 4
-  completed_plans: 4
-  percent: 0
+  completed_phases: 4
+  total_plans: 5
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-12)
 
 **Core value:** Developers can see their Claude usage limits (5-hour window, weekly quota, context window) at a glance in real-time, preventing unexpected throttling.
-**Current focus:** Phase 14 — Session Management Polish
+**Current focus:** v1.2 milestone complete — all phases 12-15 done
 
 ## Current Position
 
-Phase: 14 (Session Management Polish) — EXECUTING
+Phase: 15 (Footer Tooltip & Accessibility) — COMPLETE
 Plan: 1 of 1
-Status: Phase complete — ready for verification
-Last activity: 2026-04-12
+Status: Phase 15 complete — v1.2 milestone done, ready for milestone closure
+Last activity: 2026-04-12 -- Phase 15 complete (ACC-01, ACC-02, ACC-03 verified)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 13 P01 | 10m | 3 tasks | 6 files |
 | Phase 13-sonnet-context-window-setting P02 | 12m | 3 tasks | 3 files |
 | Phase 14-session-management-polish P01 | 5min | 2 tasks | 2 files |
+| Phase 15-footer-tooltip-accessibility P01 | 5min | 2 tasks | 0 files |
 
 ## Accumulated Context
 
@@ -65,6 +66,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 13]: JsonlService settingsService parameter optional (null default) to preserve test isolation with 13+ existing tests
 - [Phase 14-session-management-polish]: IsValidProjectDirectory short-circuits UNC paths before Directory.Exists to prevent network hang on unreachable servers
 - [Phase 14-session-management-polish]: SES-02 requires no ViewModel changes: MainViewModel.RefreshSessionList fallback auto-resets to next valid session when active session is filtered out
+- [Phase 15-footer-tooltip-accessibility]: Zero code changes required — all footer tooltip/accessibility implementation was pre-existing in XAML and resw files; build verification confirmed correctness
 
 ### Pending Todos from v1.0
 
@@ -85,6 +87,6 @@ Decisions are logged in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-04-12T17:35:28.974Z
-Stopped at: Completed 14-01-PLAN.md
+Last session: 2026-04-12T17:49:06Z
+Stopped at: Completed 15-01-PLAN.md
 Resume file: None

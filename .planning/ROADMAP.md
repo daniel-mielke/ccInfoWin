@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 CCInfoWindows MVP** — Phases 1-8 (shipped 2026-03-17)
 - ✅ **v1.1 UI Polish & UX Improvements** — Phases 9-11 (shipped 2026-04-01)
-- 🚧 **v1.2 macOS v1.8.3 Feature Parity** — Phases 12-15 (in progress)
+- ✅ **v1.2 macOS v1.8.3 Feature Parity** — Phases 12-15 (shipped 2026-04-12)
 
 ## Phases
 
@@ -39,14 +39,14 @@ Audit: `.planning/milestones/v1.1-MILESTONE-AUDIT.md`
 
 </details>
 
-### v1.2 macOS v1.8.3 Feature Parity (In Progress)
+### ✅ v1.2 macOS v1.8.3 Feature Parity (Complete — 2026-04-12)
 
 **Milestone Goal:** Bring ccInfoWin to feature parity with macOS ccInfo v1.8.3 — model-based context detection, user-configurable Sonnet context, session cleanup, stable subagent ordering, and footer accessibility.
 
 - [x] **Phase 12: Model-Based Context Detection** — Rewrite ModelContextLimits with ModelFamily enum; correct Opus to 1M, Haiku to 200K, flat autocompact warning (completed 2026-04-12)
 - [x] **Phase 13: Sonnet Context Window Setting** — End-to-end: AppSettings, Settings UI picker, messenger, live refresh on change (completed 2026-04-12)
-- [x] **Phase 14: Session Management Polish** — Filter ghost sessions by Directory.Exists; stabilize subagent sort order alphabetically (completed 2026-04-12)
-- [ ] **Phase 15: Footer Tooltip & Accessibility** — Localized tooltips on all footer buttons, AutomationProperties.Name for screen readers
+- [x] **Phase 14: Session Management Polish** — Filter ghost sessions by Directory.Exists; stabilize subagent sort order alphabetically (completed 2026-04-12)
+- [x] **Phase 15: Footer Tooltip & Accessibility** — Localized tooltips on all footer buttons, AutomationProperties.Name for screen readers (completed 2026-04-12)
 
 ## Phase Details
 
@@ -100,7 +100,9 @@ Plans:
   1. User sees a localized tooltip when hovering over each footer button (Refresh, Settings, Quit)
   2. User's screen reader announces the purpose of each footer button via AutomationProperties.Name
   3. User sees tooltip text in the language currently selected in the app (de-DE or en-US)
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [x] 15-01-PLAN.md — Build verification of existing resw/XAML wiring, runtime tooltip and accessibility human verification
 **UI hint**: yes
 
 ## Progress
@@ -120,5 +122,5 @@ Plans:
 | 11. Behavior & Interaction | v1.1 | 2/2 | Complete | 2026-03-20 |
 | 12. Model-Based Context Detection | v1.2 | 1/1 | Complete    | 2026-04-12 |
 | 13. Sonnet Context Window Setting | v1.2 | 2/2 | Complete    | 2026-04-12 |
-| 14. Session Management Polish | v1.2 | 1/1 | Complete   | 2026-04-12 |
-| 15. Footer Tooltip & Accessibility | v1.2 | 0/? | Not started | - |
+| 14. Session Management Polish | v1.2 | 1/1 | Complete    | 2026-04-12 |
+| 15. Footer Tooltip & Accessibility | v1.2 | 1/1 | Complete    | 2026-04-12 |
