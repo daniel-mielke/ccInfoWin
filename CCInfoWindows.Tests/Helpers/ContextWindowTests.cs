@@ -24,13 +24,15 @@ public class ContextWindowTests
 
     [Theory]
     [InlineData(0, 200_000, 0.0)]
-    [InlineData(200_000, 200_000, 1.0)]
+    [InlineData(167_000, 200_000, 1.0)]              // 167K / (200K - 33K) = 1.0
+    [InlineData(100_000, 200_000, 0.5988)]           // 100K / 167K ~ 0.5988 (validates effective = 167K)
+    [InlineData(967_000, 1_000_000, 1.0)]            // 967K / (1M - 33K) = 1.0 (Opus session)
     public void ContextWindowData_Utilization_ComputesTotalOverEffectiveMax(
         long totalTokens, long maxTokens, double expectedUtilization)
     {
         var data = new ContextWindowData { TotalTokens = totalTokens, MaxTokens = maxTokens };
 
-        Assert.Equal(expectedUtilization, data.Utilization, precision: 5);
+        Assert.Equal(expectedUtilization, data.Utilization, precision: 4);
     }
 
     [Fact]
@@ -65,13 +67,13 @@ public class ContextWindowTests
         Assert.Equal(expected, result);
     }
 
-    // CTXW-04: autocompact threshold
+    // CTXW-04: autocompact threshold — flat 20K buffer
     [Theory]
-    [InlineData(180_000, 200_000, true)]   // exactly 90% -> warn
-    [InlineData(190_000, 200_000, true)]   // above 90% -> warn
-    [InlineData(179_999, 200_000, false)]  // just below 90% -> no warn
-    [InlineData(50_000, 200_000, false)]   // well below -> no warn
-    public void ModelContextLimits_ShouldWarnAutocompact_LargeModel_NinetyPercentThreshold(
+    [InlineData(180_000, 200_000, true)]    // exactly at boundary
+    [InlineData(190_000, 200_000, true)]    // above boundary
+    [InlineData(179_999, 200_000, false)]   // just below boundary
+    [InlineData(50_000, 200_000, false)]    // well below
+    public void ModelContextLimits_ShouldWarnAutocompact_UsesFlat20KBuffer(
         long totalTokens, long maxTokens, bool expected)
     {
         var result = ModelContextLimits.ShouldWarnAutocompact(totalTokens, maxTokens);
@@ -80,13 +82,19 @@ public class ContextWindowTests
     }
 
     [Theory]
-    [InlineData(95_000, 100_000, true)]   // exactly 95% for small model -> warn
-    [InlineData(94_999, 100_000, false)]  // just below 95% -> no warn
-    public void ModelContextLimits_ShouldWarnAutocompact_SmallModel_NinetyFivePercentThreshold(
-        long totalTokens, long maxTokens, bool expected)
+    [InlineData(0, 200_000, 0.0)]
+    [InlineData(167_000, 200_000, 1.0)]
+    [InlineData(967_000, 1_000_000, 1.0)]
+    public void SubagentContextData_Utilization_UsesFlat33KBuffer(
+        long totalTokens, long maxTokens, double expectedUtilization)
     {
-        var result = ModelContextLimits.ShouldWarnAutocompact(totalTokens, maxTokens);
+        var data = new SubagentContextData
+        {
+            AgentId = "test-agent",
+            TotalTokens = totalTokens,
+            MaxTokens = maxTokens
+        };
 
-        Assert.Equal(expected, result);
+        Assert.Equal(expectedUtilization, data.Utilization, precision: 4);
     }
 }

@@ -36,7 +36,7 @@ public class ExportHelperTests
         };
         var windowStart = DateTimeOffset.UtcNow.AddHours(-5);
 
-        var target = ExportHelper.RenderChartToPng(points, windowStart, "80%", "02:30");
+        var target = ExportHelper.RenderChartToPng(points, windowStart, "80%", "02:30", 0.8);
 
         Assert.NotNull(target);
         Assert.Equal(ExportHelper.ExportConstants.ExportWidth, target.Size.Width, precision: 1);
@@ -50,7 +50,7 @@ public class ExportHelperTests
     {
         var points = new List<CCInfoWindows.Models.UsageHistoryPoint>();
 
-        var target = ExportHelper.RenderChartToPng(points, null, "0%", "05:00");
+        var target = ExportHelper.RenderChartToPng(points, null, "0%", "05:00", 0.0);
 
         Assert.NotNull(target);
         target.Dispose();
