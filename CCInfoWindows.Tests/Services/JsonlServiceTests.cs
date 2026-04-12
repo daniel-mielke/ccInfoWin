@@ -328,6 +328,97 @@ public class JsonlServiceTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
+    // Session filtering (orphan detection, SES-01/SES-02)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task RebuildSessionsList_ExcludesDeletedDirectories()
+    {
+        const string SurvivingSession = "aaa00001-0000-0000-0000-000000000001";
+        const string OrphanSession = "bbb00002-0000-0000-0000-000000000002";
+
+        var realCwdA = Path.Combine(_tempDir, "real-project-aaa");
+        var realCwdB = Path.Combine(_tempDir, "real-project-bbb");
+        Directory.CreateDirectory(realCwdA);
+        Directory.CreateDirectory(realCwdB);
+
+        CreateSessionFile(SurvivingSession, cwd: realCwdA);
+        CreateSessionFile(OrphanSession, cwd: realCwdB);
+
+        Directory.Delete(realCwdB, recursive: true);
+
+        var service = new JsonlService(_tempDir);
+        await service.InitializeAsync();
+
+        Assert.Single(service.Sessions);
+        Assert.Contains(service.Sessions, s => s.Id.Contains("aaa00001"[..8]));
+    }
+
+    [Fact]
+    public async Task RebuildSessionsList_ExcludesUncPaths()
+    {
+        const string SessionId = "ccc00003-0000-0000-0000-000000000003";
+        CreateSessionFile(SessionId, cwd: @"\\server\share\project");
+
+        var service = new JsonlService(_tempDir);
+        await service.InitializeAsync();
+
+        Assert.Empty(service.Sessions);
+    }
+
+    [Fact]
+    public async Task RebuildSessionsList_ExcludesEmptyCwd()
+    {
+        const string SessionId = "ddd00004-0000-0000-0000-000000000004";
+        CreateSessionFile(SessionId, cwd: "");
+
+        var service = new JsonlService(_tempDir);
+        await service.InitializeAsync();
+
+        Assert.Empty(service.Sessions);
+    }
+
+    [Fact]
+    public async Task BuildSubagentContext_ReturnsAlphabeticOrder()
+    {
+        const string SessionId = "eee00005-0000-0000-0000-000000000005";
+        var realCwd = Path.Combine(_tempDir, "real-project-eee");
+        Directory.CreateDirectory(realCwd);
+
+        CreateSessionFile(SessionId, cwd: realCwd);
+
+        var projectDir = CreateProjectSessionDir(SessionId);
+        var subagentDir = Path.Combine(projectDir, "subagents");
+        Directory.CreateDirectory(subagentDir);
+
+        var recentTime = DateTimeOffset.UtcNow.AddSeconds(-5);
+
+        await File.WriteAllLinesAsync(Path.Combine(subagentDir, "agent-zebra.jsonl"),
+        [
+            BuildAssistantEntry(SessionId, "uuid-z", "req-z", inputTokens: 1000, outputTokens: 10, timestamp: recentTime)
+        ]);
+        await File.WriteAllLinesAsync(Path.Combine(subagentDir, "agent-alpha.jsonl"),
+        [
+            BuildAssistantEntry(SessionId, "uuid-a", "req-a", inputTokens: 1000, outputTokens: 10, timestamp: recentTime)
+        ]);
+        await File.WriteAllLinesAsync(Path.Combine(subagentDir, "agent-middle.jsonl"),
+        [
+            BuildAssistantEntry(SessionId, "uuid-m", "req-m", inputTokens: 1000, outputTokens: 10, timestamp: recentTime)
+        ]);
+
+        var service = new JsonlService(_tempDir);
+        await service.InitializeAsync();
+
+        var projectDirName = Path.GetFileName(projectDir);
+        var ctx = service.GetContextWindow(projectDirName);
+
+        Assert.Equal(3, ctx.Subagents.Count);
+        Assert.Equal("alpha", ctx.Subagents[0].AgentId);
+        Assert.Equal("middle", ctx.Subagents[1].AgentId);
+        Assert.Equal("zebra", ctx.Subagents[2].AgentId);
+    }
+
+    // -------------------------------------------------------------------------
     // Incremental read
     // -------------------------------------------------------------------------
 
