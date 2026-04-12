@@ -1,67 +1,270 @@
-# Architecture Research
+# Architecture Patterns
 
-**Domain:** Windows desktop real-time monitoring app (WinUI 3 / MVVM)
-**Researched:** 2026-03-09
-**Confidence:** HIGH
+**Domain:** WinUI 3 desktop app — macOS v1.8.3 feature parity integration
+**Researched:** 2026-04-12
 
-## Standard Architecture
+---
 
-### System Overview
+## v1.2 Integration Analysis
+
+All five v1.2 features integrate cleanly into the existing MVVM layer structure. No new services, no new View pages, and no changes to the DI registration are required. The dependency chain is linear from the bottom up:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         PRESENTATION                            │
-│  ┌───────────┐  ┌──────────────┐  ┌─────────────┐              │
-│  │ MainView  │  │ SettingsView │  │  LoginView  │              │
-│  │ (XAML)    │  │ (XAML)       │  │ (WebView2)  │              │
-│  └─────┬─────┘  └──────┬───────┘  └──────┬──────┘              │
-│        │               │                 │                      │
-│  ┌─────┴─────┐  ┌──────┴───────┐  ┌──────┴──────┐              │
-│  │ MainVM    │  │ SettingsVM   │  │  LoginVM    │              │
-│  └─────┬─────┘  └──────┬───────┘  └──────┬──────┘              │
-│        │               │                 │                      │
-│  Custom Controls:                                               │
-│  ┌────────────────┐ ┌───────────────┐ ┌──────────────────┐      │
-│  │UsageChartCtrl  │ │ProgressBarCtrl│ │SessionPickerCtrl │      │
-│  │(Win2D Canvas)  │ │(XAML)         │ │(XAML ComboBox)   │      │
-│  └────────────────┘ └───────────────┘ └──────────────────┘      │
-├─────────────────────────────────────────────────────────────────┤
-│                      COMMUNICATION BUS                          │
-│        CommunityToolkit.Mvvm Messenger (WeakReferenceMessenger) │
-├─────────────────────────────────────────────────────────────────┤
-│                          SERVICES                               │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐            │
-│  │ClaudeApi     │ │Jsonl         │ │Pricing       │            │
-│  │Service       │ │Service       │ │Service       │            │
-│  │(HTTP polling)│ │(FileWatcher) │ │(HTTP + cache)│            │
-│  └──────┬───────┘ └──────┬───────┘ └──────┬───────┘            │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐            │
-│  │Credential    │ │Settings      │ │Update        │            │
-│  │Service       │ │Service       │ │Service       │            │
-│  │(Win32 DPAPI) │ │(JSON file)   │ │(GitHub API)  │            │
-│  └──────────────┘ └──────────────┘ └──────────────┘            │
-│  ┌──────────────┐ ┌──────────────┐                              │
-│  │FileWatcher   │ │Navigation    │                              │
-│  │Service       │ │Service       │                              │
-│  │(FSWatcher)   │ │(Frame nav)   │                              │
-│  └──────────────┘ └──────────────┘                              │
-├─────────────────────────────────────────────────────────────────┤
-│                           MODELS                                │
-│  UsageData  WeeklyUsage  ContextWindow  SessionInfo             │
-│  TokenStats  PricingData  AppSettings                           │
-├─────────────────────────────────────────────────────────────────┤
-│                       INFRASTRUCTURE                            │
-│  ┌───────────┐ ┌──────────────┐ ┌──────────────┐               │
-│  │ Win32 Cred│ │ JSON Files   │ │ JSONL Files  │               │
-│  │ Manager   │ │ %LOCALAPPDATA│ │ %USERPROFILE%│               │
-│  │ (DPAPI)   │ │ \CCInfoWin\  │ │ \.claude\    │               │
-│  └───────────┘ └──────────────┘ └──────────────┘               │
-│  ┌───────────┐ ┌──────────────┐                                 │
-│  │claude.ai  │ │GitHub/LiteLLM│                                 │
-│  │(HTTPS)    │ │(HTTPS)       │                                 │
-│  └───────────┘ └──────────────┘                                 │
-└─────────────────────────────────────────────────────────────────┘
+Phase 1: ModelContextLimits (Helper) — core logic rewrite
+    ↓ signature change propagates to ContextWindowData callers
+Phase 2: AppSettings + SettingsViewModel + SonnetContextChangedMessage + JsonlService
+    (no dependency on phases below)
+Phase 3: JsonlService.RebuildSessionsList() — one-line filter
+Phase 4: JsonlService.BuildSubagentContext() — one-line sort
+Phase 5: MainView.xaml + localization files — XAML only
 ```
+
+---
+
+## Component Map: Modified vs New
+
+### Modified Components
+
+| Component | File | What Changes |
+|-----------|------|--------------|
+| `ModelContextLimits` | `Helpers/ModelContextLimits.cs` | Remove 3 obsolete constants, add `ExtendedContextLimit` and `AutocompactWarningBuffer`, add `ModelFamily` enum, add `GetModelFamily()`, rewrite `GetMaxContextTokens()` to accept `sonnetContextSize` parameter, simplify `GetEffectiveMaxTokens()` to single-parameter flat buffer, rewrite `ShouldWarnAutocompact()` to flat 20K buffer |
+| `ContextWindowData` | `Models/ContextWindowData.cs` | `Utilization` property calls `GetEffectiveMaxTokens(TotalTokens, MaxTokens)` — must update call site when signature drops `currentTokens` parameter |
+| `SubagentContextData` | `Models/ContextWindowData.cs` | Same `Utilization` call site propagation as above |
+| `AppSettings` | `Models/AppSettings.cs` | Add `SonnetContextSize` int property with `[JsonPropertyName("sonnetContextSize")]` and default value `200_000` |
+| `JsonlService` | `Services/JsonlService.cs` | (1) Constructor: add `ISettingsService` parameter; (2) `GetContextWindow()`: pass `settings.SonnetContextSize` to `GetMaxContextTokens()`; (3) `BuildSubagentContext()`: add `.OrderBy(a => a.AgentId, StringComparer.Ordinal).ToList()` before return; (4) `RebuildSessionsList()`: extend the `.Where()` filter to include `Directory.Exists(s.Cwd)` |
+| `SettingsViewModel` | `ViewModels/SettingsViewModel.cs` | Add `_selectedSonnetContextIndex` `[ObservableProperty]`, initialize in `Initialize()`, persist and send `SonnetContextChangedMessage` in `OnSelectedSonnetContextIndexChanged()` |
+| `MainViewModel` | `ViewModels/MainViewModel.cs` | Register handler for `SonnetContextChangedMessage` → call the existing local data refresh path (`UpdateSessionData` or equivalent) |
+| `MainView.xaml` | `Views/MainView.xaml` | Add `ToolTipService.ToolTip` (localized via l:Uids.Uid) and `AutomationProperties.Name` (static English) to the three footer buttons |
+| `SettingsView.xaml` | `Views/SettingsView.xaml` | Add Sonnet Context `ComboBox` section (label + two-item picker) after the Language selector |
+| `Resources.resw` (both locales) | `Strings/de-DE/` and `Strings/en-US/` | Phase 2: Sonnet context label keys; Phase 5: three footer tooltip keys |
+
+### New Components
+
+| Component | Type | Purpose |
+|-----------|------|---------|
+| `ModelFamily` | Enum (nested in `ModelContextLimits` or standalone in `Helpers/`) | Represents `Opus`, `Sonnet`, `Haiku`, `Unknown` — consumed by `GetModelFamily()` and `GetMaxContextTokens()` |
+| `SonnetContextChangedMessage` | `Messages/SonnetContextChangedMessage.cs` | Typed messenger notification that Sonnet context size changed; follows the `ValueChangedMessage<int>` pattern of the existing `RefreshIntervalChangedMessage` |
+
+No new services. No new Views. No DI registration changes.
+
+---
+
+## Detailed Data Flow per Feature
+
+### Phase 1: Model-Based Context Detection
+
+```
+JsonlService.GetContextWindow(sessionId)
+  → ResolveModelName() → string modelName
+  → ISettingsService.LoadSettings().SonnetContextSize → int sonnetContextSize
+  → ModelContextLimits.GetMaxContextTokens(modelName, sonnetContextSize) → long maxTokens
+  → ModelContextLimits.ShouldWarnAutocompact(totalTokens, maxTokens)
+       uses: totalTokens >= maxTokens - AutocompactWarningBuffer (20K flat)
+  → ContextWindowData { MaxTokens = maxTokens, ... }
+
+ContextWindowData.Utilization (computed property)
+  → ModelContextLimits.GetEffectiveMaxTokens(maxTokens)
+       returns: Math.Max(1, maxTokens - StandardAutocompactBuffer) // 33K flat
+  → Math.Clamp(TotalTokens / effectiveMax, 0.0, 1.0)
+```
+
+The `GetEffectiveMaxTokens()` signature drops the `currentTokens` parameter (it was only used for the heuristic that is being removed). Both `ContextWindowData.Utilization` and `SubagentContextData.Utilization` contain call sites — both must be updated in the same commit as the helper change to avoid a build break.
+
+### Phase 2: Sonnet Context Setting
+
+```
+SettingsView.xaml ComboBox (index 0 = 200K, 1 = 1M)
+  → SettingsViewModel._selectedSonnetContextIndex [ObservableProperty]
+  → OnSelectedSonnetContextIndexChanged()
+       → settings.SonnetContextSize = index == 0 ? 200_000 : 1_000_000
+       → ISettingsService.SaveSettings(settings)
+       → WeakReferenceMessenger.Default.Send(new SonnetContextChangedMessage(settings.SonnetContextSize))
+
+MainViewModel receives SonnetContextChangedMessage
+  → calls the local data refresh path (re-reads context window data for current session)
+
+JsonlService.GetContextWindow(sessionId)
+  → reads AppSettings.SonnetContextSize via cached ISettingsService.LoadSettings()
+  → passes value to ModelContextLimits.GetMaxContextTokens(modelName, sonnetContextSize)
+```
+
+**ISettingsService injection into JsonlService:** The cleanest approach is constructor injection — `JsonlService` already accepts `IPricingService` via constructor for cost calculations. Adding `ISettingsService` follows the same pattern. Settings are read fresh on each `GetContextWindow()` call by reading from the service (which already caches the deserialized `AppSettings` in memory). No stale-value risk. The `IJsonlService` public interface does not need to change.
+
+An alternative is caching the sonnet context size as a field in `JsonlService` and updating it when `SonnetContextChangedMessage` is received (by registering on the messenger in the constructor). This avoids one service dependency but adds messenger coupling in the service layer, which is less clean. Prefer the ISettingsService injection approach.
+
+### Phase 3: Session Filtering
+
+```
+JsonlService.RebuildSessionsList()
+  current:  .Where(s => s is not null)
+  change:   .Where(s => s is not null
+                     && !string.IsNullOrEmpty(s.Cwd)
+                     && Directory.Exists(s.Cwd))
+```
+
+`Sessions` is already an `IReadOnlyList<SessionInfo>` read by `MainViewModel` on the `DataUpdated` event. The filtered list propagates through the existing event-driven refresh path without any ViewModel or UI changes.
+
+`s.Cwd` originates from JSONL file content (external data). `Directory.Exists()` is safe on NTFS paths and is already used elsewhere in WinUI 3 apps for this pattern. The existing path-validation guard in `DiscoverSessions()` already filters paths during initial indexing, so `Cwd` values stored in `_projectData` have already passed basic path sanitization.
+
+### Phase 4: Subagent Sorting
+
+```
+JsonlService.BuildSubagentContext(subagentFiles)
+  current:  return result;
+  change:   return result.OrderBy(a => a.AgentId, StringComparer.Ordinal).ToList();
+```
+
+One line before the return. The returned `IReadOnlyList<SubagentContextData>` is consumed by `MainViewModel` without any re-sorting. The `SubagentContextData.AgentId` values are already strings (e.g. `"abc123"` extracted from `agent-abc123.jsonl`), so ordinal sort produces a stable alphabetical order.
+
+### Phase 5: Footer Accessibility
+
+```
+MainView.xaml — three existing footer Button elements:
+  Add: ToolTipService.ToolTip="{l:Uids.Uid FooterRefreshTooltip}"
+  Add: AutomationProperties.Name="Refresh"   (static, not localized)
+
+Repeat for Settings ("Einstellungen" / "Settings") and Quit ("Beenden" / "Quit").
+
+Resources.resw (both locales) — add:
+  FooterRefreshTooltip.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip
+  FooterSettingsTooltip.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip
+  FooterQuitTooltip.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip
+```
+
+No ViewModel changes. No messenger messages. Pure XAML and resource file edits.
+
+**WinUI3Localizer ToolTipService.ToolTip syntax — verify before writing XAML.** The existing localization pattern for text properties uses the short form (`Label.Text = "value"`). For attached properties like `ToolTipService.ToolTip`, WinUI3Localizer requires the full namespace-qualified property path in the `.resw` key. Confirm the exact key format expected by the installed WinUI3Localizer version against the library's own documentation or test suite before committing the XAML. An incorrect Uid path silently falls back to an empty tooltip.
+
+---
+
+## Component Boundary Diagram
+
+```
+┌─────────────────────────────────────────────────────┐
+│ Views                                                │
+│  MainView.xaml        Phase 5: add tooltip/a11y     │
+│  SettingsView.xaml    Phase 2: add Sonnet ComboBox  │
+└────────────────┬────────────────────────────────────┘
+                 │ x:Bind (compiled bindings)
+┌────────────────▼────────────────────────────────────┐
+│ ViewModels                                           │
+│  MainViewModel        Phase 2: register msg handler │
+│  SettingsViewModel    Phase 2: add ObservableProperty│
+└──────────┬──────────────────────┬───────────────────┘
+           │ service calls        │ messenger
+┌──────────▼───────┐   ┌──────────▼─────────────────┐
+│ Messages         │   │ Services                    │
+│ SonnetContext-   │   │  JsonlService               │
+│ ChangedMessage   │   │    Phase 2: ISettingsService│
+│ (NEW)            │   │    Phase 3: Cwd filter      │
+└──────────────────┘   │    Phase 4: agentId sort    │
+                       └──────────┬──────────────────┘
+                                  │ calls
+┌─────────────────────────────────▼───────────────────┐
+│ Models                                               │
+│  AppSettings          Phase 2: SonnetContextSize    │
+│  ContextWindowData    Phase 1: Utilization call site │
+│  SubagentContextData  Phase 1: Utilization call site │
+└─────────────────────────────────┬───────────────────┘
+                                  │ calls
+┌─────────────────────────────────▼───────────────────┐
+│ Helpers                                              │
+│  ModelContextLimits   Phase 1: core rewrite          │
+│  ModelFamily enum     Phase 1: NEW                   │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+## Suggested Build Order
+
+Dependency-driven. Each phase is an atomic commit. Phases 3, 4, 5 are independent of Phase 2 and can be done in any order after Phase 1.
+
+### Step 1 — ModelContextLimits rewrite (Phase 1)
+
+Files: `ModelContextLimits.cs`, `ContextWindowData.cs`
+
+Must be first. Removes `ExtendedAutocompactBuffer`, `ExtendedContextDetectionThreshold`, and the token-count heuristic from `GetEffectiveMaxTokens()`. Adds `ModelFamily` enum, `GetModelFamily()`, updated `GetMaxContextTokens(modelName, sonnetContextSize)`, simplified `GetEffectiveMaxTokens(maxTokens)`, and flat-buffer `ShouldWarnAutocompact()`. Both `ContextWindowData.Utilization` and `SubagentContextData.Utilization` call `GetEffectiveMaxTokens()` — update both call sites in this same commit to keep the build green.
+
+At this point `GetMaxContextTokens()` accepts a `sonnetContextSize` parameter. Temporary call sites in `JsonlService` can pass the hardcoded constant `200_000` until Phase 2 wires up the live setting.
+
+### Step 2 — Sonnet Context Setting end-to-end (Phase 2)
+
+Files: `AppSettings.cs`, `SonnetContextChangedMessage.cs` (new), `JsonlService.cs` (ISettingsService constructor injection + GetMaxContextTokens call update), `SettingsViewModel.cs`, `MainViewModel.cs`, `SettingsView.xaml`, `Strings/de-DE/Resources.resw`, `Strings/en-US/Resources.resw`
+
+Requires Step 1 because it passes a live `sonnetContextSize` to the updated `GetMaxContextTokens()` signature. After this step, Opus, Sonnet, and Haiku all display the correct context limits, and the Settings view exposes the picker.
+
+### Step 3 — Session Filtering (Phase 3)
+
+Files: `JsonlService.cs` (one filter expression in `RebuildSessionsList()`)
+
+Independent of Step 2. Can be done any time after Step 1. Low-risk single-method change.
+
+### Step 4 — Subagent Sorting (Phase 4)
+
+Files: `JsonlService.cs` (one `.OrderBy()` call in `BuildSubagentContext()`)
+
+Independent of everything. Can be batched with Step 3 into a single "JsonlService polish" commit if desired, or kept separate for cleaner git history.
+
+### Step 5 — Footer Accessibility (Phase 5)
+
+Files: `MainView.xaml`, `Strings/de-DE/Resources.resw`, `Strings/en-US/Resources.resw`
+
+Purely additive. No logic changes. Zero regression risk. Do last.
+
+---
+
+## Anti-Patterns to Avoid
+
+### Anti-Pattern 1: Leaving the `currentTokens` parameter on `GetEffectiveMaxTokens`
+
+**What goes wrong:** Keeping `GetEffectiveMaxTokens(long currentTokens, long maxTokens)` "for backwards compatibility." The `isExtended = currentTokens > 180_000` heuristic path survives and silently overrides model-based detection for Opus sessions with low current token counts (e.g. an Opus session at 50K tokens would use the standard 200K limit instead of 1M).
+
+**Prevention:** Remove all three obsolete constants (`ExtendedAutocompactBuffer`, `ExtendedContextDetectionThreshold`, `LargeModelAutocompactThreshold`, `SmallModelAutocompactThreshold`, `LargeModelThresholdTokens`) and both parameters in one atomic commit. Update both `Utilization` call sites in the same commit.
+
+### Anti-Pattern 2: Passing `sonnetContextSize` through the IJsonlService public interface
+
+**What goes wrong:** Adding `sonnetContextSize` to `GetContextWindow(string sessionId, int sonnetContextSize)`. Every caller — `MainViewModel` has at least two call sites — must retrieve and pass the value. The `IJsonlService` interface changes, breaking any existing mock implementations used in tests.
+
+**Prevention:** Inject `ISettingsService` into `JsonlService` constructor. The setting is an implementation detail of the service layer.
+
+### Anti-Pattern 3: Performing file I/O under the sessions lock on every context window read
+
+**What goes wrong:** Calling `ISettingsService.LoadSettings()` (which reads `settings.json`) inside `GetContextWindow()` while `_sessionsLock` is held. `GetContextWindow()` is called on every UI refresh cycle. File I/O under lock blocks other threads from accessing session data.
+
+**Prevention:** `ISettingsService.LoadSettings()` already deserializes from an in-memory cache in the current implementation (verify, but this is the standard pattern). If it does cache, no action needed. If it does disk I/O, read the setting before acquiring the lock and pass it in as a local variable.
+
+### Anti-Pattern 4: Localizing `AutomationProperties.Name` for footer buttons
+
+**What goes wrong:** Attempting to drive `AutomationProperties.Name` through WinUI3Localizer using the same Uid pattern as tooltips. Screen readers use the OS locale, not the app's runtime locale. The localization switch would not affect what the screen reader announces.
+
+**Prevention:** Use static English strings (`"Refresh"`, `"Settings"`, `"Quit"`) for `AutomationProperties.Name`. Localize only the visible `ToolTipService.ToolTip`.
+
+### Anti-Pattern 5: Filtering sessions inside `GetContextWindow()` instead of `RebuildSessionsList()`
+
+**What goes wrong:** Adding the `Directory.Exists(s.Cwd)` check inside `GetContextWindow()` or `UpdateSessionData()`. The session would still appear in the dropdown but return `ContextWindowData.Empty` when selected, which would look like a data error to the user.
+
+**Prevention:** Filter in `RebuildSessionsList()` so deleted sessions never enter the `_sessions` list at all. The dropdown stays clean.
+
+---
+
+## Scalability Considerations
+
+These are all read-path or additive changes for a single-user desktop app. No scalability concerns.
+
+| Concern | Before v1.2 | After v1.2 |
+|---------|-------------|------------|
+| Session list rebuild | O(n) `OrderByDescending` | O(n) `OrderByDescending` + O(n) `Directory.Exists` per session |
+| Subagent list build | O(n) unordered | O(n log n) `OrderBy agentId` |
+| Context window reads | O(1) in-memory, `GetMaxContextTokens` dict lookup | O(1) same + O(1) settings cache read |
+
+`Directory.Exists` on local NTFS paths is sub-millisecond per call. With 5–30 sessions, `RebuildSessionsList()` overhead is negligible. UNC/network drive paths are a known edge case — acceptable since the method is only called on `FileSystemWatcher` events and initial scan, not on every UI tick.
+
+---
+
+## Retained: Existing Architecture (v1.0–v1.1)
+
+The sections below document the stable architectural foundation that v1.2 builds on.
 
 ### Component Responsibilities
 
@@ -69,543 +272,34 @@
 |-----------|----------------|-------------------|
 | **MainView + MainViewModel** | Primary dashboard: 5h chart, weekly usage, context window, session picker, token stats, cost display | ClaudeApiService, JsonlService, PricingService, NavigationService |
 | **LoginView + LoginViewModel** | WebView2 login flow, cookie extraction from claude.ai | CredentialService, NavigationService |
-| **SettingsView + SettingsViewModel** | App preferences (refresh interval, theme, language, autostart) | SettingsService, NavigationService |
-| **UsageChartControl** | Win2D area chart with color-coded zones, glow indicator, PNG export | Receives data from MainViewModel via bindings |
-| **ProgressBarControl** | Context window progress bars with model badges | Receives data from MainViewModel via bindings |
-| **SessionPickerControl** | Multi-session dropdown with activity indicators | Receives session list from MainViewModel |
-| **ClaudeApiService** | HTTP polling for 5h/weekly usage data from claude.ai | CredentialService (for auth tokens) |
-| **JsonlService** | Parses JSONL log files for token/session/cost data | FileWatcherService (triggers re-parse) |
-| **FileWatcherService** | FileSystemWatcher on `%USERPROFILE%\.claude\projects\`, debounced events | JsonlService (notifies of changes) |
+| **SettingsView + SettingsViewModel** | App preferences (refresh interval, theme, language, autostart, sonnet context) | SettingsService, NavigationService |
+| **ClaudeApiService** | HTTP polling for 5h/weekly usage data from claude.ai via WebView2 bridge | CredentialService |
+| **JsonlService** | Parses JSONL log files for token/session/cost data, FileSystemWatcher | PricingService, ISettingsService |
 | **PricingService** | Fetches and caches LiteLLM pricing, tiered pricing calculation | Local cache file, GitHub raw content |
-| **CredentialService** | Win32 CredRead/CredWrite for session token storage | Windows Credential Manager via P/Invoke |
-| **SettingsService** | Read/write settings.json, usage_history.json, caches | Local JSON files in %LOCALAPPDATA% |
+| **CredentialService** | Win32 CredRead/CredWrite for session token storage | Windows Credential Manager via AdysTech.CredentialManager |
+| **SettingsService** | Read/write settings.json | Local JSON files in %LOCALAPPDATA% |
 | **UpdateService** | Periodic GitHub Releases API check, version comparison | GitHub API, MainViewModel (banner notification) |
 | **NavigationService** | Frame-based page navigation within single window | All Views |
 
-## Recommended Project Structure
+### Key Architectural Patterns
 
-```
-CCInfoWindows/
-├── CCInfoWindows.sln
-├── CCInfoWindows/
-│   ├── App.xaml / App.xaml.cs          # DI container setup, theme init
-│   ├── MainWindow.xaml / .cs           # Single window with Frame
-│   │
-│   ├── Models/                         # Plain data objects (no logic)
-│   │   ├── UsageData.cs
-│   │   ├── WeeklyUsage.cs
-│   │   ├── ContextWindow.cs
-│   │   ├── SessionInfo.cs
-│   │   ├── TokenStats.cs
-│   │   ├── PricingData.cs
-│   │   └── AppSettings.cs
-│   │
-│   ├── ViewModels/                     # Observable state + commands
-│   │   ├── MainViewModel.cs
-│   │   ├── SettingsViewModel.cs
-│   │   ├── LoginViewModel.cs
-│   │   └── SessionViewModel.cs
-│   │
-│   ├── Views/                          # XAML pages + custom controls
-│   │   ├── MainView.xaml / .cs
-│   │   ├── SettingsView.xaml / .cs
-│   │   ├── LoginView.xaml / .cs
-│   │   └── Controls/
-│   │       ├── UsageChartControl.xaml / .cs
-│   │       ├── ProgressBarControl.xaml / .cs
-│   │       └── SessionPickerControl.xaml / .cs
-│   │
-│   ├── Services/                       # Business logic + I/O
-│   │   ├── Interfaces/                 # Service interfaces for DI
-│   │   │   ├── IClaudeApiService.cs
-│   │   │   ├── IJsonlService.cs
-│   │   │   ├── IPricingService.cs
-│   │   │   ├── ICredentialService.cs
-│   │   │   ├── ISettingsService.cs
-│   │   │   ├── IUpdateService.cs
-│   │   │   ├── IFileWatcherService.cs
-│   │   │   └── INavigationService.cs
-│   │   ├── ClaudeApiService.cs
-│   │   ├── JsonlService.cs
-│   │   ├── PricingService.cs
-│   │   ├── CredentialService.cs
-│   │   ├── SettingsService.cs
-│   │   ├── UpdateService.cs
-│   │   ├── FileWatcherService.cs
-│   │   └── NavigationService.cs
-│   │
-│   ├── Helpers/                        # Pure utility functions
-│   │   ├── ColorThresholds.cs
-│   │   ├── TokenCalculator.cs
-│   │   ├── JsonlParser.cs
-│   │   └── ClipboardHelper.cs
-│   │
-│   ├── Converters/                     # XAML value converters
-│   │   ├── BoolToVisibilityConverter.cs
-│   │   └── PercentageToColorConverter.cs
-│   │
-│   ├── Messages/                       # Messenger message types
-│   │   ├── AuthStateChangedMessage.cs
-│   │   ├── UsageDataUpdatedMessage.cs
-│   │   ├── ThemeChangedMessage.cs
-│   │   └── SessionChangedMessage.cs
-│   │
-│   ├── Strings/                        # Localization resources
-│   │   ├── de-DE/Resources.resw
-│   │   └── en-US/Resources.resw
-│   │
-│   ├── Assets/                         # Static resources
-│   │   ├── app-icon.ico
-│   │   └── fallback_pricing.json
-│   │
-│   └── Native/                         # P/Invoke declarations
-│       └── CredentialManagerInterop.cs
-│
-└── CCInfoWindows.Installer/
-    └── setup.iss                       # Inno Setup script
-```
+**DI-Based MVVM:** All services registered as singletons in `Microsoft.Extensions.DependencyInjection`. ViewModels receive services via constructor injection. Source generators (`[ObservableProperty]`, `[RelayCommand]`) eliminate boilerplate.
 
-### Structure Rationale
+**WeakReferenceMessenger:** Cross-ViewModel communication via typed messages. `SonnetContextChangedMessage` follows the exact same pattern as the existing `RefreshIntervalChangedMessage`.
 
-- **Services/Interfaces/**: Separate interfaces enable DI registration and testability. Every service gets an interface because this app has real I/O boundaries (filesystem, HTTP, Win32 API) that need mocking in tests.
-- **Messages/**: Dedicated message types for the CommunityToolkit.Mvvm Messenger pattern. Keeps cross-component communication typed and discoverable rather than scattered across ViewModels.
-- **Native/**: Isolates Win32 P/Invoke declarations (CredRead/CredWrite from advapi32.dll) from business logic. Clear boundary between managed and native code.
-- **Helpers/**: Pure functions with no dependencies on services or ViewModels. TokenCalculator (tiered pricing math), ColorThresholds (usage zone colors), JsonlParser (line-by-line JSONL parsing).
-- **Models/**: Strictly data-only. No INotifyPropertyChanged here -- that belongs in ViewModels. Models are DTOs for serialization and service-to-ViewModel data transfer.
+**Timer-Driven Polling + FileSystemWatcher:** Claude API data polled at configurable interval (30s–10min). JSONL data reactive via debounced FileSystemWatcher (2s debounce). Both paths marshal to UI thread via `DispatcherQueue.TryEnqueue()`.
 
-## Architectural Patterns
+**DispatcherQueue.TryEnqueue():** Mandatory for all observable property updates originating from background threads. WinUI 3 does not auto-marshal (unlike WPF).
 
-### Pattern 1: DI-Based MVVM with CommunityToolkit.Mvvm
-
-**What:** All services registered as singletons in a central DI container (Microsoft.Extensions.DependencyInjection). ViewModels receive services via constructor injection. Source generators (`[ObservableProperty]`, `[RelayCommand]`) eliminate boilerplate.
-
-**When to use:** Always in this project. Every ViewModel and service.
-
-**Trade-offs:** Slightly more setup in App.xaml.cs, but massive reduction in boilerplate and clean separation of concerns. The alternative (manual service locator or static singletons) is worse in every dimension.
-
-**Example:**
-```csharp
-// App.xaml.cs -- DI container setup
-public partial class App : Application
-{
-    public IServiceProvider Services { get; private set; }
-
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
-    {
-        Services = ConfigureServices();
-        m_window = new MainWindow();
-        m_window.Activate();
-    }
-
-    private static IServiceProvider ConfigureServices()
-    {
-        var services = new ServiceCollection();
-
-        // Services (singletons -- one instance for app lifetime)
-        services.AddSingleton<ISettingsService, SettingsService>();
-        services.AddSingleton<ICredentialService, CredentialService>();
-        services.AddSingleton<IClaudeApiService, ClaudeApiService>();
-        services.AddSingleton<IJsonlService, JsonlService>();
-        services.AddSingleton<IFileWatcherService, FileWatcherService>();
-        services.AddSingleton<IPricingService, PricingService>();
-        services.AddSingleton<IUpdateService, UpdateService>();
-        services.AddSingleton<INavigationService, NavigationService>();
-
-        // ViewModels (transient -- new instance per navigation)
-        services.AddTransient<MainViewModel>();
-        services.AddTransient<SettingsViewModel>();
-        services.AddTransient<LoginViewModel>();
-
-        return services.BuildServiceProvider();
-    }
-}
-```
-
-### Pattern 2: WeakReferenceMessenger for Cross-Component Communication
-
-**What:** CommunityToolkit.Mvvm's `WeakReferenceMessenger` decouples ViewModels and services. Instead of direct references, components publish/subscribe to typed messages. Weak references prevent memory leaks.
-
-**When to use:** When a service or ViewModel needs to notify others without a direct dependency. Key scenarios:
-- Auth state changes (LoginVM -> MainVM)
-- Usage data updates (ClaudeApiService -> MainVM)
-- Theme changes (SettingsVM -> UsageChartControl)
-- Session selection changes (SessionPicker -> MainVM -> all data services)
-
-**Trade-offs:** Indirection makes debugging harder (can't "Go to Definition" on a message send to find receivers). Mitigated by keeping message types in a dedicated folder and naming them clearly.
-
-**Example:**
-```csharp
-// Message definition
-public sealed class UsageDataUpdatedMessage : ValueChangedMessage<UsageData>
-{
-    public UsageDataUpdatedMessage(UsageData value) : base(value) { }
-}
-
-// Publisher (ClaudeApiService)
-WeakReferenceMessenger.Default.Send(new UsageDataUpdatedMessage(newData));
-
-// Subscriber (MainViewModel constructor)
-WeakReferenceMessenger.Default.Register<UsageDataUpdatedMessage>(this, (r, m) =>
-{
-    ((MainViewModel)r).OnUsageDataUpdated(m.Value);
-});
-```
-
-### Pattern 3: Timer-Driven Polling with Async/Await
-
-**What:** Periodic data refresh using `PeriodicTimer` on a background thread, with UI dispatch via `DispatcherQueue.TryEnqueue()`. Separate from the event-driven FileWatcher path.
-
-**When to use:** For Claude API polling (configurable 30s-10min interval) and update checks (hourly).
-
-**Trade-offs:** Polling is simple and predictable but not real-time. For this app, the API data is inherently polled (no websocket endpoint exists), so polling is the correct pattern. The JSONL path uses FileSystemWatcher for near-real-time reactivity.
-
-**Example:**
-```csharp
-// In ClaudeApiService
-private readonly PeriodicTimer _timer;
-private readonly DispatcherQueue _dispatcherQueue;
-
-public async Task StartPollingAsync(CancellationToken ct)
-{
-    while (await _timer.WaitForNextTickAsync(ct))
-    {
-        var data = await FetchUsageDataAsync();
-        _dispatcherQueue.TryEnqueue(() =>
-        {
-            WeakReferenceMessenger.Default.Send(new UsageDataUpdatedMessage(data));
-        });
-    }
-}
-```
-
-### Pattern 4: Debounced FileSystemWatcher
-
-**What:** FileSystemWatcher fires duplicate and rapid events. A debounce mechanism (300ms delay, reset on each event) coalesces rapid changes into a single parse operation.
-
-**When to use:** Always for the JSONL file monitoring path. FileSystemWatcher is notoriously chatty on Windows.
-
-**Trade-offs:** 300ms latency on file change detection. Acceptable for a monitoring dashboard where sub-second precision is irrelevant.
-
-**Example:**
-```csharp
-// In FileWatcherService
-private CancellationTokenSource _debounceCts;
-
-private void OnFileChanged(object sender, FileSystemEventArgs e)
-{
-    _debounceCts?.Cancel();
-    _debounceCts = new CancellationTokenSource();
-    _ = DebounceAsync(e.FullPath, _debounceCts.Token);
-}
-
-private async Task DebounceAsync(string path, CancellationToken ct)
-{
-    try
-    {
-        await Task.Delay(300, ct);
-        // Only fires if 300ms passed without another change
-        var data = await _jsonlService.ParseFileAsync(path);
-        _dispatcherQueue.TryEnqueue(() =>
-        {
-            WeakReferenceMessenger.Default.Send(new SessionDataUpdatedMessage(data));
-        });
-    }
-    catch (TaskCanceledException) { /* debounced away */ }
-}
-```
-
-### Pattern 5: DelegatingHandler for Cookie-Based Auth
-
-**What:** A custom `HttpMessageHandler` that injects session cookies from CredentialService into every HTTP request to claude.ai. Keeps auth concerns out of ClaudeApiService business logic.
-
-**When to use:** For all ClaudeApiService HTTP calls.
-
-**Trade-offs:** Slightly more indirection than setting cookies directly, but cleanly separates auth transport from API logic. Also makes it trivial to handle 401/403 responses centrally (trigger re-auth flow).
-
-**Example:**
-```csharp
-public class AuthenticatedHandler : DelegatingHandler
-{
-    private readonly ICredentialService _credentialService;
-
-    public AuthenticatedHandler(ICredentialService credentialService)
-        : base(new HttpClientHandler())
-    {
-        _credentialService = credentialService;
-    }
-
-    protected override async Task<HttpResponseMessage> SendAsync(
-        HttpRequestMessage request, CancellationToken ct)
-    {
-        var token = _credentialService.GetSessionToken();
-        if (token != null)
-            request.Headers.Add("Cookie", $"sessionKey={token}");
-
-        var response = await base.SendAsync(request, ct);
-
-        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-            WeakReferenceMessenger.Default.Send(new AuthExpiredMessage());
-
-        return response;
-    }
-}
-```
-
-## Data Flow
-
-### Primary Data Flows
-
-```
-FLOW 1: Authentication
-========================
-LoginView (WebView2)
-    │ User completes login on claude.ai
-    ↓
-LoginViewModel
-    │ Extracts cookies via CoreWebView2.CookieManager.GetCookiesAsync()
-    ↓
-CredentialService
-    │ Stores sessionKey via Win32 CredWrite (DPAPI encrypted)
-    ↓
-Messenger: AuthStateChangedMessage
-    │
-    ↓
-NavigationService → navigates to MainView
-ClaudeApiService → begins polling with stored token
-
-
-FLOW 2: API Usage Data (Polling)
-==================================
-PeriodicTimer tick (configurable interval)
-    ↓
-ClaudeApiService
-    │ GET https://claude.ai/api/organizations/{orgId}/usage
-    │ GET https://claude.ai/api/organizations/{orgId}/usage?scope=weekly
-    │ Cookies injected by AuthenticatedHandler
-    ↓
-UsageData / WeeklyUsage models
-    ↓
-Messenger: UsageDataUpdatedMessage
-    ↓
-MainViewModel
-    │ Updates [ObservableProperty] fields
-    ↓
-MainView bindings → UsageChartControl.Invalidate()
-                  → Weekly usage text/bars
-                  → Context window progress bars
-
-
-FLOW 3: Local Session Data (Event-Driven)
-===========================================
-Claude Code writes to JSONL file
-    ↓
-FileSystemWatcher (FileWatcherService)
-    │ Changed/Created event (background thread)
-    ↓
-Debounce (300ms)
-    ↓
-JsonlService.ParseFileAsync()
-    │ Reads last ~1MB, parses line-by-line
-    │ Deduplicates by messageId/requestId
-    ↓
-TokenStats / SessionInfo models
-    ↓
-DispatcherQueue.TryEnqueue()
-    ↓
-Messenger: SessionDataUpdatedMessage
-    ↓
-MainViewModel
-    │ Aggregates by session/today/week/month
-    │ Calculates costs via PricingService
-    ↓
-MainView bindings → Token stats tabs
-                  → Cost display with burn rate
-                  → Session picker list
-
-
-FLOW 4: Pricing Data (Cached HTTP)
-=====================================
-App start OR 12-hour cache expiry
-    ↓
-PricingService
-    │ GET https://raw.githubusercontent.com/.../model_prices_and_context_window.json
-    │ Falls back to Assets/fallback_pricing.json on failure
-    ↓
-pricing_cache.json (%LOCALAPPDATA%)
-    ↓
-TokenCalculator
-    │ Applies tiered pricing (>200K tokens = higher rate)
-    ↓
-Cost calculation in MainViewModel
-
-
-FLOW 5: Settings Changes
-===========================
-SettingsView user interaction
-    ↓
-SettingsViewModel [RelayCommand]
-    │ Updates AppSettings model
-    ↓
-SettingsService
-    │ Persists to settings.json
-    ↓
-Messenger: ThemeChangedMessage / RefreshIntervalChangedMessage
-    ↓
-MainViewModel → reconfigures polling timer
-UsageChartControl → recalculates color palette, invalidates
-App root element → RequestedTheme = Dark/Light
-```
-
-### State Management
-
-There is no central state store. State lives in ViewModels as `[ObservableProperty]` fields. Cross-ViewModel communication happens exclusively through the Messenger. This is the standard WinUI 3 MVVM approach -- simpler than Redux-style patterns and appropriate for a single-window dashboard app with modest state complexity.
-
-**State ownership:**
-| State | Owner | Persistence |
-|-------|-------|-------------|
-| 5h usage data | MainViewModel | In-memory + usage_history.json |
-| Weekly usage data | MainViewModel | In-memory only |
-| Context window | MainViewModel | In-memory only |
-| Token stats | MainViewModel | token_stats_cache.json |
-| Session list | MainViewModel | Derived from JSONL scan |
-| Pricing data | PricingService | pricing_cache.json |
-| App settings | SettingsService | settings.json |
-| Auth token | CredentialService | Windows Credential Manager |
-| Update availability | MainViewModel | In-memory only |
-
-## Build Order (Dependency Chain)
-
-The architecture has clear dependency layers that dictate build order:
-
-### Phase 1: Foundation (no feature dependencies)
-1. **Project scaffold** -- Solution, .csproj, NuGet packages, folder structure
-2. **Models** -- Pure data classes, no dependencies
-3. **DI container** -- App.xaml.cs with ServiceCollection
-4. **NavigationService** -- Frame navigation between pages
-5. **SettingsService** -- JSON read/write for settings.json
-6. **MainWindow + empty MainView/SettingsView** -- Navigation shell
-
-### Phase 2: Authentication (blocks all API features)
-1. **CredentialService** -- Win32 P/Invoke for CredRead/CredWrite
-2. **LoginView + LoginViewModel** -- WebView2 login + cookie extraction
-3. **AuthenticatedHandler** -- DelegatingHandler for HttpClient
-4. **Auth flow integration** -- Login -> credential store -> navigate to main
-
-### Phase 3: API Data (depends on Phase 2)
-1. **ClaudeApiService** -- HTTP polling for usage endpoints
-2. **MainViewModel** -- Observable properties for usage data
-3. **MainView** -- Basic text display of 5h + weekly usage
-4. **Timer-driven polling** -- PeriodicTimer + DispatcherQueue dispatch
-
-### Phase 4: Charts (depends on Phase 3 data)
-1. **UsageChartControl** -- Win2D CanvasControl + area chart rendering
-2. **ColorThresholds** -- Zone color calculation (green/yellow/orange/red)
-3. **Chart export** -- CanvasRenderTarget to PNG file/clipboard
-
-### Phase 5: Local Data (independent of Phase 3, can parallel)
-1. **FileWatcherService** -- FileSystemWatcher + debounce
-2. **JsonlParser** -- Line-by-line JSONL parsing
-3. **JsonlService** -- Aggregation + deduplication
-4. **TokenCalculator** -- Cost calculation with tiered pricing
-5. **PricingService** -- LiteLLM fetch + cache + fallback
-6. **Session management UI** -- SessionPickerControl + token stats tabs
-
-### Phase 6: Polish (depends on Phases 3-5)
-1. **ProgressBarControl** -- Context window bars with model badges
-2. **Dark/light mode toggle** -- RequestedTheme + chart palette recalc
-3. **Localization** -- .resw files for DE/EN
-4. **UpdateService** -- GitHub Releases check + InfoBar banner
-5. **Window position persistence** -- Save/restore on close/open
-6. **Inno Setup installer**
-
-**Critical path:** Phase 1 -> Phase 2 -> Phase 3 -> Phase 4. Phases 5 and 6 can partially overlap with Phase 3/4.
-
-## Anti-Patterns
-
-### Anti-Pattern 1: Calling Services Directly from Code-Behind
-
-**What people do:** Inject or create service instances in XAML code-behind (.xaml.cs) files and call them directly, bypassing the ViewModel.
-**Why it's wrong:** Breaks MVVM separation. Code-behind becomes untestable and tightly coupled. State scattered across code-behind and ViewModel.
-**Do this instead:** Code-behind should only do things that require a direct reference to XAML elements (e.g., WebView2 initialization, Win2D draw session setup). All logic and state goes through the ViewModel. Use `x:Bind` to connect View to ViewModel.
-
-### Anti-Pattern 2: Static Singletons Instead of DI
-
-**What people do:** Create `public static ClaudeApiService Instance { get; }` singletons instead of registering services in DI.
-**Why it's wrong:** Untestable (can't mock), hidden dependencies, initialization order bugs, thread-safety landmines.
-**Do this instead:** Register everything in `ServiceCollection`. Access via constructor injection in ViewModels and services.
-
-### Anti-Pattern 3: Raising PropertyChanged from Background Threads
-
-**What people do:** Update `[ObservableProperty]` fields directly from async service callbacks running on thread pool threads.
-**Why it's wrong:** WinUI 3 throws `COMException` (RPC_E_WRONG_THREAD) when UI bindings try to process property changes from non-UI threads. Unlike WPF, WinUI 3 does not auto-marshal.
-**Do this instead:** Always dispatch to UI thread via `DispatcherQueue.TryEnqueue()` before updating any observable property. Alternatively, use Messenger to send messages that ViewModels handle on the UI thread.
-
-### Anti-Pattern 4: Trusting FileSystemWatcher Events Directly
-
-**What people do:** Parse JSONL files on every FileSystemWatcher event without debouncing.
-**Why it's wrong:** Windows FSW fires duplicate events, partial-write events, and rapid bursts. Parsing on each event causes excessive I/O, partial reads, and wasted CPU.
-**Do this instead:** Debounce (300ms), verify file is not locked before reading, read only the tail of the file (seek to last ~1MB).
-
-### Anti-Pattern 5: Hardcoding Win2D Draw Calls in ViewModel
-
-**What people do:** Put chart drawing logic in the ViewModel to keep the View "dumb."
-**Why it's wrong:** Win2D drawing sessions (`CanvasDrawingSession`) are GPU-bound UI resources that must run on the UI thread. They belong in the control. The ViewModel should expose data; the control decides how to render it.
-**Do this instead:** ViewModel exposes `IReadOnlyList<UsageDataPoint>` as an observable property. The UsageChartControl subscribes to changes and calls `Invalidate()` to trigger a redraw in its `Draw` event handler.
-
-## Integration Points
-
-### External Services
-
-| Service | Integration Pattern | Notes |
-|---------|---------------------|-------|
-| claude.ai API | HttpClient + DelegatingHandler (cookie auth) | Polling-based. Must handle 401/403 -> re-auth. orgId must be percent-encoded. |
-| LiteLLM pricing (GitHub raw) | HttpClient GET + JSON cache | 12h cache. Fallback to bundled JSON. No auth needed. |
-| GitHub Releases API | HttpClient GET (unauthenticated) | Rate limit: 60 req/hour for unauthenticated. Hourly check is fine. |
-| Claude Code JSONL files | FileSystemWatcher + direct file I/O | Read-only. Files may be locked by Claude Code process -- handle IOException with retry. |
-| Windows Credential Manager | Win32 P/Invoke (advapi32.dll) | CredRead/CredWrite/CredDelete. DPAPI-encrypted. Or use AdysTech.CredentialManager NuGet wrapper. |
-
-### Internal Boundaries
-
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| View <-> ViewModel | x:Bind (compiled bindings) | One-way for display, two-way for settings inputs. Prefer `x:Bind` over `{Binding}` for compile-time safety and performance. |
-| ViewModel <-> ViewModel | WeakReferenceMessenger | Typed messages. No direct ViewModel references. |
-| ViewModel <-> Service | Constructor injection (DI) | ViewModels call service methods. Services notify via Messenger or return Task results. |
-| Service <-> Service | Constructor injection (DI) | E.g., ClaudeApiService depends on ICredentialService. Keep dependency graph acyclic. |
-| Background thread <-> UI thread | DispatcherQueue.TryEnqueue() | All UI property updates must go through this. Non-negotiable in WinUI 3. |
-| Win2D Control <-> ViewModel | Data binding + Invalidate() | ViewModel pushes data, control pulls during Draw event. |
-
-## Performance Boundaries
-
-This is a single-user desktop app, not a server. "Scaling" means handling increasing data volumes gracefully.
-
-| Concern | With 10 sessions | With 100 sessions | With 500+ sessions |
-|---------|-------------------|--------------------|--------------------|
-| JSONL parsing | <100ms, parse all files | 1-2s, need selective parsing | Cache parsed results, only re-parse changed files |
-| Memory (JSONL data) | <5 MB | ~20 MB | Need rolling window, drop old data from memory |
-| FileSystemWatcher | Works fine | Works fine (recursive) | May need to watch only active session directories |
-| API polling | Trivial (2 requests/interval) | Same (API data is per-org, not per-session) | Same |
-| Win2D chart render | <5ms | Same (chart shows aggregate, not per-session) | Same |
-
-### First bottleneck: JSONL parsing at startup
-Large JSONL files (>50MB) will cause noticeable startup delay. Mitigation: Parse only tail of files (last ~1MB), cache aggregated stats in token_stats_cache.json, load cache first and backfill lazily.
-
-### Second bottleneck: FileSystemWatcher reliability
-FSW can miss events under heavy I/O load. Mitigation: Periodic full rescan (every 5 minutes) as a safety net alongside event-driven updates.
+---
 
 ## Sources
 
-- [CommunityToolkit.Mvvm Introduction](https://learn.microsoft.com/en-us/dotnet/communitytoolkit/mvvm/) -- HIGH confidence
-- [WinUI 3 MVVM + DI Tutorial](https://learn.microsoft.com/en-us/windows/apps/tutorials/winui-mvvm-toolkit/dependency-injection) -- HIGH confidence
-- [Win2D for WinUI 3](https://microsoft.github.io/Win2D/WinUI3/html/Introduction.htm) -- HIGH confidence
-- [Microsoft.Graphics.Win2D NuGet (v1.3.2)](https://www.nuget.org/packages/Microsoft.Graphics.Win2D) -- HIGH confidence
-- [CanvasControl Class Reference](https://microsoft.github.io/Win2D/WinUI3/html/T_Microsoft_Graphics_Canvas_UI_Xaml_CanvasControl.htm) -- HIGH confidence
-- [WebView2 Cookie Management Spec](https://github.com/MicrosoftEdge/WebView2Feedback/blob/main/specs/CookieManagement.md) -- HIGH confidence
-- [WebView2 Cookie Auth Pattern (Anthony Simmon)](https://anthonysimmon.com/authenticating-http-requests-cookies-webview2-wpf/) -- MEDIUM confidence (WPF example, pattern applies to WinUI 3)
-- [DispatcherQueue in WinUI 3](https://learn.microsoft.com/en-us/windows/apps/develop/dispatcherqueue) -- HIGH confidence
-- [DI with WinUI 3 (Albert Akhmetov)](https://albertakhmetov.com/posts/2024/using-.net-build-in-dependency-injection-with-winui-apps/) -- MEDIUM confidence
-- [Win2D Performance Discussion](https://github.com/microsoft/Win2D/issues/828) -- MEDIUM confidence
-
----
-*Architecture research for: WinUI 3 MVVM real-time monitoring desktop app*
-*Researched: 2026-03-09*
+- `spec-release-from-1.7.1-to-1.8.3.md` — Authoritative implementation spec (HIGH confidence, authored for this milestone)
+- `CCInfoWindows/CCInfoWindows/Helpers/ModelContextLimits.cs` — Current implementation, direct code read
+- `CCInfoWindows/CCInfoWindows/Models/ContextWindowData.cs` — Utilization computation, direct code read
+- `CCInfoWindows/CCInfoWindows/Services/JsonlService.cs` — `RebuildSessionsList()`, `BuildSubagentContext()`, `GetContextWindow()`, direct code read
+- `CCInfoWindows/CCInfoWindows/Models/AppSettings.cs` — Current settings schema, direct code read
+- `CCInfoWindows/CCInfoWindows/ViewModels/SettingsViewModel.cs` — Settings property and messenger patterns, direct code read
+- `CCInfoWindows/CCInfoWindows/Messages/RefreshIntervalChangedMessage.cs` — Messenger message pattern reference, direct code read
+- `CCInfoWindows/CCInfoWindows/Services/Interfaces/IJsonlService.cs` — Public service contract, direct code read

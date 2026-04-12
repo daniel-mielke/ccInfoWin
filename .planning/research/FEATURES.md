@@ -1,174 +1,126 @@
-# Feature Landscape
+# Feature Research
 
-**Domain:** Desktop LLM usage monitoring (Claude Code usage tracker for Windows)
-**Researched:** 2026-03-09
-
-## Competitive Landscape
-
-The Claude usage monitoring space has exploded since mid-2025. Key competitors analyzed:
-
-| Tool | Platform | Type | Key Differentiator |
-|------|----------|------|-------------------|
-| ccInfo (reference) | macOS | Native menu bar | Full-featured, our port target |
-| claude-usage-widget | Windows + macOS | Electron widget | Only Windows competitor, basic features |
-| SessionWatcher | macOS | Native menu bar | Zero-config, paid ($) |
-| CUStats | macOS + iOS/Android | Native multi-platform | Multi-account, mobile companion, activity charts |
-| ClaudeMeter | macOS | Native menu bar | JSON export, lightweight |
-| Claude-Code-Usage-Monitor | Terminal (cross-platform) | Python CLI | ML predictions, P90 detection |
-| ccusage | Terminal (cross-platform) | Node CLI | JSONL analysis, date filtering |
-
-**Windows gap:** Only `claude-usage-widget` targets Windows, and it is a basic Electron widget with session/weekly progress bars, countdown timers, and threshold warnings. No JSONL parsing, no token statistics, no cost analysis, no chart visualization. ccInfoWin would be the most feature-complete Windows Claude monitor by a wide margin.
+**Domain:** Desktop LLM usage monitoring — macOS v1.8.3 feature parity delta for ccInfoWin v1.2
+**Researched:** 2026-04-12
+**Confidence:** HIGH (spec fully defined, reference implementation known, codebase inspected)
 
 ---
 
-## Table Stakes
+## Scope
 
-Features users expect. Missing = product feels incomplete compared to the reference app and competitors.
-
-| Feature | Why Expected | Complexity | Spec Reference |
-|---------|--------------|------------|----------------|
-| 5-hour window percentage display | Every single competitor shows this. Core metric for avoiding throttling. | Low | FA-020 |
-| Reset countdown timer | All competitors show time until reset. Without it, the percentage is less actionable. | Low | FA-021 |
-| Weekly usage limit display | Shown by all competitors. Second most important limit metric. | Low | FA-030 |
-| Color-coded progress bars (green/yellow/orange/red) | Visual convention across all tools. Users scan colors, not numbers. | Low | NF-013 |
-| Secure authentication via WebView2 | Required to access claude.ai API. Every tool that uses the API does this. | Med | FA-010, FA-011 |
-| Auto-refresh on interval | All competitors auto-refresh. Manual-only refresh would feel broken. | Low | FA-090 |
-| Dark mode | Every competitor supports dark mode. Developer tools default dark. | Low | FA-094, FA-095 |
-| Token credential storage (Windows Credential Manager) | Security baseline. Competitors use Keychain (macOS). Plaintext storage is unacceptable. | Med | FA-011, NF-032 |
-| Session token re-validation on startup | Competitors handle expired sessions gracefully. Broken auth on launch = uninstall. | Low | FA-012 |
-| Logout capability | Basic account hygiene. All competitors offer this. | Low | FA-013 |
-| Persistent window position | Desktop widgets/monitors remember position. Losing position on restart is annoying. | Low | NF-010 |
-| No telemetry / privacy-first | Every competitor in this space advertises zero telemetry. Privacy is a hygiene factor for dev tools. | Low | NF-030 |
+This document covers ONLY the five new features being added in v1.2. The existing feature set
+(authentication, charts, weekly limits, context window, token stats, cost, export, settings,
+auto-update, localization) is already implemented and NOT re-analyzed here.
 
 ---
 
-## Differentiators
+## Feature Landscape
 
-Features that set ccInfoWin apart from competitors. Not expected by all users, but create real value.
+### Table Stakes (Users Expect These)
 
-### Tier 1: Strong Differentiators (vs. Windows competition)
+| Feature | Why Expected | Complexity | Existing Code Impact |
+|---------|--------------|------------|----------------------|
+| Accurate context limit for Opus (1M) | Opus has had 1M context since launch. Displaying 200K for Opus is visibly wrong for any Max subscriber. Trust breaks immediately. | MEDIUM | `ModelContextLimits.cs` dict + `GetMaxContextTokens()` + `GetEffectiveMaxTokens()` + `ShouldWarnAutocompact()` must all change. Propagates to `ContextWindowData.Utilization` and `SubagentContextData.Utilization`. |
+| Stable subagent order | If the subagent list reorders on every refresh, users can't track individual agents visually. Any monitoring tool should have stable display order. | LOW | `BuildSubagentContext()` in `JsonlService.cs` — single `.OrderBy()` addition. No model or view changes. |
+| Session list without ghost projects | Showing sessions for deleted directories is confusing (user clicks session, gets no data). Users expect the dropdown to reflect reality. | LOW | `RebuildSessionsList()` in `JsonlService.cs` — single `.Where(Directory.Exists)` filter addition. Edge: selected session cleared if its directory is deleted. |
+| Tooltips on icon-only buttons | Icon-only buttons without tooltips fail basic discoverability. Any desktop app with icon-only controls must have hover tooltips — this is a Windows design guideline requirement. | LOW | `MainView.xaml` — add `ToolTipService.ToolTip` and `AutomationProperties.Name` to three existing footer buttons. Localization strings for both locales needed. |
 
-| Feature | Value Proposition | Complexity | Spec Reference |
-|---------|-------------------|------------|----------------|
-| Interactive area chart (5h window) | No Windows tool has this. Visual history of usage over time, not just current %. Signature feature of ccInfo. | High | FA-022, FA-023, FA-024, FA-025 |
-| Context window status with subagents | Unique to ccInfo. Shows how close you are to autocompact. Prevents context loss mid-conversation. | Med | FA-040, FA-041, FA-042, FA-043 |
-| Multi-session management | No Windows competitor tracks multiple Claude Code sessions. Essential for devs working on multiple projects. | Med | FA-050, FA-051, FA-054 |
-| Token statistics by time period | Session/today/week/month aggregation. Only CLI tools (ccusage) offer this, no GUI on Windows. | Med | FA-060, FA-061 |
-| Cost calculation with live pricing | Real-time cost awareness. Only the Python CLI tool does ML-based cost analysis. No Windows GUI does this. | High | FA-070, FA-071, FA-073 |
-| Model-specific breakdown (Sonnet/Opus) | Shows which model eats your quota. Only ccInfo and CUStats break this down visually. | Med | FA-031, FA-041 |
+### Differentiators (Competitive Advantage)
 
-### Tier 2: Nice-to-Have Differentiators
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Sonnet context size picker (200K / 1M) | Sonnet on Max plan supports 1M context. Letting users configure which size they have makes the context bar accurate for Max subscribers — no other Windows tool offers this. | MEDIUM | New setting in `AppSettings`, new ComboBox row in `SettingsView.xaml`, `SettingsViewModel` property, messenger trigger for live refresh. Depends on Phase 1 model-based detection being in place first. |
+| Model-family-based context detection | Detecting context size from model family (Opus/Sonnet/Haiku) rather than a token-count heuristic is more reliable and future-proof. Prevents false "1M context" display when a Sonnet session grows past 180K tokens. | MEDIUM | Core logic change in `ModelContextLimits.cs`. Introduces `ModelFamily` enum. Unified 33K flat autocompact buffer replaces the two-tier 33K/165K system. Warning threshold changes from percentage-based to flat 20K-remaining. |
 
-| Feature | Value Proposition | Complexity | Spec Reference |
-|---------|-------------------|------------|----------------|
-| Burn rate display | "At this rate you'll hit the limit in X minutes." Actionable insight, few tools offer this. | Med | FA-074 |
-| Chart export (PNG + clipboard) | Share usage charts in Slack/Teams. Unique to ccInfo among GUI tools. | Med | FA-080, FA-081, FA-082 |
-| Tiered pricing for extended context | Accurate cost for 1M-context models. Only relevant for Max subscribers but shows attention to detail. | Med | FA-073 |
-| Autocompact warning at 95% context | Proactive warning before Claude auto-compresses context. Prevents surprise context loss. | Low | FA-043 |
-| Localization (DE/EN) | Broader accessibility. No competitor offers multi-language. Low effort for two languages. | Low | FA-093 |
-| Light mode | Some devs prefer light themes. Most competitors offer this toggle. | Low | FA-094 |
-| Autostart with Windows | Convenience for always-on monitoring. claude-usage-widget also offers this. | Low | FA-091 |
-| Auto-update check with banner | Keeps users on latest version without manual checking. Standard for desktop apps. | Med | FA-100, FA-101, FA-102 |
+### Anti-Features (Explicitly Out of Scope)
 
----
-
-## Anti-Features
-
-Features to explicitly NOT build. Either out of scope, harmful to UX, or not worth the complexity.
-
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| System tray / taskbar integration | No standard Windows API for rich metrics in taskbar. Complexity vs. value is terrible. The persistent window IS the dashboard. | Keep all metrics in the main window (PROJECT.md decision) |
-| Transparent/blur background | Unreliable across Windows versions, GPU-dependent, accessibility nightmare. macOS vibrancy has no good Windows equivalent. | Opaque background, clean dark/light themes (PROJECT.md decision) |
-| ML-based usage predictions | The Python CLI tool does this with P90 percentile calculations. Over-engineered for a desktop widget. Predictions are noisy and create false confidence. | Show burn rate (simple math) instead of ML predictions |
-| Multi-account support | CUStats does this. Adds auth complexity, UI complexity, edge cases. Target audience (individual dev) rarely needs this. | Single account, clean logout/re-login flow |
-| Mobile companion app | CUStats has iOS/Android. Massive scope expansion. Claude Code is a desktop tool -- you monitor it at your desk. | Stay desktop-only |
-| GitHub-style activity heatmaps | CUStats has these. Looks nice but low information density for the use case. Users need real-time status, not historical heatmaps. | Token stats by time period (session/day/week/month) covers the same need more concisely |
-| JSON/CSV data export | ClaudeMeter offers JSON export. Niche feature, adds file format maintenance burden. Chart PNG export covers the sharing use case. | Chart PNG export + clipboard copy |
-| Notification toasts for usage warnings | SessionWatcher and CUStats push notifications. Windows toast notifications are unreliable, often ignored, and require packaging complexity. | Color-coded in-app warnings (the window is always visible anyway) |
-| Configurable color thresholds | claude-usage-widget lets users set amber/red thresholds. Adds settings complexity for marginal value. The 50/75/90 breakpoints match Claude's actual behavior. | Fixed thresholds matching Claude's rate limit zones |
-| Separate settings window | macOS ccInfo opens a separate settings window. On Windows, a persistent-window app should navigate in-place. | In-app settings view with back navigation (NF-010a) |
-| OpenAI Codex / other LLM support | CUStats monitors Codex too. Dilutes focus, adds API complexity, different data formats. | Claude-only. Do one thing well. |
-| SQLite or database storage | Overkill for the data volumes involved (few KB of usage data). | JSON files via System.Text.Json (PROJECT.md decision) |
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Per-model context size override (arbitrary number input) | Power users want full control | Adds validation complexity, UI noise, edge cases (e.g. user sets 500K which doesn't exist). Claude models only come in 200K or 1M. Two-option ComboBox is sufficient and correct. | 200K/1M ComboBox for Sonnet — covers 100% of real-world cases |
+| Auto-detect Sonnet context from API response | Seems elegant — let the API tell us | The API does not expose context window size in the usage endpoint. Would require separate undocumented API call; brittle. | Manual setting with sensible 200K default |
+| Filter sessions by date / age threshold | Related to ghost-project filtering | Different problem domain — old-but-valid sessions should remain visible. Age filtering conflates "stale" with "orphaned". | Directory-existence check only (Phase 3) |
+| Accessibility tree for chart canvas | Full screen reader support for Win2D canvas | Win2D canvas has no accessibility element tree — implementing this would require custom IAccessibleEx implementation, massively complex. | `AutomationProperties.Name` on all interactive controls (Phase 5 covers this for footer buttons) |
+| Sparkle-style in-app update UI (Settings tab) | macOS v1.8.0 added a dedicated Updates settings tab | The macOS version is Sparkle-specific (XPC, EdDSA appcast). Our GitHub Releases poller + InfoBar banner already covers the use case without a dedicated tab. | Existing `UpdateService` + banner (already shipped) |
 
 ---
 
 ## Feature Dependencies
 
 ```
-FA-010 (Auth/Login)
-  +-> FA-020 (5h percentage) -- requires API access
-  +-> FA-030 (Weekly limit) -- requires API access
-  +-> FA-022 (Area chart) -- requires 5h data
-       +-> FA-080 (Chart export) -- requires rendered chart
+Phase 1: Model-based context detection (ModelContextLimits.cs refactor)
+    └──required by──> Phase 2: Sonnet context window setting
+                          (GetMaxContextTokens must accept sonnet size parameter
+                           before Settings UI can influence context display)
 
-DS-020 (JSONL file reading)
-  +-> FA-040 (Context window) -- requires session data
-  +-> FA-050 (Multi-session) -- requires session discovery
-  +-> FA-060 (Token stats) -- requires token data from JSONL
-       +-> FA-070 (Cost calc) -- requires token counts + pricing
-            +-> DS-030 (LiteLLM API) -- pricing data source
-
-FA-094 (Dark/Light mode)
-  +-> FA-028 (Chart dark mode adaptation) -- chart colors depend on theme
-
-FA-090 (Settings infrastructure)
-  +-> FA-091 (Autostart)
-  +-> FA-092 (Session threshold)
-  +-> FA-093 (Language)
+Phase 3: Session filtering          ← independent, no Phase 1/2 dependency
+Phase 4: Subagent sorting           ← independent, no Phase 1/2 dependency
+Phase 5: Footer tooltips            ← independent, no Phase 1/2 dependency
 ```
 
-**Critical path:** Authentication must work first, then API data fetch, then visualization. JSONL parsing is a parallel independent track that enables session/token/cost features.
+### Dependency Notes
+
+- **Phase 1 blocks Phase 2:** The `GetMaxContextTokens()` signature must accept a `sonnetContextSize` parameter (or read from injected settings) before Phase 2 can wire the UI control to live context recalculation. If Phase 2 is implemented first, Sonnet context changes would have no effect.
+- **Phases 3, 4, 5 are fully independent:** Can be implemented in any order or in parallel after Phase 1+2.
+- **`ContextWindowData.Utilization` and `SubagentContextData.Utilization`** both call `GetEffectiveMaxTokens()` directly — Phase 1's signature simplification (`(long maxTokens)` instead of `(long currentTokens, long maxTokens)`) propagates to both records automatically.
+- **`ShouldWarnAutocompact()` behavioral change** (percentage → flat 20K remaining) affects `GetContextWindow()` in `JsonlService.cs` — no view changes, the existing `ShouldWarnAutocompact` bool property on `ContextWindowData` propagates through unchanged.
 
 ---
 
-## MVP Recommendation
+## Implementation Complexity Assessment
 
-### Phase 1: Core monitoring (must ship)
-1. Authentication via WebView2 + credential storage (FA-010 through FA-013)
-2. 5-hour window with percentage + countdown (FA-020, FA-021)
-3. Weekly limit display (FA-030)
-4. Color-coded progress bars (NF-013)
-5. Dark/light mode (FA-094, FA-095)
-6. Basic settings (refresh interval) (FA-090)
+| Phase | Effort | Files Changed | Risk |
+|-------|--------|---------------|------|
+| Phase 1: 1M context window + model detection | MEDIUM | `ModelContextLimits.cs`, `ContextWindowData.cs`, `JsonlService.cs`, `MainViewModel.cs` (verify) | LOW — pure logic, no new infrastructure, comprehensive existing test surface for `JsonlServiceTests` |
+| Phase 2: Sonnet context setting | MEDIUM | `AppSettings.cs`, `SettingsView.xaml`, `SettingsViewModel.cs`, `JsonlService.cs`, 2x `.resw` files | LOW — follows established pattern (Language picker is identical pattern already implemented) |
+| Phase 3: Session filtering | LOW | `JsonlService.cs` — one filter clause in `RebuildSessionsList()` | LOW — `Directory.Exists()` is a standard .NET API. Edge case: selected session invalidation handled by existing "no active session" fallback in `MainViewModel` |
+| Phase 4: Subagent sorting | TRIVIAL | `JsonlService.cs` — one `.OrderBy()` call in `BuildSubagentContext()` | NEGLIGIBLE |
+| Phase 5: Footer tooltips | LOW | `MainView.xaml`, 2x `.resw` files | LOW — `ToolTipService.ToolTip` via `l:Uids.Uid` needs verification: WinUI3Localizer property path syntax for attached properties. Existing localization pattern (`l:Uids.Uid`) may require the property segment `[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip` in the Uid name — verify against existing `l:Uids.Uid` usage before assuming standard WinUI Uid pattern works here. |
 
-**Rationale:** This matches what `claude-usage-widget` offers but with native WinUI 3 quality. Gets something usable out the door.
+---
 
-### Phase 2: Signature features (what makes it ccInfo)
-1. Interactive area chart with color zones (FA-022 through FA-028) -- THE differentiator
-2. Model-specific weekly breakdown (FA-031)
-3. Context window status + subagents (FA-040 through FA-044)
-4. Multi-session management (FA-050 through FA-054)
+## Pitfall Flags for Phase Implementation
 
-**Rationale:** These are the features that make ccInfoWin more than "just another progress bar widget." The area chart is the visual signature of ccInfo.
+| Phase | Key Pitfall |
+|-------|-------------|
+| Phase 1 | `GetMaxContextTokens()` currently has no parameter for `sonnetContextSize` — the signature change must be designed so `JsonlService` can supply the configured value without creating a circular dependency (service reads settings, settings are loaded by `SettingsService`). Inject `ISettingsService` into `JsonlService` constructor, or pass the value as a method parameter. |
+| Phase 1 | The existing `ExtendedContextDetectionThreshold = 180_000` heuristic must be fully removed — not just unused. Leaving it in code creates future confusion about which path is active. |
+| Phase 2 | `settings.json` deserialization: `System.Text.Json` will use the default value (200,000) if `sonnetContextSize` key is missing. No migration code needed — this is the correct zero-effort migration path. |
+| Phase 3 | The `Cwd` field can be an empty string for sessions parsed before v1.0 (pre-`Cwd` JSONL format). The filter must guard: `!string.IsNullOrEmpty(s.Cwd) && Directory.Exists(s.Cwd)`. Sessions with empty Cwd are effectively unvalidatable orphans and should also be excluded. |
+| Phase 5 | `AutomationProperties.Name` should be the English string (screen readers expect non-localized control names in most assistive tech conventions). The tooltip can be localized; the automation name should stay English and be hardcoded, not run through the localizer. |
 
-### Phase 3: Analytics and polish
-1. Token statistics with time periods (FA-060 through FA-063)
-2. Cost calculation with live pricing (FA-070 through FA-075)
-3. Burn rate (FA-074)
-4. Chart export (FA-080 through FA-082)
+---
 
-**Rationale:** Analytics features build on top of the core monitoring. Cost calculation depends on LiteLLM integration and tiered pricing logic, which is complex but not critical for initial use.
+## MVP Definition for This Milestone
 
-### Phase 4: Distribution and convenience
-1. Localization DE/EN (FA-093)
-2. Autostart (FA-091)
-3. Auto-update (FA-100 through FA-102)
-4. Inno Setup installer
-5. Accessibility / screen reader support (NF-040)
+### Ship Together (v1.2)
 
-**Defer indefinitely:** ML predictions, multi-account, mobile app, heatmaps, data export, Codex support.
+All five phases constitute the complete milestone. There is no partial-ship that makes sense:
+
+- [ ] Phase 1 (1M context + model detection) — correctness fix, not optional
+- [ ] Phase 2 (Sonnet picker) — requires Phase 1, low additional effort
+- [ ] Phase 3 (session filtering) — independent, small scope
+- [ ] Phase 4 (subagent sorting) — independent, trivial
+- [ ] Phase 5 (footer tooltips) — independent, Windows design guideline compliance
+
+### Defer to Future Milestones
+
+- Accessibility tree for Win2D chart canvas — complex, niche
+- Updates Settings tab — macOS-specific pattern, existing banner sufficient
+- Per-model context size override beyond Sonnet — no real-world use case exists
 
 ---
 
 ## Sources
 
-- [ccInfo (reference macOS app)](https://github.com/stefanlange/ccInfo)
-- [claude-usage-widget (Windows competitor)](https://github.com/SlavomirDurej/claude-usage-widget)
-- [SessionWatcher](https://www.sessionwatcher.com/)
-- [CUStats](https://custats.info/)
-- [ClaudeMeter](https://eddmann.com/ClaudeMeter/)
-- [Claude-Code-Usage-Monitor (Python CLI)](https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor)
-- [ccusage (Node CLI)](https://github.com/ryoppippi/ccusage)
-- [Claude Usage Tracker](https://github.com/hamed-elfayome/Claude-Usage-Tracker)
-- [Claude Code usage analytics (official)](https://support.claude.com/en/articles/12157520-claude-code-usage-analytics)
+- `spec-release-from-1.7.1-to-1.8.3.md` — Primary specification document (HIGH confidence)
+- `.planning/PROJECT.md` — Project context and constraints (HIGH confidence)
+- `CCInfoWindows/CCInfoWindows/Helpers/ModelContextLimits.cs` — Current implementation (HIGH confidence)
+- `CCInfoWindows/CCInfoWindows/Models/AppSettings.cs` — Current settings model (HIGH confidence)
+- `CCInfoWindows/CCInfoWindows/Models/ContextWindowData.cs` — Utilization calculation chain (HIGH confidence)
+- `CCInfoWindows/CCInfoWindows/Services/JsonlService.cs` — `BuildSubagentContext()`, `RebuildSessionsList()` (HIGH confidence)
+- `CCInfoWindows/CCInfoWindows/Views/MainView.xaml` — Footer button structure (HIGH confidence)
+- `CCInfoWindows/CCInfoWindows/Views/SettingsView.xaml` — Existing ComboBox pattern for Language picker (HIGH confidence)
+
+---
+*Feature research for: ccInfoWin v1.2 macOS v1.8.3 parity delta*
+*Researched: 2026-04-12*

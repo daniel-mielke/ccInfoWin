@@ -1,179 +1,158 @@
 # Project Research Summary
 
-**Project:** ccInfoWin (Claude Code Usage Monitor for Windows)
-**Domain:** Windows desktop real-time monitoring application
-**Researched:** 2026-03-09
+**Project:** ccInfoWin v1.2 - macOS v1.8.3 Feature Parity
+**Domain:** WinUI 3 Desktop App - Claude Code usage monitoring
+**Researched:** 2026-04-12
 **Confidence:** HIGH
 
 ## Executive Summary
 
-ccInfoWin is a native Windows desktop monitoring tool that tracks Claude Code usage metrics -- 5-hour rate limits, weekly quotas, token consumption, and costs. The reference implementation is ccInfo for macOS. The Windows landscape has exactly one competitor (claude-usage-widget, Electron-based, bare-bones). Building this as a WinUI 3 app with .NET 9, Win2D for custom charts, and CommunityToolkit.Mvvm for MVVM plumbing is the only viable path for a native Windows 11 experience. The stack is mature, well-documented, and every technology choice has HIGH confidence from official Microsoft sources.
+ccInfoWin v1.2 ports five improvements from macOS ccInfo v1.8.3 onto the existing WinUI 3 / .NET9 codebase. Core challenge: surgical precision over shared infrastructure. Phases 1 and 2 have a hard ordering dependency; Phases 3-5 are fully independent and low-risk.
 
-The architecture follows standard DI-based MVVM with two independent data paths: (1) HTTP polling against the unofficial claude.ai API for rate limit data, and (2) FileSystemWatcher-driven JSONL parsing for local session/token/cost data. These two paths converge in the MainViewModel via the WeakReferenceMessenger pattern. The single-window design with Frame-based navigation keeps the app simple. Win2D provides the GPU-accelerated area chart that is the visual signature of ccInfo.
+Recommended approach: Phase 1 as an atomic commit removing the token-count heuristic and introducing ModelFamily enum and updated method signatures, then Phase 2 to wire the live setting through the data path. Phases 3, 4, 5 land in any order.
 
-The critical risks are concentrated in three areas: WebView2 initialization reliability (corrupted User Data Folder, cookie threading constraints), Win2D memory leaks from reference cycles at the C#/C++ interop boundary, and FileSystemWatcher's notorious unreliability on Windows (duplicate events, buffer overflows, file locking conflicts). All three have well-documented prevention patterns. The fourth risk is deployment -- unpackaged WinUI 3 apps require the Windows App SDK Runtime, which is NOT pre-installed on any Windows version. The Inno Setup installer must handle this prerequisite or the app will silently fail to launch on end-user machines.
-
+Main risks: Phase 1 (stale Opus entries in ContextLimits dictionary; both Utilization call sites must be updated atomically) and Phase 3 (missing UNC path validation causing NTLM hash leak). Phase 5 is essentially already done.
 ## Key Findings
 
 ### Recommended Stack
 
-The stack is .NET 9 with C# 13, WinUI 3 via Windows App SDK 1.8.5, and Win2D 1.3.2 for chart rendering. CommunityToolkit.Mvvm 8.4 provides source-generated MVVM boilerplate elimination. Credentials go through AdysTech.CredentialManager (Win32 Credential Manager wrapper) because the WinRT PasswordVault has documented compatibility issues in unpackaged WinUI 3 apps. Distribution uses Inno Setup with framework-dependent publishing (~10-20 MB) plus runtime prerequisite checks.
+No stack changes. Entire milestone uses the existing dependency graph: C# 13 / .NET 9 BCL, CommunityToolkit.Mvvm source generators, WinUI3Localizer resw keys, and WeakReferenceMessenger. System.Text.Json handles new AppSettings property via C# default values.
 
 **Core technologies:**
-- **.NET 9 + C# 13:** Latest stable runtime, enables partial property source generators for cleaner ViewModels
-- **Windows App SDK 1.8.5 (WinUI 3):** Native Windows 11 controls, dark/light theme, WebView2, InfoBar -- no viable alternative
-- **Win2D 1.3.2:** Only option for GPU-accelerated 2D drawing in WinUI 3, needed for the gradient area chart with glow effects
-- **CommunityToolkit.Mvvm 8.4:** Microsoft-maintained MVVM toolkit, de facto standard, source generators eliminate boilerplate
-- **AdysTech.CredentialManager 2.6:** Clean wrapper around Win32 CredRead/CredWrite, avoids PasswordVault bugs
-- **Inno Setup 6.7:** Per-user EXE installer without admin rights, chains runtime prerequisites
-
-**Critical version constraints:** Visual Studio 17.12+ required. No AnyCPU platform support (WinUI 3 limitation). Target framework must be `net9.0-windows10.0.19041.0`.
+- C# 13 / .NET 9: Enum types, LINQ OrderBy, Directory.Exists - already in use throughout
+- CommunityToolkit.Mvvm 8.4.0: [ObservableProperty], ValueChangedMessage<T>, WeakReferenceMessenger - identical patterns already implemented
+- WinUI3Localizer 2.3.0: Attached-property key syntax in resw - proven by SessionComboBox.AutomationProperties.Name
+- System.Text.Json (bundled): Auto-default for new SonnetContextSize - no migration needed
+- Windows App SDK 1.8: ToolTipService.ToolTip, AutomationProperties.Name - supported via l:Uids.Uid
 
 ### Expected Features
 
-**Must have (table stakes):**
-- 5-hour window percentage + reset countdown -- every competitor shows this
-- Weekly usage limit display -- second most important metric
-- Color-coded progress bars (green/yellow/orange/red) -- visual convention across all tools
-- WebView2 authentication + secure token storage -- required for API access
-- Auto-refresh on interval -- manual-only feels broken
-- Dark mode -- developer tools default dark
-- Session token re-validation on startup -- broken auth on launch means uninstall
-- No telemetry / privacy-first -- hygiene factor for dev tools
+All five features constitute the complete v1.2 milestone.
 
-**Should have (differentiators vs. Windows competition):**
-- Interactive area chart with color zones -- THE signature feature, no Windows tool has this
-- Context window status with subagent tracking -- unique to ccInfo, prevents autocompact surprise
-- Multi-session management -- essential for devs with multiple projects
-- Token statistics by time period -- only CLI tools offer this, no Windows GUI
-- Cost calculation with live LiteLLM pricing -- real-time cost awareness
-- Model-specific breakdown (Sonnet/Opus) -- which model eats your quota
+**Must have (table stakes):**
+- 1M context window support for Opus - showing 200K for Opus is visibly wrong for any Max subscriber
+- Stable subagent display order - reordering on every refresh is unusable
+- Session list without ghost projects - sessions for deleted directories confuse users
+- Tooltips on icon-only footer buttons - Windows design guideline requirement
+
+**Should have (competitive):**
+- Sonnet context size picker (200K / 1M) - model-family detection alone insufficient
 
 **Defer (v2+):**
-- ML-based usage predictions, multi-account support, mobile companion, GitHub activity heatmaps, JSON/CSV export, notification toasts, configurable color thresholds, system tray integration, transparent/blur background
-
+- Per-model arbitrary context override - no real use case
+- Auto-detect Sonnet context from API - usage endpoint does not expose context window size
+- Win2D chart canvas accessibility tree - requires custom IAccessibleEx
+- Sparkle-style Updates settings tab - existing banner covers the use case
 ### Architecture Approach
 
-Standard DI-based MVVM with a single window, Frame navigation between three views (Main, Login, Settings), and a flat service layer. Cross-component communication uses WeakReferenceMessenger. Two independent data pipelines (API polling + JSONL file watching) feed into the MainViewModel. Win2D chart rendering is isolated in a custom control that receives data via binding and handles all GPU drawing internally.
+All five phases integrate into the existing MVVM layer without new services or DI changes. Change set is bottom-up: ModelContextLimits (helper) first, propagating to ContextWindowData (models), then AppSettings and JsonlService (services), then ViewModels, then XAML views.
 
-**Major components:**
-1. **MainView + MainViewModel** -- Primary dashboard: chart, usage bars, context window, session picker, token stats, costs
-2. **LoginView + LoginViewModel** -- WebView2 login flow, cookie extraction, credential storage
-3. **SettingsView + SettingsViewModel** -- App preferences (refresh interval, theme, language, autostart)
-4. **ClaudeApiService** -- HTTP polling for 5h/weekly usage data with cookie-based auth via DelegatingHandler
-5. **JsonlService + FileWatcherService** -- JSONL parsing with debounced FileSystemWatcher for local session data
-6. **PricingService** -- LiteLLM pricing fetch, 12h cache, fallback to bundled JSON
-7. **UsageChartControl** -- Win2D CanvasControl for the area chart with gradient fills and glow effects
+**Modified components:**
+1. ModelContextLimits (Helpers) - ModelFamily enum, GetModelFamily(), GetMaxContextTokens(modelName, sonnetContextSize), simplified GetEffectiveMaxTokens(maxTokens), flat 20K ShouldWarnAutocompact()
+2. JsonlService (Services) - ISettingsService injection, Directory.Exists filter, OrderBy(AgentId)
+3. ContextWindowData + SubagentContextData (Models) - two Utilization call sites updated
+4. AppSettings (Models) - SonnetContextSize int with 200K default
+5. SettingsViewModel / MainViewModel (ViewModels) - picker state and messenger subscription
+6. SettingsView.xaml / MainView.xaml (Views) - Sonnet ComboBox and footer tooltip/accessibility
+7. Resources.resw both locales - context labels and tooltip keys
+
+**New components:**
+1. ModelFamily enum - Opus, Sonnet, Haiku, Unknown
+2. SonnetContextChangedMessage - ValueChangedMessage<int>, same shape as RefreshIntervalChangedMessage
 
 ### Critical Pitfalls
 
-1. **Win2D memory leak from reference cycles** -- MUST call `RemoveFromVisualTree()` and null the control reference in the page Unloaded handler. Without this, GPU memory grows continuously and the app crashes after hours of use.
-2. **WebView2 initialization failure** -- Explicitly set User Data Folder path, await `EnsureCoreWebView2Async()`, catch failures and retry after deleting corrupted UDF. Without this, login screen never appears.
-3. **WebView2 cookie threading** -- Access cookie properties (Name, Value) ONLY on the UI thread. The async method looks thread-safe but cookie objects have UI thread affinity.
-4. **FileSystemWatcher unreliability** -- Debounce 300ms, increase buffer to 64KB, handle Error event for buffer overflow recovery, open files with `FileShare.ReadWrite | FileShare.Delete`.
-5. **Missing Windows App Runtime on end-user machines** -- Bundle the runtime installer as Inno Setup prerequisite. Without this, the EXE silently fails to start on non-developer machines.
+1. **Stale ContextLimits dictionary with 200K Opus entries** - Update or delete in Phase 1. GetMaxContextTokens must return 1,000,000 for claude-opus-4-6.
 
+2. **GetEffectiveMaxTokens signature change not propagated atomically** - Delete deprecated constants in same commit to force compiler errors. No stubs.
+
+3. **Directory.Exists on unvalidated UNC path (NTLM hash leak)** - Cwd from JSONL is external data. Guard: Path.IsPathRooted(Cwd) AND not-UNC check before Directory.Exists.
+
+4. **SettingsViewModel.Initialize() firing prematurely** - Assign backing field _selectedSonnetContextIndex (not generated property setter) inside Initialize().
+
+5. **ToolTipService.ToolTip as XAML attribute overrides WinUI3Localizer** - Freezes tooltips in one language. Define only in resw. Zero XAML changes needed for Phase 5.
 ## Implications for Roadmap
 
-Based on research, suggested phase structure:
+### Phase 1: ModelContextLimits Core Rewrite
+**Rationale:** Foundation for everything. Phase 2 cannot function without updated GetMaxContextTokens(modelName, sonnetContextSize). Must be atomic.
+**Delivers:** Correct 1M context display for Opus. Architectural basis for Sonnet context config. Removal of fragile token-count heuristic.
+**Addresses:** 1M context for Opus (table stakes), model-family-based detection (differentiator)
+**Avoids:** Stale ContextLimits dictionary, GetEffectiveMaxTokens signature mismatch, deprecated constants surviving
 
-### Phase 1: Foundation and Authentication
-**Rationale:** Authentication is the hard gate -- nothing works without API access. WebView2 initialization is the highest-risk integration point (Pitfalls 2, 3). Get this working and proven first.
-**Delivers:** Project scaffold, DI container, navigation shell, WebView2 login, credential storage, session validation, logout. A launchable app that can authenticate.
-**Addresses:** FA-010 through FA-013 (auth features), project structure, NuGet setup
-**Avoids:** Pitfall 2 (WebView2 init), Pitfall 3 (cookie threading), Pitfall 4 (unpackaged deployment basics)
+### Phase 2: Sonnet Context Window Setting (End-to-End)
+**Rationale:** Depends directly on Phase 1. Injects ISettingsService into JsonlService. Wires full data path from Settings UI to context bar.
+**Delivers:** User-configurable Sonnet context (200K / 1M). Live refresh on setting change. Settings persistence.
+**Uses:** CommunityToolkit.Mvvm WeakReferenceMessenger, [ObservableProperty], WinUI3Localizer resw keys
+**Implements:** SonnetContextChangedMessage -> MainViewModel subscription -> UpdateSessionData
+**Avoids:** Initialize() premature fire, ISettingsService disk read under _sessionsLock
 
-### Phase 2: Core Monitoring Dashboard
-**Rationale:** With auth working, the API polling path delivers the core value proposition. This is where ccInfoWin becomes usable and matches the basic Windows competitor.
-**Delivers:** 5-hour usage percentage, reset countdown, weekly limit display, color-coded progress bars, auto-refresh polling, dark/light mode.
-**Addresses:** FA-020, FA-021, FA-030, FA-090, FA-094, FA-095, NF-013
-**Avoids:** Pitfall 6 (DispatcherQueue threading), Pitfall 9 (auth expiry handling)
+### Phase 3: Session Filtering (Directory Existence)
+**Rationale:** Independent. Single filter clause in RebuildSessionsList(). UNC path validation mandatory.
+**Delivers:** Clean session dropdown. Auto-fallback to next valid session on directory deletion.
+**Avoids:** Directory.Exists on unvalidated UNC path (NTLM hash leak), selected-session removal without recovery
 
-### Phase 3: Area Chart (Signature Feature)
-**Rationale:** The interactive area chart is THE differentiator. It depends on Phase 2 data being available. Win2D integration carries the memory leak risk (Pitfall 1) so it needs focused attention.
-**Delivers:** Win2D area chart with color zones, glow indicator, time axis, interactive hover. The feature that makes screenshots compelling.
-**Addresses:** FA-022 through FA-028
-**Avoids:** Pitfall 1 (Win2D memory leak), Pitfall 8 (DPI/theme changes)
+### Phase 4: Subagent Sorting Stabilization
+**Rationale:** Trivial one-liner, fully independent. Can batch with Phase 3.
+**Delivers:** Stable alphabetical subagent order across all FSW-triggered refreshes.
+**Avoids:** Sort at call site instead of inside BuildSubagentContext
 
-### Phase 4: Local Session Data Pipeline
-**Rationale:** Independent of the API path. FileSystemWatcher + JSONL parsing enables context window, multi-session, and token stats. This is the second data pipeline and can be built in parallel with chart polish.
-**Delivers:** JSONL file watching, session discovery, context window status with subagents, multi-session picker, token statistics by time period.
-**Addresses:** FA-040 through FA-044, FA-050 through FA-054, FA-060 through FA-063
-**Avoids:** Pitfall 5 (FileSystemWatcher), Pitfall 7 (file locking)
-
-### Phase 5: Cost Analytics
-**Rationale:** Cost calculation depends on token data (Phase 4) and LiteLLM pricing integration. Complex tiered pricing logic needs the data pipeline to be stable first.
-**Delivers:** Cost per session/day/week/month, burn rate, model-specific breakdown, LiteLLM pricing with cache and fallback.
-**Addresses:** FA-070 through FA-075, FA-031
-**Avoids:** Pitfall 13 (LiteLLM schema changes)
-
-### Phase 6: Export, Polish, and Distribution
-**Rationale:** Polish and distribution features come last. Chart export requires the chart to be complete. Installer requires the app to be feature-complete. Localization is low-effort but should not block earlier phases.
-**Delivers:** Chart PNG export + clipboard, localization (DE/EN), autostart, auto-update check, window position persistence, accessibility, Inno Setup installer with runtime prerequisites.
-**Addresses:** FA-080 through FA-082, FA-091, FA-093, FA-100 through FA-102, NF-010, NF-040
-**Avoids:** Pitfall 4 (missing runtime), Pitfall 10 (off-screen window), Pitfall 12 (localization resources), Pitfall 14 (per-user install)
+### Phase 5: Footer Tooltip and Accessibility
+**Rationale:** Purely additive, zero regression risk. resw entries confirmed present.
+**Delivers:** Windows design guideline compliance, screen reader support, runtime language switching for tooltips.
+**Avoids:** ToolTipService.ToolTip as XAML attribute, missing de-DE resw entries
 
 ### Phase Ordering Rationale
 
-- **Auth first:** Every API feature is blocked by authentication. WebView2 is the highest-risk integration. Proving it works removes the biggest uncertainty.
-- **API dashboard before JSONL pipeline:** The API path delivers visible value faster (usage percentages, countdown). JSONL parsing is more complex and delivers secondary features.
-- **Chart as its own phase:** Win2D is a completely different rendering paradigm from XAML. It deserves focused attention to get the memory management right from the start.
-- **JSONL before costs:** Token data is a prerequisite for cost calculation. The file watching infrastructure must be stable before building analytics on top of it.
-- **Distribution last:** Inno Setup + runtime bundling is mechanical work that should happen when the app is feature-complete. Testing on clean VMs is the final validation.
+- Phase 1 must be first: compile-time dependency for Phase 2
+- Phase 2 must follow Phase 1: passes live sonnetContextSize to updated signature
+- Phases 3, 4, 5 fully independent after Phase 1
+- Natural batching: Phase 3 + Phase 4 as single JsonlService polish commit
+- Phase 5 last: purely additive, zero regression risk
 
 ### Research Flags
 
-Phases likely needing deeper research during planning:
-- **Phase 1 (Auth):** WebView2 cookie extraction patterns for the specific claude.ai login flow need validation. The unofficial API endpoints may have changed since the macOS reference was built.
-- **Phase 3 (Chart):** Win2D area chart with gradient fills and glow effects is custom rendering. No off-the-shelf examples match the ccInfo design exactly. Needs prototype validation.
-- **Phase 5 (Costs):** LiteLLM pricing JSON schema and tiered pricing calculation need validation against current API responses. The pricing model names must match Claude's current model identifiers.
-
-Phases with standard patterns (skip research-phase):
-- **Phase 2 (Dashboard):** Standard WinUI 3 MVVM with HttpClient polling. Well-documented, established patterns.
-- **Phase 4 (JSONL):** FileSystemWatcher + JSON parsing is well-documented .NET territory. Pitfalls are known and prevention patterns are clear.
-- **Phase 6 (Polish):** Inno Setup, localization, autostart are all commodity patterns with extensive documentation.
+All phases use standard patterns - no /gsd:research-phase deep dive required:
+- **Phase 1:** Pure C# refactor of static helper. Patterns documented by direct codebase inspection.
+- **Phase 2:** Identical to existing language picker and refresh interval patterns.
+- **Phase 3:** BCL Directory.Exists with two-condition guard. No novel patterns.
+- **Phase 4:** Single LINQ OrderBy inside existing method. Trivial.
+- **Phase 5:** resw additions only. WinUI3Localizer syntax proven by existing SessionComboBox entry.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All technologies are Microsoft-maintained with official documentation. Version compatibility verified across NuGet packages. |
-| Features | HIGH | Competitive landscape thoroughly analyzed with 7+ tools compared. Feature dependencies mapped. Anti-features explicitly identified. |
-| Architecture | HIGH | Standard WinUI 3 MVVM patterns from official Microsoft tutorials. Data flow patterns verified against Win2D and WebView2 documentation. |
-| Pitfalls | HIGH | 14 pitfalls identified, 10 with HIGH-confidence sources (official docs, confirmed GitHub issues). Prevention patterns include code examples. |
+| Stack | HIGH | Direct codebase inspection. Zero uncertainty about available APIs. |
+| Features | HIGH | Authoritative spec document. Reference implementation known. |
+| Architecture | HIGH | Component boundaries from direct code reading. Data flow verified. |
+| Pitfalls | HIGH | Direct code analysis. Specific line numbers referenced. |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Claude.ai API stability:** This is an unofficial API. Endpoint URLs, cookie names, and response formats could change without notice. Monitor the macOS ccInfo repository for API change tracking. Build the ClaudeApiService as a replaceable component.
-- **Win2D area chart design:** No existing Win2D example matches the exact ccInfo chart design (gradient fills, color zones, glow indicator, interactive hover). Will need prototype iteration during Phase 3.
-- **LiteLLM pricing model names:** The mapping between LiteLLM's model identifiers and Claude's actual model names needs runtime validation. Ship a fallback pricing file to handle mismatches.
-- **.NET 9 + WinAppSDK 1.8 long-term support:** .NET 9 is not LTS (ends May 2026). Plan migration to .NET 10 (LTS, ships Nov 2025) when WinAppSDK confirms compatibility. This is not urgent but should be tracked.
+- **ISettingsService injection into JsonlService:** Verify before Phase 2. If not present, DI registration in App.xaml.cs (line 141) needs updating.
+- **ISettingsService.LoadSettings() caching:** Verify in-memory cache vs disk I/O. If disk I/O, read into local variable before _sessionsLock.
+- **de-DE resw completeness for Phase 5:** en-US entries confirmed. de-DE must be verified before marking done.
+- **ModelContextLimits dictionary decision:** Decide at Phase 1 start: update all Opus entries to 1,000,000 OR delete the dictionary entirely.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- [Windows App SDK 1.8 Release Notes](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/release-notes/windows-app-sdk-1-8) -- stack compatibility
-- [WinUI 3 Overview](https://learn.microsoft.com/en-us/windows/apps/winui/winui3/) -- UI framework
-- [Win2D for WinUI 3](https://microsoft.github.io/Win2D/WinUI3/html/Introduction.htm) -- chart rendering
-- [Win2D: Avoiding Memory Leaks](https://microsoft.github.io/Win2D/WinUI3/html/RefCycles.htm) -- critical pitfall
-- [CommunityToolkit.Mvvm](https://learn.microsoft.com/en-us/dotnet/communitytoolkit/mvvm/) -- MVVM framework
-- [Windows App SDK Unpackaged Deployment](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/deploy-unpackaged-apps) -- deployment
-- [FileSystemWatcher Duplicate Events](https://learn.microsoft.com/en-us/archive/blogs/ahamza/filesystemwatcher-generates-duplicate-events-how-to-workaround) -- file watching pitfall
-- [WebView2 CookieManager Threading (#1283)](https://github.com/MicrosoftEdge/WebView2Feedback/issues/1283) -- auth pitfall
+- spec-release-from-1.7.1-to-1.8.3.md - Authoritative implementation spec
+- CCInfoWindows/CCInfoWindows/Helpers/ModelContextLimits.cs
+- CCInfoWindows/CCInfoWindows/Models/ContextWindowData.cs
+- CCInfoWindows/CCInfoWindows/Services/JsonlService.cs (lines 640-779)
+- CCInfoWindows/CCInfoWindows/Models/AppSettings.cs
+- CCInfoWindows/CCInfoWindows/ViewModels/SettingsViewModel.cs (lines 85-100)
+- CCInfoWindows/CCInfoWindows/Views/MainView.xaml (lines 579-625)
+- CCInfoWindows/CCInfoWindows/Strings/en-US/Resources.resw (lines 100-118)
+- CCInfoWindows/CCInfoWindows/Strings/de-DE/Resources.resw
+- .planning/PROJECT.md
 
 ### Secondary (MEDIUM confidence)
-- [ccInfo macOS reference app](https://github.com/stefanlange/ccInfo) -- feature reference
-- [claude-usage-widget](https://github.com/SlavomirDurej/claude-usage-widget) -- Windows competitor analysis
-- [WebView2 Cookie Auth Pattern (Anthony Simmon)](https://anthonysimmon.com/authenticating-http-requests-cookies-webview2-wpf/) -- auth implementation
-- [AdysTech.CredentialManager NuGet](https://www.nuget.org/packages/AdysTech.CredentialManager) -- credential storage
-- [Inno Setup Documentation](https://jrsoftware.org/isinfo.php) -- installer
-
-### Tertiary (LOW confidence)
-- Claude.ai API endpoints -- unofficial, no documentation, reverse-engineered from macOS reference. Stability unknown.
-- LiteLLM pricing JSON schema -- external dependency, schema may change without notice.
+- .planning/research/STACK.md, FEATURES.md, ARCHITECTURE.md, PITFALLS.md (synthesized above)
 
 ---
-*Research completed: 2026-03-09*
+*Research completed: 2026-04-12*
 *Ready for roadmap: yes*

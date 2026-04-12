@@ -1,365 +1,275 @@
-# Domain Pitfalls
+# Pitfalls Research
 
-**Domain:** Windows desktop monitoring app (WinUI 3 / WebView2 / Win2D / FileSystemWatcher)
-**Project:** ccInfo Windows
-**Researched:** 2026-03-09
+**Domain:** Adding model-based context detection, settings-driven data logic, FS-state filtering, sort stabilization, and WinUI 3 tooltip localization to an existing MVVM app (ccInfoWin v1.2)
+**Researched:** 2026-04-12
+**Confidence:** HIGH — all findings derived from direct codebase analysis of the live implementation
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, crashes in production, or fundamental architectural problems.
+### Pitfall 1: `GetEffectiveMaxTokens` Signature Change Silently Breaks `ContextWindowData`
 
-### Pitfall 1: Win2D CanvasControl Memory Leak via Reference Cycles
+**What goes wrong:**
+`GetEffectiveMaxTokens(long currentTokens, long maxTokens)` is called in two computed properties inside the immutable records `ContextWindowData.Utilization` and `SubagentContextData.Utilization`. If the Phase 1 refactor changes or removes this method without updating both records, the app compiles but calculates utilization against the old effective-max, producing wrong progress bar fills and percentage text — with no runtime error.
 
-**What goes wrong:** Win2D controls (CanvasControl, CanvasAnimatedControl) use C++ reference counting while XAML pages use .NET garbage collection. When you subscribe to Win2D events (e.g., `Draw`, `CreateResources`) from a XAML page, a reference cycle forms: Page -> Control -> EventDelegate -> Page. The GC cannot detect this cycle because one side is reference-counted C++. The control and its GPU resources are never freed.
+**Why it happens:**
+Both computed properties live in `Models/ContextWindowData.cs`, not in `JsonlService` where most of the Phase 1 changes land. The refactor removes `currentTokens` from the signature (no longer needed after the buffer is flattened to 33K). Forgetting to update the model callers means they still pass two arguments, or — worse — the old two-argument overload is kept for "compatibility" and the model properties silently keep calling the heuristic path.
 
-**Why it happens:** This is inherent to the C#/C++ interop boundary. Every Win2D event subscription creates a strong reference chain that crosses the GC/refcount boundary.
+**How to avoid:**
+Delete `ExtendedAutocompactBuffer` and `ExtendedContextDetectionThreshold` from `ModelContextLimits` in the same commit that changes the signature, so the compiler immediately flags all unresolved references in `ContextWindowData.cs`. Do not leave deprecated constants as stubs.
 
-**Consequences:** GPU memory grows continuously. In a monitoring app that runs for hours/days, this causes visible memory creep and eventually GPU resource exhaustion. The app will slow down, the chart will stop rendering, or Windows will kill the process.
+**Warning signs:**
+- Opus session shows a context bar below 100% when tokens exceed 200K (capped at the old 200K effective max)
+- Utilization for any session is negative or exceeds 1.0 (division by wrong effective max)
 
-**Prevention:**
-```csharp
-// In your page's Unloaded handler:
-void Page_Unloaded(object sender, RoutedEventArgs e)
-{
-    this.usageChart.RemoveFromVisualTree();
-    this.usageChart = null;
-}
-```
-Every page containing a Win2D control MUST call `RemoveFromVisualTree()` and null the reference in the `Unloaded` event. This applies to UsageChartControl and any custom control wrapping CanvasControl.
-
-**Detection:** Monitor GPU memory in Task Manager during extended use. If it grows steadily without stabilizing, you have this leak.
-
-**Phase:** Must be implemented from the very first Win2D integration (chart rendering phase). Not something to "fix later."
-
-**Confidence:** HIGH (official Win2D documentation at microsoft.github.io/Win2D)
+**Phase to address:** Phase 1
 
 ---
 
-### Pitfall 2: WebView2 Initialization Failures and User Data Folder Corruption
+### Pitfall 2: `JsonlService` Reads `AppSettings` On Every `GetContextWindow` Call — Or Never
 
-**What goes wrong:** `EnsureCoreWebView2Async()` can fail silently, hang indefinitely, or throw `E_UNEXPECTED (0x8000FFFF)` on launch. Three root causes: (a) fire-and-forget async call without proper await, (b) corrupted User Data Folder from a previous GPU/renderer crash, (c) permission issues on the UDF path.
+**What goes wrong:**
+Phase 1 makes `GetMaxContextTokens` for Sonnet depend on the configured value. `JsonlService` does not currently take `ISettingsService` as a dependency (it only takes `IPricingService`). There are two bad implementations:
 
-**Why it happens:** WebView2 spawns a separate Chromium process. If the previous session's cache/profile directory was damaged (GPU crash, forced termination, disk full), WebView2 cannot reuse it and throws cryptically. Unpackaged apps sometimes default to a UDF path that is not writable.
+1. Calling `_settingsService.LoadSettings()` on each `GetContextWindow` invocation — which hits the disk on every UI refresh cycle inside `_sessionsLock`, causing read-under-lock on the hot path.
+2. Reading the setting once in the constructor and caching it locally — which means a Phase 2 setting change never takes effect until app restart.
 
-**Consequences:** Login screen never appears. Users cannot authenticate. The app is completely non-functional with no useful error message.
+Both break a correctness or performance invariant.
 
-**Prevention:**
-1. Always `await` the `EnsureCoreWebView2Async()` call -- never fire-and-forget.
-2. Explicitly set the User Data Folder to `%LOCALAPPDATA%\CCInfoWindows\WebView2` via `CoreWebView2Environment.CreateAsync()`.
-3. Wrap initialization in try/catch. On failure, delete the UDF and retry once before showing an error.
-4. Set a timeout (e.g., 30 seconds) on initialization and show a meaningful error if it expires.
+**How to avoid:**
+Inject `ISettingsService` into `JsonlService` via the constructor (update `App.xaml.cs` DI registration at line 141). Store `SonnetContextSize` in a private field. Add a `public void UpdateSonnetContextSize(long size)` method — or register for `SonnetContextChangedMessage` inside `JsonlService` — so the value can be updated without disk I/O on every call. Keep `_sessionsLock` free of any I/O.
 
-```csharp
-var env = await CoreWebView2Environment.CreateAsync(
-    null,
-    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "CCInfoWindows", "WebView2"));
-await webView.EnsureCoreWebView2Async(env);
-```
+**Warning signs:**
+- `_sessionsLock` is held while `File.ReadAllText` or `LoadSettings()` is called
+- Changing the Sonnet Context setting has no effect on the displayed context bar until app restart
 
-**Detection:** Test on a clean machine with no Edge profile. Test after force-killing the app during login. Test with a read-only UDF path.
-
-**Phase:** Authentication phase (Phase 1). This is the first thing users interact with.
-
-**Confidence:** HIGH (multiple documented issues on MicrosoftEdge/WebView2Feedback)
+**Phase to address:** Phase 1 (inject dependency), Phase 2 (wire up live update)
 
 ---
 
-### Pitfall 3: WebView2 CookieManager Threading Constraint
+### Pitfall 3: `ContextLimits` Dictionary Still Has `200_000` for All Opus Keys
 
-**What goes wrong:** `CookieManager.GetCookiesAsync()` returns cookies successfully from any thread, but accessing individual cookie properties (Name, Value, Domain) from a non-UI thread throws an exception. The API looks thread-safe but is not.
+**What goes wrong:**
+`ModelContextLimits.cs` contains a hard-coded dictionary with explicit entries like `["claude-opus-4-6"] = 200_000`. After Phase 1 adds `GetModelFamily` family-based logic, `GetMaxContextTokens` may route through the dictionary first for known model names. If the dictionary is not updated (or removed), a real Opus session returns 200K because the dictionary short-circuits the new family-based logic for exact-match model names.
 
-**Why it happens:** WebView2 cookie objects have thread affinity to the UI thread. The async method itself does not enforce this, creating a trap where the call succeeds but property access fails.
+**Why it happens:**
+The dictionary was the original source of truth. After Phase 1, there are two competing sources: the dictionary (fast-path for known models) and `GetModelFamily` (family-based for all models). The refactor must make a clear decision: keep the dictionary and update all Opus entries to 1,000,000, or delete the dictionary entirely and rely only on family detection. Leaving the dictionary with stale 200K Opus values is the worst of both worlds.
 
-**Consequences:** Intermittent crashes during cookie extraction after login. Hard to reproduce because timing-dependent.
+**How to avoid:**
+In Phase 1: decide once whether to keep or remove the dictionary. If keeping it, update every `"claude-opus-*"` entry to `1_000_000`. If removing it, delete the dictionary entirely. Add a unit test: `Assert.Equal(1_000_000, ModelContextLimits.GetMaxContextTokens("claude-opus-4-6"))`.
 
-**Prevention:** Always call `GetCookiesAsync()` AND access cookie properties on the UI thread. Do not offload cookie extraction to a background task.
+**Warning signs:**
+- An Opus session shows ~167K effective context instead of ~967K
+- The `ContextLimits` dictionary still contains `["claude-opus-4-6"] = 200_000` after Phase 1 is committed
 
-```csharp
-// CORRECT: Everything on UI thread
-var cookies = await webView.CoreWebView2.CookieManager.GetCookiesAsync("https://claude.ai");
-foreach (var cookie in cookies)
-{
-    // Access properties here, on the UI thread
-    var name = cookie.Name;
-    var value = cookie.Value;
-}
-```
-
-**Detection:** Run cookie extraction repeatedly under load. If it works 90% of the time but occasionally crashes, this is the cause.
-
-**Phase:** Authentication phase.
-
-**Confidence:** HIGH (documented in WebView2Feedback issue #1283)
+**Phase to address:** Phase 1
 
 ---
 
-### Pitfall 4: Unpackaged App Deployment - Missing Windows App Runtime
+### Pitfall 4: `Initialize()` in `SettingsViewModel` Fires `OnSelectedSonnetContextIndexChanged` Prematurely
 
-**What goes wrong:** The published EXE runs perfectly on the dev machine but fails to start on end-user machines with a cryptic error or no error at all. The app requires the Windows App SDK Runtime, which is NOT bundled with Windows (not even Windows 11).
+**What goes wrong:**
+`SettingsViewModel.Initialize()` (lines 85–100) follows a specific pattern: it assigns the *backing field* (`_selectedRefreshOption = ...`) then calls `OnPropertyChanged` explicitly. This avoids triggering the `partial void OnXChanged` side-effect handler during initialization. A developer adding the Sonnet picker may assign the generated property (`SelectedSonnetContextIndex = ...`) instead of the backing field. This fires `partial void OnSelectedSonnetContextIndexChanged` immediately during initialization, saving to settings and sending a messenger message before the view is ready — potentially overwriting a previously saved `1000000` value with the default `0 = 200K`.
 
-**Why it happens:** Unpackaged WinUI 3 apps have a hard dependency on the Windows App Runtime (WindowsAppRuntime). Unlike .NET Runtime, this is a separate install that most users do not have. The Bootstrapper API must be called before any WinUI 3 features work.
+**How to avoid:**
+Follow the exact existing pattern in `Initialize()`: assign `_selectedSonnetContextIndex` (backing field), then call `OnPropertyChanged(nameof(SelectedSonnetContextIndex))`. Never assign the generated property setter inside `Initialize()`.
 
-**Consequences:** Users download the app, double-click the EXE, and nothing happens. They assume it is broken and leave. This is the #1 deployment killer for WinUI 3 apps.
+**Warning signs:**
+- On app startup, a Sonnet session briefly shows 1M context then reverts to 200K
+- `settings.json` shows `sonnetContextSize: 200000` even though the user previously saved `1000000`
 
-**Prevention:** Two options:
-1. **Recommended:** Bundle the WindowsAppRuntime installer as a prerequisite in the Inno Setup script. Chain it silently during installation.
-2. **Alternative:** Use `WindowsAppSDKSelfContained=true` in the .csproj, which embeds the runtime (~200 MB size increase).
-
-```iss
-; Inno Setup prerequisite example
-[Run]
-Filename: "{tmp}\WindowsAppRuntimeInstall.exe"; Parameters: "--quiet"; \
-    StatusMsg: "Installing Windows App Runtime..."; Flags: waituntilterminated
-```
-
-**Detection:** Test installation on a clean Windows VM with no dev tools installed.
-
-**Phase:** Build & Deployment phase. Must be solved before any public release.
-
-**Confidence:** HIGH (Microsoft official deployment docs, multiple GitHub issues)
+**Phase to address:** Phase 2
 
 ---
 
-### Pitfall 5: FileSystemWatcher Duplicate and Missed Events
+### Pitfall 5: Session Filter Removes the Currently Selected Session Without UI Recovery
 
-**What goes wrong:** FileSystemWatcher fires multiple `Changed` events for a single file write (JSONL append). It can also silently stop raising events if the internal buffer overflows, and it may miss events entirely on network/cloud-synced folders.
+**What goes wrong:**
+`RebuildSessionsList()` will filter out orphaned sessions on the next FileSystemWatcher tick or manual refresh. If `MainViewModel.SelectedSession` is one of the filtered sessions, the ComboBox binding removes it, but `MainViewModel` does not detect the removal: `SelectedSession` becomes null or stale, `UpdateSessionData` is called with a null session, and the UI displays empty context data indefinitely — or crashes on a null dereference.
 
-**Why it happens:** File writes are not atomic OS operations. A single JSONL append triggers: open file, write data, flush buffer, close file -- each step can fire a `Changed` event. The default internal buffer is 8 KB; in a directory with many JSONL files being written simultaneously (multiple Claude Code sessions), events can overflow the buffer.
+**Why it happens:**
+`RebuildSessionsList()` builds a new `_sessions` list and fires `DataUpdated`. `MainViewModel.RefreshSessionList()` re-selects based on `lastSelectedSessionId`. If the selected session's `Cwd` no longer exists, it disappears from the filtered list but `RefreshSessionList` may not recognize it as absent if the session ID still appears in `_settings.LastSelectedSessionId`.
 
-**Consequences:** Without debouncing: the app re-parses JSONL files 2-5x per write, causing CPU spikes and UI flickering. With buffer overflow: the app silently stops updating until restart.
+**How to avoid:**
+After applying the `Directory.Exists` filter in `RebuildSessionsList`, ensure the resulting `_sessions` list is the authoritative source. `MainViewModel.RefreshSessionList()` already handles the "not found" case by falling back to the most-recent session — this works correctly as long as the filtered `_sessions` list is consistent before `DataUpdated` fires. The key: do not keep the orphaned session in `_sessions` as a tombstone.
 
-**Prevention:**
-1. **Debounce all events** with a 300-500ms timer per file path. Reset the timer on each duplicate event.
-2. **Increase InternalBufferSize** to 64 KB (default 8 KB is too small for recursive watching).
-3. **Handle the `Error` event** to detect buffer overflows and recover (re-scan the directory).
-4. **Use a HashSet of recently-processed files** with timestamps to deduplicate.
+**Warning signs:**
+- After deleting a project directory, the session dropdown shows "No active session" but context bars still show old non-zero values
+- `NullReferenceException` in `UpdateSessionData` after project directory deletion
 
-```csharp
-watcher.InternalBufferSize = 65536; // 64 KB
-watcher.Error += (s, e) => {
-    // Buffer overflow -- trigger full rescan
-    ScheduleFullRescan();
-};
-```
-
-**Detection:** Open 5+ Claude Code sessions simultaneously and monitor CPU usage. If it spikes on every keystroke, debouncing is insufficient.
-
-**Phase:** JSONL parsing phase. Must be implemented correctly from the start, not retrofitted.
-
-**Confidence:** HIGH (well-documented .NET issue, Microsoft's own blog post acknowledges it)
+**Phase to address:** Phase 3
 
 ---
 
-## Moderate Pitfalls
+### Pitfall 6: `Directory.Exists` Called on Unvalidated External Path (NTLM Hash Leak)
 
-### Pitfall 6: DispatcherQueue Cross-Thread UI Updates
+**What goes wrong:**
+`SessionInfo.Cwd` is populated from JSONL file content — external, untrusted data. Passing it directly to `Directory.Exists(s.Cwd)` violates the project's secure coding rule ("Restrict file paths — never pass user-supplied paths directly"). A crafted JSONL file with a UNC path (`\\attacker-server\share`) causes `Directory.Exists` to initiate an SMB connection attempt, leaking the Windows hostname and NTLM hash to a rogue server.
 
-**What goes wrong:** FileSystemWatcher events, HttpClient callbacks, and timer callbacks all fire on thread-pool threads. Updating any UI-bound property or ObservableCollection from these threads causes a `COMException: The application called an interface that was marshalled for a different thread`.
+**Why it happens:**
+The spec describes the filter as a one-liner `.Where(s => Directory.Exists(s.Cwd))`. The simplicity makes it easy to skip path validation. Claude Code writes the JSONL files, so in normal use the paths are benign — but the rule exists for any input that the app does not control.
 
-**Why it happens:** WinUI 3 enforces strict thread affinity for all UI elements. Unlike WPF's `Dispatcher.Invoke`, WinUI 3 uses `DispatcherQueue.TryEnqueue()` which has a different API surface and failure modes.
+**How to avoid:**
+Guard the path before calling `Directory.Exists`: validate that `Cwd` is a rooted, non-UNC, local path: `!string.IsNullOrEmpty(s.Cwd) && Path.IsPathRooted(s.Cwd) && !s.Cwd.StartsWith(@"\\") && Directory.Exists(s.Cwd)`. This is two conditions, not a rewrite.
 
-**Prevention:**
-1. Capture `DispatcherQueue` reference during ViewModel construction (on the UI thread).
-2. Use it for ALL property change notifications from background work.
-3. Consider using `CommunityToolkit.Mvvm`'s `ObservableObject` which does NOT auto-marshal -- you must dispatch yourself.
+**Warning signs:**
+- Absence of any path validation guard around the `Directory.Exists` call in `RebuildSessionsList`
+- Wireshark shows SMB traffic on app startup when a UNC path is present in a JSONL file
 
-```csharp
-// In ViewModel constructor (runs on UI thread):
-private readonly DispatcherQueue _dispatcher = DispatcherQueue.GetForCurrentThread();
-
-// In background callback:
-_dispatcher.TryEnqueue(() => {
-    UsagePercentage = newValue; // Safe UI update
-});
-```
-
-**Detection:** Run the app and trigger data updates while scrolling or interacting with the UI. Crashes will be intermittent and timing-dependent.
-
-**Phase:** Affects every phase that introduces background work (API polling, JSONL watching, pricing updates).
-
-**Confidence:** HIGH (Microsoft documentation, WinUI 3 specs)
+**Phase to address:** Phase 3
 
 ---
 
-### Pitfall 7: JSONL File Locking Conflicts with Claude Code
+### Pitfall 7: Subagent Sort Applied at Call Site Instead of Inside `BuildSubagentContext`
 
-**What goes wrong:** The app opens a JSONL file for reading at the exact moment Claude Code is writing to it. Without proper file sharing flags, one process blocks the other, causing either a read failure in ccInfoWin or (worse) a write failure in Claude Code that disrupts the user's coding session.
+**What goes wrong:**
+`BuildSubagentContext` is a private static method called from both `GetContextWindow` (line 153) and `GetSubagentContext` (line 174). If the Phase 4 `OrderBy` is added at one call site instead of inside the method, the list is sorted in one context and unsorted in the other — the same instability that Phase 4 aims to fix.
 
-**Why it happens:** Default `FileStream` opens with `FileShare.None`. Claude Code holds the file open with write access. Two processes accessing the same file requires explicit sharing.
+**How to avoid:**
+Add `return result.OrderBy(a => a.AgentId, StringComparer.Ordinal).ToList();` as the final statement inside `BuildSubagentContext` before returning. No changes to `GetContextWindow` or `GetSubagentContext` are needed. After Phase 4: grep for `OrderBy.*AgentId` — it must appear exactly once, inside `BuildSubagentContext`.
 
-**Consequences:** If ccInfoWin blocks Claude Code's writes, the user's actual work is disrupted. This is unacceptable for a monitoring tool -- it must be invisible to the monitored process.
+**Warning signs:**
+- Subagent bars jump order on FSW-triggered refreshes but not on manual refresh (or vice versa)
+- The `OrderBy` appears in `GetContextWindow` or `GetSubagentContext` instead of inside `BuildSubagentContext`
 
-**Prevention:** Always open JSONL files with maximum sharing permissions and read-only access:
-
-```csharp
-using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-using var reader = new StreamReader(stream);
-```
-
-**Detection:** Run Claude Code actively while ccInfoWin is reading. If Claude Code reports write errors or hangs, file locking is wrong.
-
-**Phase:** JSONL parsing phase.
-
-**Confidence:** HIGH (standard .NET file I/O knowledge, confirmed by project requirements)
+**Phase to address:** Phase 4
 
 ---
 
-### Pitfall 8: Win2D Chart Rendering on Theme/DPI Changes
+### Pitfall 8: `ToolTipService.ToolTip` Set as XAML Attribute Overrides WinUI3Localizer
 
-**What goes wrong:** When the user switches between dark and light mode, or moves the window to a monitor with different DPI, the Win2D CanvasControl does not automatically re-render. Cached colors, font sizes, and layout calculations become stale.
+**What goes wrong:**
+WinUI3Localizer applies `ToolTipService.ToolTip` by reading the resw key `ButtonUid.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip` and setting it as an attached property at runtime. If a developer also adds `ToolTipService.ToolTip="Refresh"` as a XAML attribute on the button, this static value is applied at XAML load time and overwrites what the localizer sets at runtime. The tooltip freezes in the build-time language and never changes when the user switches languages.
 
-**Why it happens:** Win2D draws pixels directly -- it has no automatic layout system like XAML controls. DPI changes require recalculating all coordinates. Theme changes require rebuilding the color palette. Neither happens automatically.
+**Why it happens:**
+The spec example shows `<Button ToolTipService.ToolTip="{l:Uids.Uid FooterRefreshTooltip}" ...>` as a possible implementation. This is the wrong approach. The correct approach is the pure-resw method: only define the tooltip in resw with the attached-property key syntax, and let the existing `l:Uids.Uid="FooterRefreshButton"` pick it up automatically. The three footer buttons already have their Uid attributes — no XAML change is needed beyond verifying the resw entries exist.
 
-**Prevention:**
-1. Listen for `ActualThemeChanged` on the root element and call `CanvasControl.Invalidate()`.
-2. Handle `CanvasControl.DpiChanged` event and recalculate all layout constants.
-3. Never cache absolute pixel coordinates -- always compute from control size * DPI scale.
+**How to avoid:**
+Do not add any `ToolTipService.ToolTip` attribute to `MainView.xaml`. Add only the `.ToolTipService.ToolTip` and `.AutomationProperties.Name` entries to both resw files. The `en-US/Resources.resw` entries already exist (confirmed at lines 101–118). Verify `de-DE/Resources.resw` also has all six entries before marking Phase 5 done.
 
-**Detection:** Change Windows display scaling to 150%, then 200%, while the app is running. Switch dark/light mode. If the chart looks wrong, clipped, or blurry, DPI handling is broken.
+**Warning signs:**
+- Tooltip shows "Refresh" in German mode (static override beating the localizer)
+- Language switch leaves tooltip in the previous language
+- Grep of `MainView.xaml` shows `ToolTipService.ToolTip` as a XAML attribute
 
-**Phase:** Chart rendering phase.
-
-**Confidence:** MEDIUM (derived from Win2D documentation and general DPI handling patterns)
-
----
-
-### Pitfall 9: Claude.ai API Authentication Fragility
-
-**What goes wrong:** The session cookie extracted from WebView2 expires, gets invalidated server-side, or the API endpoint changes. The app continues polling with an invalid token, receives 401/403 errors, but does not gracefully degrade or re-authenticate.
-
-**Why it happens:** This is an unofficial API. Anthropic can change endpoints, cookie formats, or authentication mechanisms at any time without notice. The macOS original (ccInfo) has the same fragility.
-
-**Consequences:** The app shows stale data or errors without explanation. Users lose trust in the monitoring tool.
-
-**Prevention:**
-1. Detect 401/403 responses immediately and trigger re-authentication flow.
-2. Show a clear "Session expired -- please log in again" UI state (not a crash).
-3. Cache the last known good data and display it with a "stale data" indicator.
-4. Design the ClaudeApiService as a replaceable component so endpoint changes can be updated quickly.
-5. Monitor the macOS ccInfo repo for API changes -- they will hit the same issues.
-
-**Detection:** Manually invalidate the stored session token and observe app behavior. It should gracefully redirect to login.
-
-**Phase:** API integration phase. The error handling must be designed in from the start, not bolted on.
-
-**Confidence:** MEDIUM (based on unofficial API patterns, not verifiable against Anthropic documentation)
+**Phase to address:** Phase 5
 
 ---
 
-### Pitfall 10: Window Position Restoration on Multi-Monitor Changes
+## Technical Debt Patterns
 
-**What goes wrong:** The app saves window position (X=3840, Y=200) for a multi-monitor setup. User disconnects the external monitor. On next launch, the window opens off-screen and is invisible.
-
-**Why it happens:** Saved coordinates are absolute pixel positions that may refer to monitors that no longer exist.
-
-**Prevention:** On startup, validate saved coordinates against current screen bounds (`DisplayArea.GetFromPoint` or `MonitorFromPoint` Win32 API). If the saved position is off-screen, reset to center of primary monitor.
-
-**Detection:** Save position on a dual-monitor setup, disconnect external monitor, relaunch.
-
-**Phase:** Settings/window management phase.
-
-**Confidence:** HIGH (common Windows desktop app issue, well-known pattern)
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Keep `ContextLimits` dictionary with partial updates (only Opus entries changed) | Low-effort Phase 1 | Dictionary and family-based logic diverge on new model releases; two places to update per new model | Never — pick one canonical source of truth |
+| Pass `SonnetContextSize` as parameter without DI into `JsonlService` | Avoids constructor change | Callers must obtain the setting themselves; `MainViewModel` and `JsonlService` both read settings independently and can drift | Never for this app — DI is already wired |
+| Call `Directory.Exists` on `Cwd` without path validation | One-liner implementation | NTLM hash leak to UNC paths in crafted JSONL files | Never — the validation guard is two conditions |
+| Add `ToolTipService.ToolTip` as XAML attribute instead of resw entry | No resw file edits needed | Breaks runtime language switching; tooltip is frozen in build-time language | Never — defeats WinUI3Localizer entirely |
+| Skip `de-DE` resw entries for Phase 5 | Half the work | German users see English tooltip strings on hover | Never — both resw files must be in sync |
+| Keep deprecated constants (`ExtendedAutocompactBuffer`, `ExtendedContextDetectionThreshold`) as stubs | No compiler errors during refactor | Dead code in static class; callers may revert to using them; heuristic path silently lives on | Never — delete them in the same commit |
 
 ---
 
-## Minor Pitfalls
+## Integration Gotchas
 
-### Pitfall 11: WinUI 3 XAML Hot Reload Unreliability
-
-**What goes wrong:** XAML Hot Reload stops working mid-session, does not apply changes to custom controls, or crashes the app. Developers waste time restarting the app instead of iterating quickly on UI.
-
-**Prevention:** Do not rely on Hot Reload for Win2D controls or complex custom controls. Accept manual restart cycles for those. Use Hot Reload only for simple XAML layout changes.
-
-**Phase:** All UI development phases. Development velocity concern, not a runtime issue.
-
-**Confidence:** HIGH (widely reported across WinUI 3 developer community)
-
----
-
-### Pitfall 12: Localization Resource Loading in Unpackaged Apps
-
-**What goes wrong:** `ResourceLoader` fails to find `.resw` files in unpackaged apps because the resource indexing (PRI) behaves differently than in packaged apps.
-
-**Prevention:** Verify localization works in both Debug and Release configurations. Test with `dotnet publish` output, not just F5 debug. Ensure `MakePri.exe` is part of the build pipeline and PRI files are included in the publish output.
-
-**Detection:** Build a Release publish, run from the output folder (not Visual Studio). If all strings show as key names instead of localized values, PRI generation is broken.
-
-**Phase:** Localization phase.
-
-**Confidence:** MEDIUM (reported in WinUI 3 discussions, not consistently reproduced)
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| WinUI3Localizer + `ToolTipService.ToolTip` | Setting the attached property as a XAML attribute overrides what the localizer writes at runtime | Only define it in resw with the attached-property path syntax; the button's existing `l:Uids.Uid` picks it up automatically |
+| WinUI3Localizer + `AutomationProperties.Name` | Wrong namespace prefix in resw key | Copy the exact pattern from `en-US/Resources.resw` line 47: `SessionComboBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name` |
+| `ModelContextLimits` static helper + runtime setting | Static methods have no DI access; embedding `ISettingsService` in a static class breaks testability | Pass `sonnetContextSize` as a parameter to `GetMaxContextTokens`; the DI-injected `JsonlService` holds the setting |
+| CommunityToolkit `[ObservableProperty]` + `Initialize()` | Assigning the generated property setter in `Initialize()` fires `OnXChanged` before view is ready | Assign the backing field (`_x`) in `Initialize()`, then call `OnPropertyChanged(nameof(X))` explicitly — match the existing pattern on lines 95–99 |
+| `FileSystemWatcher` + session filter + `Directory.Exists` | Calling `Directory.Exists` inside the FSW callback (hot path, called on every file change) | Only call `Directory.Exists` inside `RebuildSessionsList`, which runs after the 2-second debounce — never in `OnFileChanged` |
+| `IJsonlService` interface + new `UpdateSonnetContextSize` method | Adding a method to `JsonlService` without updating `IJsonlService` | Update the interface and any test doubles; the interface is the contract, not the concrete class |
 
 ---
 
-### Pitfall 13: LiteLLM Pricing JSON Schema Changes
+## Performance Traps
 
-**What goes wrong:** The LiteLLM pricing JSON structure changes (new fields, renamed models, restructured nesting). The app crashes or shows $0.00 for all costs.
-
-**Prevention:** Use defensive JSON parsing with fallback values. Never assume a field exists. Ship a `fallback_pricing.json` as specified in the tech spec. Log parsing errors but do not crash. Validate the downloaded JSON schema before replacing the cache.
-
-**Detection:** Corrupt the cached `pricing_cache.json` and verify the app falls back gracefully.
-
-**Phase:** Cost calculation phase.
-
-**Confidence:** MEDIUM (external API dependency, schema stability unknown)
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| `LoadSettings()` (disk read) inside `_sessionsLock` in `GetContextWindow` | UI thread stalls on refresh; lock contention under rapid FSW events | Load setting once into a field; update via messenger | Any FSW burst (10+ file changes/second during active Claude session) |
+| `Directory.Exists` on every entry in `RebuildSessionsList` | Slow rebuild with many orphaned network-path projects | Acceptable per spec — only called on rebuild, not every tick; guard against UNC to avoid SMB latency | Negligible at expected scale; only problematic if >100 orphaned UNC-path sessions |
+| Calling `BuildSubagentContext` twice per `GetContextWindow` + `GetSubagentContext` | Double disk read for subagent files | Pre-existing; Phase 4 does not make it worse — the sort is O(n log n) on a tiny list | No new degradation from Phase 4 |
 
 ---
 
-### Pitfall 14: Inno Setup Per-User Install Without Admin Rights
+## Security Mistakes
 
-**What goes wrong:** The Inno Setup script defaults to `{autopf}` (Program Files), which requires admin rights. The PROJECT.md explicitly requires no admin elevation.
-
-**Prevention:** Use `{localappdata}\CCInfoWindows` as the default install directory. Set `PrivilegesRequired=lowest` in the Inno Setup script. Do NOT use `{autopf}` or `{commonpf}`.
-
-```iss
-[Setup]
-PrivilegesRequired=lowest
-DefaultDirName={localappdata}\CCInfoWindows
-```
-
-**Detection:** Run the installer on a standard (non-admin) Windows account.
-
-**Phase:** Deployment phase.
-
-**Confidence:** HIGH (Inno Setup documentation, project requirement)
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| Passing `Cwd` from JSONL (external data) directly to `Directory.Exists` | SMB NTLM hash leak to crafted UNC path | `Path.IsPathRooted(cwd) && !cwd.StartsWith(@"\\")` guard before `Directory.Exists` |
+| Storing `SonnetContextSize` as an unvalidated integer in settings JSON | Invalid value (e.g., `999`) causes nonsensical context display or divide-by-near-zero | On load, clamp/reject values not in `{200_000, 1_000_000}`; fall back to `DefaultContextLimit` |
+| Sending `SonnetContextChangedMessage` with an unvalidated value from `SelectedSonnetContextIndex` | Out-of-bounds index maps to wrong context size | Use a fixed-size array `long[] { 200_000L, 1_000_000L }` indexed by `SelectedSonnetContextIndex`; bounds-check before access |
 
 ---
 
-## Phase-Specific Warnings
+## UX Pitfalls
 
-| Phase Topic | Likely Pitfall | Mitigation | Severity |
-|-------------|---------------|------------|----------|
-| Authentication (WebView2 login) | WebView2 init failure, cookie threading | Explicit UDF path, await init, UI-thread cookie access | Critical |
-| JSONL Parsing (FileSystemWatcher) | Duplicate events, file locking, buffer overflow | Debounce 300ms, FileShare.ReadWrite, 64KB buffer, Error handler | Critical |
-| Chart Rendering (Win2D) | Memory leak, DPI/theme invalidation | RemoveFromVisualTree pattern, Invalidate on theme change | Critical |
-| API Polling (ClaudeApiService) | Session expiry, silent failures | 401/403 detection, graceful re-auth, stale data indicator | Moderate |
-| Threading (all background work) | COMException on UI update | Capture DispatcherQueue early, dispatch all property changes | Moderate |
-| Deployment (Inno Setup) | Missing runtime, admin requirement | Bundle WindowsAppRuntime, PrivilegesRequired=lowest | Critical |
-| Settings (window position) | Off-screen window | Validate against current display bounds | Low |
-| Localization (.resw) | Missing resources in publish | Verify PRI generation in Release build | Low |
-| Cost Calculation (LiteLLM) | Schema change | Defensive parsing, fallback JSON | Low |
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| Context bar stays at 0% after changing Sonnet setting to 1M | User thinks the setting did not apply | `MainViewModel` subscribes to `SonnetContextChangedMessage` and calls `UpdateSessionData` immediately on receipt |
+| Selected session vanishes silently after project deletion | User sees empty context bars with no explanation | After filtering, auto-select the most recent remaining session — do not leave the ComboBox blank without a placeholder |
+| Subagent bars reorder on every FSW tick | Visual instability during active coding session | Phase 4 sort must be inside `BuildSubagentContext`, not at call sites |
+| Tooltips frozen in one language after runtime language switch | German user sees "Refresh" after switching to DE | Never hard-code `ToolTipService.ToolTip` in XAML — resw-only approach lets WinUI3Localizer control the value |
+
+---
+
+## "Looks Done But Isn't" Checklist
+
+- [ ] **Phase 1 — Opus context limit:** `GetMaxContextTokens("claude-opus-4-6")` returns `1_000_000`. The `ContextLimits` dictionary has an explicit 200K entry for this model — it must be updated or the dictionary must be removed.
+- [ ] **Phase 1 — `GetEffectiveMaxTokens` callers:** Search for `GetEffectiveMaxTokens` after Phase 1 — zero two-argument calls should remain. Both `ContextWindowData.Utilization` and `SubagentContextData.Utilization` must use the new single-parameter signature.
+- [ ] **Phase 1 — `ShouldWarnAutocompact` updated:** Confirm the new flat-buffer warning (`maxTokens − 20K`) is in place and the two-tier utilization percentage logic is removed.
+- [ ] **Phase 1 — Deprecated constants deleted:** `ExtendedAutocompactBuffer` and `ExtendedContextDetectionThreshold` do not appear anywhere in the codebase after Phase 1.
+- [ ] **Phase 2 — `de-DE` resw:** `SettingsSonnetContextLabel.Text`, `SettingsSonnetContext200K.Content`, `SettingsSonnetContext1M.Content` exist in both `de-DE` and `en-US` resource files.
+- [ ] **Phase 2 — Settings persistence:** Open Settings, change to 1M, close app, reopen — the picker must still show 1M, not reset to 200K.
+- [ ] **Phase 2 — `IJsonlService` interface updated:** If `JsonlService` gains a `UpdateSonnetContextSize` method, the `IJsonlService` interface must also declare it.
+- [ ] **Phase 3 — Null/empty `Cwd` guard:** Sessions with `Cwd = null` or `Cwd = ""` are filtered out explicitly, not passed to `Directory.Exists` (which silently returns false for empty strings).
+- [ ] **Phase 3 — Path validation guard present:** The `RebuildSessionsList` filter includes a `!cwd.StartsWith(@"\\")` UNC guard before calling `Directory.Exists`.
+- [ ] **Phase 4 — Sort inside the method:** Search for `OrderBy.*AgentId` — exactly one occurrence, inside `BuildSubagentContext`. Zero occurrences at call sites.
+- [ ] **Phase 5 — `de-DE` resw completeness:** Six entries required: `FooterRefreshButton`, `FooterSettingsButton`, `FooterQuitButton` × (`ToolTipService.ToolTip` + `AutomationProperties.Name`). All six exist in `de-DE/Resources.resw` (the `en-US` entries already exist).
+- [ ] **Phase 5 — No XAML attribute override:** Grep `MainView.xaml` for `ToolTipService.ToolTip` — zero matches.
+
+---
+
+## Recovery Strategies
+
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Opus sessions showing 200K after Phase 1 | LOW | Update or remove `ContextLimits` dictionary; rebuild and verify unit test |
+| Sonnet setting not persisting (reverts to 200K on restart) | LOW | Debug `Initialize()` — confirm backing-field assignment pattern; verify `JsonPropertyName("sonnetContextSize")` on `AppSettings` property |
+| Setting change not reflected live (requires restart) | LOW | Ensure `JsonlService` subscribes to `SonnetContextChangedMessage` or has an `UpdateSonnetContextSize` method; verify `MainViewModel` calls the update method on message receipt |
+| Session filter removes selected session without fallback | LOW | Add guard in `MainViewModel.RefreshSessionList()` — check if `LastSelectedSessionId` still exists in the new filtered `_sessions` before selecting; fallback is already implemented for the "not found" case |
+| Tooltip hard-coded in XAML breaks language switch | LOW | Remove `ToolTipService.ToolTip` XAML attribute; verify resw entry exists for both languages; rebuild |
+| `GetEffectiveMaxTokens` called with wrong signature | LOW | Compiler error catches this immediately if deprecated constants are deleted in same commit as signature change |
+| Path validation missing on `Directory.Exists` | MEDIUM | Add `Path.IsPathRooted` + UNC guard; this is a correctness fix even if no exploit has occurred in practice |
+
+---
+
+## Pitfall-to-Phase Mapping
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| `GetEffectiveMaxTokens` signature mismatch in records | Phase 1 | Zero two-argument calls to `GetEffectiveMaxTokens` in codebase |
+| Opus still showing 200K (dictionary not updated) | Phase 1 | `GetMaxContextTokens("claude-opus-4-6")` returns 1,000,000 |
+| Deprecated constants not deleted | Phase 1 | `ExtendedAutocompactBuffer` and `ExtendedContextDetectionThreshold` absent from codebase |
+| `JsonlService` reads settings on every call under lock | Phase 1 | No `LoadSettings()` call inside `_sessionsLock` in `GetContextWindow` |
+| `Initialize()` fires `OnSelectedSonnetContextIndexChanged` prematurely | Phase 2 | Sonnet 1M setting persists across app restarts; no spurious 200K override on startup |
+| Sonnet setting change not reflected live | Phase 2 | Changing setting immediately updates context bar without app restart |
+| Session filter removes selected session without fallback | Phase 3 | After deleting project directory, app auto-selects next session cleanly |
+| `Directory.Exists` called on UNC/unvalidated path | Phase 3 | Path validation guard present in `RebuildSessionsList` |
+| Sort applied at call site instead of inside method | Phase 4 | Single `OrderBy.*AgentId` in codebase, inside `BuildSubagentContext` |
+| `ToolTipService.ToolTip` set as XAML attribute | Phase 5 | Grep `MainView.xaml` for `ToolTipService.ToolTip` — zero matches |
+| Missing `de-DE` resw entries for Phase 5 | Phase 5 | Language switch to German: all three footer button tooltips show German text |
 
 ---
 
 ## Sources
 
-### Official Documentation
-- [Win2D: Avoiding Memory Leaks](https://microsoft.github.io/Win2D/WinUI3/html/RefCycles.htm) (HIGH confidence)
-- [Windows App SDK Unpackaged Deployment Guide](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/deploy-unpackaged-apps) (HIGH confidence)
-- [CoreWebView2CookieManager API](https://learn.microsoft.com/en-us/dotnet/api/microsoft.web.webview2.core.corewebview2cookiemanager.getcookiesasync) (HIGH confidence)
-- [FileSystemWatcher Duplicate Events](https://learn.microsoft.com/en-us/archive/blogs/ahamza/filesystemwatcher-generates-duplicate-events-how-to-workaround) (HIGH confidence)
+- Direct codebase analysis: `ModelContextLimits.cs` (lines 1–157), `JsonlService.cs` (lines 666–779), `ContextWindowData.cs` (lines 1–54), `AppSettings.cs`, `SettingsViewModel.cs` (lines 85–100), `MainViewModel.cs`, `MainView.xaml` (lines 579–624), `SettingsView.xaml`, `en-US/Resources.resw` (lines 100–118), `App.xaml.cs` (lines 141–142)
+- `spec-release-from-1.7.1-to-1.8.3.md` — implementation spec for all five phases including cross-cutting concerns
+- `.planning/PROJECT.md` — current milestone context, known tech debt, key decisions log
+- `MEMORY.md` — Cloudflare fix architecture and Phase 2 execution history
 
-### GitHub Issues
-- [Win2D CanvasControl Memory Leak on Resize (#821)](https://github.com/microsoft/Win2D/issues/821) (HIGH confidence)
-- [WebView2 EnsureCoreWebView2Async in Unpackaged Apps (#7201)](https://github.com/microsoft/microsoft-ui-xaml/issues/7201) (HIGH confidence)
-- [WebView2 CookieManager Threading (#1283)](https://github.com/MicrosoftEdge/WebView2Feedback/issues/1283) (HIGH confidence)
-- [WinUI 3 COMException Marshalled Thread (#8410)](https://github.com/microsoft/microsoft-ui-xaml/discussions/8410) (HIGH confidence)
-- [WinUI 3 Unpackaged App Distribution (#6620)](https://github.com/microsoft/microsoft-ui-xaml/issues/6620) (HIGH confidence)
-- [WebView2 GetCookiesAsync in WinUI (#1655)](https://github.com/MicrosoftEdge/WebView2Feedback/issues/1655) (MEDIUM -- fixed but verify with current SDK version)
-
-### Community Sources
-- [FileSystemWatcher is a Bit Broken](https://failingfast.io/a-robust-solution-for-filesystemwatcher-firing-events-multiple-times/) (MEDIUM confidence)
-- [Nick's .NET Travels: Packaged vs Unpackaged WinUI 3](https://nicksnettravels.builttoroam.com/packaged-unpackaged-self-contained/) (MEDIUM confidence)
-- [Authenticating HTTP Requests with Cookies from WebView2](https://anthonysimmon.com/authenticating-http-requests-cookies-webview2-wpf/) (MEDIUM confidence)
+---
+*Pitfalls research for: ccInfoWin v1.2 — macOS v1.8.3 feature parity additions*
+*Researched: 2026-04-12*
