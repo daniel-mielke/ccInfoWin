@@ -214,6 +214,12 @@
   <data name="LanguageComboBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Select language</value>
   </data>
+  <data name="SettingsSonnetContextLabel.Text" xml:space="preserve">
+    <value>Sonnet Context:</value>
+  </data>
+  <data name="SonnetContextComboBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Select Sonnet context size</value>
+  </data>
 
   <!-- Accessibility labels for settings controls -->
   <data name="DarkModeToggle.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">

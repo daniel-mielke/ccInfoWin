@@ -141,6 +141,24 @@
                     </ComboBox>
                 </Grid>
 
+                <!-- Sonnet context row -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock l:Uids.Uid="SettingsSonnetContextLabel"
+                               FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
+                               VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="1"
+                              l:Uids.Uid="SonnetContextComboBox"
+                              Width="120"
+                              SelectedIndex="{x:Bind ViewModel.SelectedSonnetContextIndex, Mode=TwoWay}">
+                        <ComboBoxItem Content="200K" />
+                        <ComboBoxItem Content="1M" />
+                    </ComboBox>
+                </Grid>
+
                 <!-- Reset window size row -->
                 <Grid>
                     <Grid.ColumnDefinitions>
