@@ -74,7 +74,10 @@ Plans:
   3. User sees the context window display update immediately after changing the picker (no manual refresh)
   4. User sees the same Sonnet context setting after restarting the app
   5. User sees the picker label and options in the correct language (de-DE and en-US)
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 13-01-PLAN.md — AppSettings property, SonnetContextChangedMessage, SettingsViewModel, XAML ComboBox, localization
+- [ ] 13-02-PLAN.md — JsonlService ISettingsService injection, DI wiring, MainViewModel live refresh
 **UI hint**: yes
 
 ### Phase 14: Session Management Polish
@@ -113,7 +116,7 @@ Plans:
 | 9. Layout & Structure | v1.1 | 2/2 | Complete | 2026-03-19 |
 | 10. Visual Styles | v1.1 | 2/2 | Complete | 2026-03-19 |
 | 11. Behavior & Interaction | v1.1 | 2/2 | Complete | 2026-03-20 |
-| 12. Model-Based Context Detection | v1.2 | 1/1 | Complete   | 2026-04-12 |
-| 13. Sonnet Context Window Setting | v1.2 | 0/? | Not started | - |
+| 12. Model-Based Context Detection | v1.2 | 1/1 | Complete    | 2026-04-12 |
+| 13. Sonnet Context Window Setting | v1.2 | 0/2 | Not started | - |
 | 14. Session Management Polish | v1.2 | 0/? | Not started | - |
 | 15. Footer Tooltip & Accessibility | v1.2 | 0/? | Not started | - |

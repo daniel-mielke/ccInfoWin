@@ -38,4 +38,7 @@ public class AppSettings
 
     [JsonPropertyName("language")]
     public string Language { get; set; } = "de-DE";
+
+    [JsonPropertyName("sonnetContextSize")]
+    public int SonnetContextSize { get; set; } = 200_000;
 }
