@@ -720,7 +720,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
             }
         }
 
-        return result;
+        return result.OrderBy(a => a.AgentId, StringComparer.Ordinal).ToList();
     }
 
     private static string ExtractAgentId(string filePath)
@@ -763,6 +763,19 @@ public sealed class JsonlService : IJsonlService, IDisposable
             + (usage.CacheCreationInputTokens ?? 0);
     }
 
+    private static bool IsValidProjectDirectory(string cwd)
+    {
+        if (string.IsNullOrEmpty(cwd))
+            return false;
+        if (!Path.IsPathRooted(cwd))
+            return false;
+        // UNC paths (\\server\share or //server/share) cause Directory.Exists to hang
+        // when the server is unreachable — short-circuit before filesystem call
+        if (cwd.StartsWith(@"\\", StringComparison.Ordinal) || cwd.StartsWith("//", StringComparison.Ordinal))
+            return false;
+        return Directory.Exists(cwd);
+    }
+
     private void RebuildSessionsList()
     {
         _sessions = _projectData
@@ -782,7 +795,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
                     ModelName = kvp.Value.ModelName
                 };
             })
-            .Where(s => s is not null)
+            .Where(s => s is not null && IsValidProjectDirectory(s.Cwd))
             .OrderByDescending(s => s!.LastActivity)
             .ToList()!;
     }

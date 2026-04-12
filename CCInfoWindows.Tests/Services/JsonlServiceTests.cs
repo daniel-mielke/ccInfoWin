@@ -278,8 +278,13 @@ public class JsonlServiceTests : IDisposable
         var dirName1 = Path.GetFileName(dir1);
         var dirName2 = Path.GetFileName(dir2);
 
-        CreateSessionFile(Session1, cwd: "/home/user/project-alpha");
-        CreateSessionFile(Session2, cwd: "/home/user/project-beta");
+        var cwd1 = Path.Combine(_tempDir, "project-alpha");
+        var cwd2 = Path.Combine(_tempDir, "project-beta");
+        Directory.CreateDirectory(cwd1);
+        Directory.CreateDirectory(cwd2);
+
+        CreateSessionFile(Session1, cwd: cwd1);
+        CreateSessionFile(Session2, cwd: cwd2);
 
         var service = new JsonlService(_tempDir);
         await service.InitializeAsync();
@@ -294,7 +299,10 @@ public class JsonlServiceTests : IDisposable
     public async Task Sessions_DisplayNameFromCwdField()
     {
         const string SessionId = "aaaaaaaa-0000-0000-0000-000000000010";
-        CreateSessionFile(SessionId, cwd: "/home/user/my-awesome-project");
+        var cwd = Path.Combine(_tempDir, "my-awesome-project");
+        Directory.CreateDirectory(cwd);
+
+        CreateSessionFile(SessionId, cwd: cwd);
 
         var service = new JsonlService(_tempDir);
         await service.InitializeAsync();
@@ -317,8 +325,11 @@ public class JsonlServiceTests : IDisposable
         var olderDirName = Path.GetFileName(olderDir);
         var newerDirName = Path.GetFileName(newerDir);
 
-        CreateSessionFile(OlderSession, timestamp: olderTime);
-        CreateSessionFile(NewerSession, timestamp: newerTime);
+        var cwd = Path.Combine(_tempDir, "shared-project-cwd");
+        Directory.CreateDirectory(cwd);
+
+        CreateSessionFile(OlderSession, cwd: cwd, timestamp: olderTime);
+        CreateSessionFile(NewerSession, cwd: cwd, timestamp: newerTime);
 
         var service = new JsonlService(_tempDir);
         await service.InitializeAsync();
