@@ -76,7 +76,7 @@ Plans:
   5. User sees the picker label and options in the correct language (de-DE and en-US)
 **Plans**: 2 plans
 Plans:
-- [ ] 13-01-PLAN.md — AppSettings property, SonnetContextChangedMessage, SettingsViewModel, XAML ComboBox, localization
+- [x] 13-01-PLAN.md — AppSettings property, SonnetContextChangedMessage, SettingsViewModel, XAML ComboBox, localization
 - [ ] 13-02-PLAN.md — JsonlService ISettingsService injection, DI wiring, MainViewModel live refresh
 **UI hint**: yes
 
@@ -117,6 +117,6 @@ Plans:
 | 10. Visual Styles | v1.1 | 2/2 | Complete | 2026-03-19 |
 | 11. Behavior & Interaction | v1.1 | 2/2 | Complete | 2026-03-20 |
 | 12. Model-Based Context Detection | v1.2 | 1/1 | Complete    | 2026-04-12 |
-| 13. Sonnet Context Window Setting | v1.2 | 0/2 | Not started | - |
+| 13. Sonnet Context Window Setting | v1.2 | 1/2 | In Progress|  |
 | 14. Session Management Polish | v1.2 | 0/? | Not started | - |
 | 15. Footer Tooltip & Accessibility | v1.2 | 0/? | Not started | - |
