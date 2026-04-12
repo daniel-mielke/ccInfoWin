@@ -243,6 +243,7 @@
                             VerticalAlignment="Center" />
                         <Button Grid.Column="1"
                                 l:Uids.Uid="ExportButton"
+                                ToolTipService.ToolTip="Export chart"
                                 Background="Transparent" BorderThickness="0"
                                 Padding="8" CornerRadius="6"
                                 Width="32" Height="32">
@@ -584,6 +585,7 @@
                     <!-- Refresh button with spinning icon -->
                     <Grid>
                         <Button l:Uids.Uid="FooterRefreshButton"
+                                ToolTipService.ToolTip="Refresh"
                                 Command="{x:Bind ViewModel.RefreshCommand}"
                                 Background="Transparent" BorderThickness="0"
                                 Padding="8" CornerRadius="6">
@@ -607,6 +609,7 @@
 
                     <!-- Settings button -->
                     <Button l:Uids.Uid="FooterSettingsButton"
+                            ToolTipService.ToolTip="Settings"
                             Command="{x:Bind ViewModel.OpenSettingsCommand}"
                             Background="Transparent" BorderThickness="0"
                             Padding="8" CornerRadius="6">
@@ -616,6 +619,7 @@
 
                     <!-- Quit button -->
                     <Button l:Uids.Uid="FooterQuitButton"
+                            ToolTipService.ToolTip="Quit"
                             Command="{x:Bind ViewModel.ExitAppCommand}"
                             Background="Transparent" BorderThickness="0"
                             Padding="8" CornerRadius="6">
