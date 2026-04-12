@@ -287,6 +287,17 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             ((MainViewModel)r).UpdateRefreshInterval(m.Value);
         });
 
+        // Subscribe to Sonnet context size changes from Settings — refresh context display immediately
+        WeakReferenceMessenger.Default.Register<SonnetContextChangedMessage>(this, (r, m) =>
+        {
+            var vm = (MainViewModel)r;
+            vm._dispatcherQueue?.TryEnqueue(() =>
+            {
+                if (vm.SelectedSession != null)
+                    vm.UpdateSessionData(vm.SelectedSession.Session);
+            });
+        });
+
         // Load persisted history for instant chart display before first poll
         var history = _historyService.LoadHistory();
 
