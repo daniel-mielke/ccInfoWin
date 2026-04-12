@@ -17,7 +17,7 @@ public record SubagentContextData
     {
         get
         {
-            var effective = ModelContextLimits.GetEffectiveMaxTokens(TotalTokens, MaxTokens);
+            var effective = ModelContextLimits.GetEffectiveMaxTokens(MaxTokens);
             return effective > 0 ? Math.Clamp((double)TotalTokens / effective, 0.0, 1.0) : 0.0;
         }
     }
@@ -47,7 +47,7 @@ public record ContextWindowData
     {
         get
         {
-            var effective = ModelContextLimits.GetEffectiveMaxTokens(TotalTokens, MaxTokens);
+            var effective = ModelContextLimits.GetEffectiveMaxTokens(MaxTokens);
             return effective > 0 ? Math.Clamp((double)TotalTokens / effective, 0.0, 1.0) : 0.0;
         }
     }

@@ -5,49 +5,67 @@ namespace CCInfoWindows.Helpers;
 /// </summary>
 public static class ModelContextLimits
 {
-    public const long DefaultContextLimit = 200_000;
-    public const long StandardAutocompactBuffer = 33_000;
-    public const long ExtendedAutocompactBuffer = 165_000;
-    public const long ExtendedContextDetectionThreshold = 180_000;
-
-    private const double LargeModelAutocompactThreshold = 0.90;
-    private const double SmallModelAutocompactThreshold = 0.95;
-    private const long LargeModelThresholdTokens = 100_000;
-
-    private static readonly Dictionary<string, long> ContextLimits = new(StringComparer.OrdinalIgnoreCase)
+    public enum ModelFamily
     {
-        ["claude-opus-4-6"] = 200_000,
-        ["claude-sonnet-4-6"] = 200_000,
-        ["claude-haiku-4-5"] = 200_000,
-        ["claude-haiku-4-5-20251001"] = 200_000,
-        ["claude-sonnet-4-5"] = 200_000,
-        ["claude-sonnet-4-5-20250929"] = 200_000,
-        ["claude-opus-4-5"] = 200_000,
-        ["claude-opus-4-1"] = 200_000,
-        ["claude-sonnet-4-0"] = 200_000,
-        ["claude-opus-4-0"] = 200_000,
-        ["claude-sonnet-4-20250514"] = 200_000,
-        ["claude-opus-4-20250514"] = 200_000,
-    };
+        Unknown,
+        Opus,
+        Sonnet,
+        Haiku
+    }
 
-    /// <summary>Returns the maximum context token count for the given model name, or the default 200K.</summary>
-    public static long GetMaxContextTokens(string? modelName)
+    public const long DefaultContextLimit = 200_000;
+    public const long ExtendedContextLimit = 1_000_000;
+    public const long StandardAutocompactBuffer = 33_000;
+    public const long AutocompactWarningBuffer = 20_000;
+
+    /// <summary>
+    /// Determines the model family from the given model name using substring matching.
+    /// </summary>
+    public static ModelFamily GetModelFamily(string? modelName)
     {
         if (string.IsNullOrEmpty(modelName))
-            return DefaultContextLimit;
+            return ModelFamily.Unknown;
 
-        return ContextLimits.TryGetValue(modelName, out var limit) ? limit : DefaultContextLimit;
+        var lower = modelName.ToLowerInvariant();
+
+        if (lower.Contains("opus"))
+            return ModelFamily.Opus;
+        if (lower.Contains("sonnet"))
+            return ModelFamily.Sonnet;
+        if (lower.Contains("haiku"))
+            return ModelFamily.Haiku;
+
+        return ModelFamily.Unknown;
     }
 
     /// <summary>
-    /// Returns the effective max tokens after subtracting the autocompact buffer.
-    /// Uses the extended buffer when current tokens exceed the extended context detection threshold.
+    /// Returns the maximum context token count for the given model name.
+    /// Opus models return 1M. Sonnet models return sonnetContextSize (default 200K). All others return 200K.
     /// </summary>
-    public static long GetEffectiveMaxTokens(long currentTokens, long maxTokens)
+    public static long GetMaxContextTokens(string? modelName, long sonnetContextSize = DefaultContextLimit)
     {
-        var isExtended = currentTokens > ExtendedContextDetectionThreshold;
-        var buffer = isExtended ? ExtendedAutocompactBuffer : StandardAutocompactBuffer;
-        return Math.Max(1, maxTokens - buffer);
+        return GetModelFamily(modelName) switch
+        {
+            ModelFamily.Opus => ExtendedContextLimit,
+            ModelFamily.Sonnet => sonnetContextSize,
+            _ => DefaultContextLimit
+        };
+    }
+
+    /// <summary>
+    /// Returns the effective max tokens after subtracting the flat 33K autocompact buffer.
+    /// </summary>
+    public static long GetEffectiveMaxTokens(long maxTokens)
+        => Math.Max(1, maxTokens - StandardAutocompactBuffer);
+
+    /// <summary>
+    /// Returns true when the remaining tokens fall below the flat 20K autocompact warning threshold.
+    /// </summary>
+    public static bool ShouldWarnAutocompact(long totalTokens, long maxTokens)
+    {
+        if (maxTokens <= 0)
+            return false;
+        return totalTokens >= maxTokens - AutocompactWarningBuffer;
     }
 
     /// <summary>
@@ -89,23 +107,6 @@ public static class ModelContextLimits
     private const string SonnetBadgeColor = "#FF9F0A";
     private const string HaikuBadgeColor = "#0A84FF";
     private const string FallbackBadgeColor = "#636366";
-
-    /// <summary>
-    /// Returns true when the token count is at or above the autocompact warning threshold
-    /// for the given max token limit.
-    /// </summary>
-    public static bool ShouldWarnAutocompact(long totalTokens, long maxTokens)
-    {
-        if (maxTokens <= 0)
-            return false;
-
-        var utilization = (double)totalTokens / maxTokens;
-        var threshold = maxTokens > LargeModelThresholdTokens
-            ? LargeModelAutocompactThreshold
-            : SmallModelAutocompactThreshold;
-
-        return utilization >= threshold;
-    }
 
     private static string StripDateSuffix(string modelName)
     {
