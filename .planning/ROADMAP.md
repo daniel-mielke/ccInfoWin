@@ -43,7 +43,7 @@ Audit: `.planning/milestones/v1.1-MILESTONE-AUDIT.md`
 
 **Milestone Goal:** Bring ccInfoWin to feature parity with macOS ccInfo v1.8.3 — model-based context detection, user-configurable Sonnet context, session cleanup, stable subagent ordering, and footer accessibility.
 
-- [ ] **Phase 12: Model-Based Context Detection** — Rewrite ModelContextLimits with ModelFamily enum; correct Opus to 1M, Haiku to 200K, flat autocompact warning
+- [x] **Phase 12: Model-Based Context Detection** — Rewrite ModelContextLimits with ModelFamily enum; correct Opus to 1M, Haiku to 200K, flat autocompact warning (completed 2026-04-12)
 - [ ] **Phase 13: Sonnet Context Window Setting** — End-to-end: AppSettings, Settings UI picker, messenger, live refresh on change
 - [ ] **Phase 14: Session Management Polish** — Filter ghost sessions by Directory.Exists; stabilize subagent sort order alphabetically
 - [ ] **Phase 15: Footer Tooltip & Accessibility** — Localized tooltips on all footer buttons, AutomationProperties.Name for screen readers
@@ -62,7 +62,7 @@ Audit: `.planning/milestones/v1.1-MILESTONE-AUDIT.md`
   5. User sees correct model-based context limits on all subagent context progress bars
 **Plans**: 1 plan
 Plans:
-- [ ] 12-01-PLAN.md — Rewrite ModelContextLimits with ModelFamily enum, update callers, update tests
+- [x] 12-01-PLAN.md — Rewrite ModelContextLimits with ModelFamily enum, update callers, update tests
 
 ### Phase 13: Sonnet Context Window Setting
 **Goal**: Users can configure Sonnet's context window size in Settings and see the change reflected immediately in the context display
@@ -113,7 +113,7 @@ Plans:
 | 9. Layout & Structure | v1.1 | 2/2 | Complete | 2026-03-19 |
 | 10. Visual Styles | v1.1 | 2/2 | Complete | 2026-03-19 |
 | 11. Behavior & Interaction | v1.1 | 2/2 | Complete | 2026-03-20 |
-| 12. Model-Based Context Detection | v1.2 | 0/1 | In progress | - |
+| 12. Model-Based Context Detection | v1.2 | 1/1 | Complete   | 2026-04-12 |
 | 13. Sonnet Context Window Setting | v1.2 | 0/? | Not started | - |
 | 14. Session Management Polish | v1.2 | 0/? | Not started | - |
 | 15. Footer Tooltip & Accessibility | v1.2 | 0/? | Not started | - |

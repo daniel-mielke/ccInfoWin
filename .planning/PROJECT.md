@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A Windows 11 desktop application for real-time monitoring of Claude Code usage limits. Port of the macOS app [ccInfo](https://github.com/stefanlange/ccInfo) (v1.7.1) by Stefan Lange, adapted for Windows with WinUI 3. Shipped as v1.0 with full feature parity across all 10 functional areas, and v1.1 with UI polish matching the updated macOS reference design.
+A Windows 11 desktop application for real-time monitoring of Claude Code usage limits. Port of the macOS app [ccInfo](https://github.com/stefanlange/ccInfo) (v1.7.1) by Stefan Lange, adapted for Windows with WinUI 3. Shipped as v1.0 with full feature parity across all 10 functional areas, v1.1 with UI polish matching the updated macOS reference design, and v1.2 bringing parity with macOS ccInfo v1.8.3.
 
 Target audience: Developers with active Claude Pro/Max subscriptions using Claude Code on Windows.
 
@@ -34,6 +34,19 @@ Developers can see their Claude usage limits (5-hour window, weekly quota, conte
 
 ### Active
 
+## Current Milestone: v1.2 macOS v1.8.3 Feature Parity
+
+**Goal:** Bring ccInfoWin to feature parity with macOS ccInfo v1.8.3 — model-based context detection, Sonnet context setting, session cleanup, stable subagent order, and footer accessibility.
+
+**Target features:**
+- 1M context window support with model-based detection (Opus=1M, Sonnet=configurable, Haiku=200K)
+- Sonnet context window setting in Settings (200K/1M picker)
+- Session filtering — hide sessions for deleted project directories
+- Subagent sorting stabilization (alphabetical by agentId)
+- Footer tooltip and accessibility enhancement (localized tooltips, AutomationProperties.Name)
+
+### Future
+
 - [ ] V2-01: System tray icon with quick status overview
 - [ ] V2-02: Keyboard shortcuts for common actions
 - [ ] V2-03: Configurable color thresholds for progress bars
@@ -60,6 +73,7 @@ Developers can see their Claude usage limits (5-hour window, weekly quota, conte
 Shipped v1.1 with UI polish across 3 phases (41 commits, ~1,470 net LOC changes from v1.0 baseline).
 Full v1.1 stats: 3 phases, 6 plans, 10 tasks, 18/18 requirements satisfied.
 Tech stack: C# 13 / .NET 9 / WinUI 3 (Windows App SDK 1.8) / Win2D / WebView2 / CommunityToolkit.Mvvm 8.4.
+Detailed upgrade spec available: `spec-release-from-1.7.1-to-1.8.3.md` (5 phases, dependency chain documented).
 
 **Known tech debt:**
 - 13 pre-existing unit test failures in JsonlServiceTests (parameter naming mismatch, production unaffected)
@@ -132,5 +146,22 @@ License: MIT
 | _stopOnComplete flag for refresh animation (v1.1) | WinUI 3 Storyboard must complete current rotation before Stop() — no built-in API | ✓ Good — smooth completion without snap |
 | Footer into ScrollViewer (v1.1) | Fixed footer created dead space; macOS reference scrolls footer with content | ✓ Good — matches macOS behavior |
 
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd:transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
+
 ---
-*Last updated: 2026-04-01 after v1.1 milestone*
+*Last updated: 2026-04-12 after v1.2 milestone start*
