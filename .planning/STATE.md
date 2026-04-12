@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: macOS v1.8.3 Feature Parity
 status: verifying
-stopped_at: Completed 13-02-PLAN.md
-last_updated: "2026-04-12T14:45:17.534Z"
+stopped_at: Completed 14-01-PLAN.md
+last_updated: "2026-04-12T17:35:28.977Z"
 last_activity: 2026-04-12
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 3
-  completed_plans: 3
+  completed_phases: 3
+  total_plans: 4
+  completed_plans: 4
   percent: 0
 ---
 
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-12)
 
 **Core value:** Developers can see their Claude usage limits (5-hour window, weekly quota, context window) at a glance in real-time, preventing unexpected throttling.
-**Current focus:** Phase 13 — Sonnet Context Window Setting
+**Current focus:** Phase 14 — Session Management Polish
 
 ## Current Position
 
-Phase: 13 (Sonnet Context Window Setting) — EXECUTING
-Plan: 2 of 2
+Phase: 14 (Session Management Polish) — EXECUTING
+Plan: 1 of 1
 Status: Phase complete — ready for verification
 Last activity: 2026-04-12
 
@@ -50,6 +50,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 12 P01 | 15m | 2 tasks | 5 files |
 | Phase 13 P01 | 10m | 3 tasks | 6 files |
 | Phase 13-sonnet-context-window-setting P02 | 12m | 3 tasks | 3 files |
+| Phase 14-session-management-polish P01 | 5min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -62,6 +63,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 13]: SonnetContextSize int in AppSettings, long in SonnetContextChangedMessage to match ModelContextLimits.GetMaxContextTokens return type
 - [Phase 13]: BuildSubagentContext is static — sonnetContextSize passed as parameter from non-static call sites rather than accessing instance field
 - [Phase 13]: JsonlService settingsService parameter optional (null default) to preserve test isolation with 13+ existing tests
+- [Phase 14-session-management-polish]: IsValidProjectDirectory short-circuits UNC paths before Directory.Exists to prevent network hang on unreachable servers
+- [Phase 14-session-management-polish]: SES-02 requires no ViewModel changes: MainViewModel.RefreshSessionList fallback auto-resets to next valid session when active session is filtered out
 
 ### Pending Todos from v1.0
 
@@ -82,6 +85,6 @@ Decisions are logged in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-04-12T14:45:17.531Z
-Stopped at: Completed 13-02-PLAN.md
+Last session: 2026-04-12T17:35:28.974Z
+Stopped at: Completed 14-01-PLAN.md
 Resume file: None

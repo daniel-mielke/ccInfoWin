@@ -39,13 +39,13 @@ Audit: `.planning/milestones/v1.1-MILESTONE-AUDIT.md`
 
 </details>
 
-### 🚧 v1.2 macOS v1.8.3 Feature Parity (In Progress)
+### v1.2 macOS v1.8.3 Feature Parity (In Progress)
 
 **Milestone Goal:** Bring ccInfoWin to feature parity with macOS ccInfo v1.8.3 — model-based context detection, user-configurable Sonnet context, session cleanup, stable subagent ordering, and footer accessibility.
 
 - [x] **Phase 12: Model-Based Context Detection** — Rewrite ModelContextLimits with ModelFamily enum; correct Opus to 1M, Haiku to 200K, flat autocompact warning (completed 2026-04-12)
 - [x] **Phase 13: Sonnet Context Window Setting** — End-to-end: AppSettings, Settings UI picker, messenger, live refresh on change (completed 2026-04-12)
-- [ ] **Phase 14: Session Management Polish** — Filter ghost sessions by Directory.Exists; stabilize subagent sort order alphabetically
+- [x] **Phase 14: Session Management Polish** — Filter ghost sessions by Directory.Exists; stabilize subagent sort order alphabetically (completed 2026-04-12)
 - [ ] **Phase 15: Footer Tooltip & Accessibility** — Localized tooltips on all footer buttons, AutomationProperties.Name for screen readers
 
 ## Phase Details
@@ -88,7 +88,9 @@ Plans:
   1. User does not see sessions whose project directory has been deleted in the session dropdown
   2. User sees the session selection reset to the next valid session when the active project directory is deleted
   3. User sees subagent context bars in the same alphabetical order on every refresh
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [x] 14-01-PLAN.md — IsValidProjectDirectory filter in RebuildSessionsList, alphabetical sort in BuildSubagentContext, unit tests
 
 ### Phase 15: Footer Tooltip & Accessibility
 **Goal**: Users can discover footer button functions via tooltips and screen readers can announce button purposes
@@ -117,6 +119,6 @@ Plans:
 | 10. Visual Styles | v1.1 | 2/2 | Complete | 2026-03-19 |
 | 11. Behavior & Interaction | v1.1 | 2/2 | Complete | 2026-03-20 |
 | 12. Model-Based Context Detection | v1.2 | 1/1 | Complete    | 2026-04-12 |
-| 13. Sonnet Context Window Setting | v1.2 | 2/2 | Complete   | 2026-04-12 |
-| 14. Session Management Polish | v1.2 | 0/? | Not started | - |
+| 13. Sonnet Context Window Setting | v1.2 | 2/2 | Complete    | 2026-04-12 |
+| 14. Session Management Polish | v1.2 | 1/1 | Complete   | 2026-04-12 |
 | 15. Footer Tooltip & Accessibility | v1.2 | 0/? | Not started | - |
