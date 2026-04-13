@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: macOS v1.10.0 Feature Parity
-status: executing
-stopped_at: Completed 17-01-PLAN.md
-last_updated: "2026-04-13T18:50:05.359Z"
+status: verifying
+stopped_at: "Completed 17-02-PLAN.md — awaiting checkpoint:human-verify for gradient visual verification"
+last_updated: "2026-04-13T18:54:33.023Z"
 last_activity: 2026-04-13
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-13)
 
 Phase: 17 (chart-horizontal-gradient) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-13
 
 Progress: [░░░░░░░░░░] 0%
@@ -50,6 +50,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 16-burn-rate-warning P01 | 12 | 2 tasks | 10 files |
 | Phase 16-burn-rate-warning P02 | 10 | 2 tasks | 5 files |
 | Phase 17-chart-horizontal-gradient P01 | 4 | 2 tasks | 4 files |
+| Phase 17-chart-horizontal-gradient P02 | 2 | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,8 @@ Recent decisions affecting current work:
 - [Phase 16-burn-rate-warning]: SendToast is static in BurnRateNotificationService — only the one-shot flag _notifiedBurnRate needs instance state
 - [Phase 17-chart-horizontal-gradient]: Single-point span Position=0.0f only — boundary clamping splits count==1 vs count>1 to prevent overwrite of sole element
 - [Phase 17-chart-horizontal-gradient]: GetContiguousSpans returns [(0, count-1)] unconditionally — no IsGap field on UsageHistoryPoint, signature future-proof
+- [Phase 17-chart-horizontal-gradient]: CanvasAlphaMode.Premultiplied on gradient brush prevents color desaturation artifacts in Win2D
+- [Phase 17-chart-horizontal-gradient]: FillAlpha=64 constant and ConvertToFillStops/ConvertToLineStops helpers separate alpha concerns from path building
 
 ### Critical Pitfalls for v1.3
 
@@ -91,6 +94,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-13T18:50:05.356Z
-Stopped at: Completed 17-01-PLAN.md
+Last session: 2026-04-13T18:54:33.020Z
+Stopped at: Completed 17-02-PLAN.md — awaiting checkpoint:human-verify for gradient visual verification
 Resume file: None

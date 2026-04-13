@@ -59,7 +59,7 @@ Audit: `.planning/milestones/v1.2-MILESTONE-AUDIT.md`
 **Milestone Goal:** Port macOS v1.9.0 and v1.10.0 features — burn rate prediction with visual warnings and toast notifications, chart gradient rendering, settings UI redesign with Segmented Control, and FileSystemWatcher verification.
 
 - [x] **Phase 16: Burn Rate Warning** — Prediction engine, inline banner, and toast notification when token exhaustion is projected (completed 2026-04-13)
-- [ ] **Phase 17: Chart Horizontal Gradient** — Smooth green→yellow→orange→red gradient replacing flat zone fills on the 5-hour chart
+- [x] **Phase 17: Chart Horizontal Gradient** — Smooth green→yellow→orange→red gradient replacing flat zone fills on the 5-hour chart (completed 2026-04-13)
 - [ ] **Phase 18: Settings Redesign** — Segmented Control with General/Updates/Account/About tabs at 360px width
 - [ ] **Phase 19: Session Watcher Verification** — Confirm FileSystemWatcher catches file-level session metadata changes
 
@@ -93,7 +93,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 17-01-PLAN.md — Color interpolation lookup, gradient stop calculation, contiguous spans (pure math + TDD)
-- [ ] 17-02-PLAN.md — Win2D gradient brush rendering in ChartDrawing, ExportHelper line width, visual verification
+- [x] 17-02-PLAN.md — Win2D gradient brush rendering in ChartDrawing, ExportHelper line width, visual verification
 **UI hint**: yes
 
 ### Phase 18: Settings Redesign
@@ -138,6 +138,6 @@ Plans:
 | 14. Session Management Polish | v1.2 | 1/1 | Complete | 2026-04-12 |
 | 15. Footer Tooltip & Accessibility | v1.2 | 2/2 | Complete | 2026-04-13 |
 | 16. Burn Rate Warning | v1.3 | 2/2 | Complete    | 2026-04-13 |
-| 17. Chart Horizontal Gradient | v1.3 | 1/2 | In Progress|  |
+| 17. Chart Horizontal Gradient | v1.3 | 2/2 | Complete   | 2026-04-13 |
 | 18. Settings Redesign | v1.3 | 0/? | Not started | - |
 | 19. Session Watcher Verification | v1.3 | 0/? | Not started | - |
