@@ -1,4 +1,5 @@
 using CCInfoWindows.Models;
+using Windows.UI;
 
 namespace CCInfoWindows.Helpers;
 
@@ -56,6 +57,7 @@ public static class ChartRenderer
     /// Groups consecutive data points by color zone (from ColorThresholds).
     /// Returns a list of (StartIndex, EndIndex, BrushKey) tuples.
     /// </summary>
+    [Obsolete("Use GetContiguousSpans — zone-based segmentation replaced by continuous gradient in Phase 17")]
     public static List<(int StartIndex, int EndIndex, string BrushKey)> GetZoneSegments(
         IReadOnlyList<UsageHistoryPoint> points)
     {
@@ -78,5 +80,61 @@ public static class ChartRenderer
 
         segments.Add((segmentStart, points.Count - 1, currentZone));
         return segments;
+    }
+
+    /// <summary>
+    /// Returns all data points as a single contiguous span.
+    /// Since UsageHistoryPoint has no IsGap field, all points are always contiguous.
+    /// Returns an empty list for empty input. Signature ready for future gap support.
+    /// </summary>
+    public static List<(int StartIndex, int EndIndex)> GetContiguousSpans(
+        IReadOnlyList<UsageHistoryPoint> points)
+    {
+        if (points.Count == 0) return [];
+        return [(0, points.Count - 1)];
+    }
+
+    /// <summary>
+    /// Builds gradient stop tuples for a span of data points.
+    /// Positions are normalized to [0, 1] within the span (not the full chart width).
+    /// Colors are looked up from the pre-built colorLookup array by utilization index.
+    /// Return type is plain C# tuples — no Win2D dependency. Conversion to CanvasGradientStop
+    /// happens in ChartDrawing (Phase 17, Plan 02).
+    /// </summary>
+    public static (float Position, Color Color)[] BuildGradientStops(
+        IReadOnlyList<UsageHistoryPoint> points,
+        int startIndex,
+        int endIndex,
+        DateTimeOffset windowStart,
+        float plotWidth,
+        Color[] colorLookup)
+    {
+        var spanStartX = ToX(points[startIndex].Timestamp, windowStart, plotWidth);
+        var spanEndX = ToX(points[endIndex].Timestamp, windowStart, plotWidth);
+        var spanWidth = spanEndX - spanStartX;
+
+        if (spanWidth <= 0f) spanWidth = 1f;
+
+        var stops = new List<(float Position, Color Color)>();
+
+        for (var i = startIndex; i <= endIndex; i++)
+        {
+            var x = ToX(points[i].Timestamp, windowStart, plotWidth);
+            var position = Math.Clamp((x - spanStartX) / spanWidth, 0f, 1f);
+            var colorIndex = (int)Math.Clamp(points[i].Utilization * 100.0, 0, 100);
+            stops.Add((position, colorLookup[colorIndex]));
+        }
+
+        if (stops.Count == 1)
+        {
+            stops[0] = (0.0f, stops[0].Color);
+        }
+        else if (stops.Count > 1)
+        {
+            stops[0] = (0.0f, stops[0].Color);
+            stops[^1] = (1.0f, stops[^1].Color);
+        }
+
+        return [.. stops];
     }
 }

@@ -1,5 +1,6 @@
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Models;
+using Windows.UI;
 
 namespace CCInfoWindows.Tests.Helpers;
 
@@ -237,5 +238,180 @@ public class ChartRendererTests
         var result = ChartRenderer.GetRightEdgeAbsoluteX(points, endIndex: 0, windowStart, plotWidth);
 
         Assert.Equal(ChartRenderer.LeftMargin + plotWidth, result, precision: 2);
+    }
+
+    // --- GetContiguousSpans tests ---
+
+    [Fact]
+    public void GetContiguousSpans_EmptyPoints_ReturnsEmptyList()
+    {
+        var spans = ChartRenderer.GetContiguousSpans([]);
+        Assert.Empty(spans);
+    }
+
+    [Fact]
+    public void GetContiguousSpans_SinglePoint_ReturnsOneSpan_0_0()
+    {
+        var points = new List<UsageHistoryPoint>
+        {
+            new() { Timestamp = DateTimeOffset.UtcNow, Utilization = 0.3 }
+        };
+
+        var spans = ChartRenderer.GetContiguousSpans(points);
+
+        Assert.Single(spans);
+        Assert.Equal(0, spans[0].StartIndex);
+        Assert.Equal(0, spans[0].EndIndex);
+    }
+
+    [Fact]
+    public void GetContiguousSpans_FivePoints_ReturnsOneSpan_0_4()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var points = new List<UsageHistoryPoint>
+        {
+            new() { Timestamp = now, Utilization = 0.1 },
+            new() { Timestamp = now.AddMinutes(1), Utilization = 0.3 },
+            new() { Timestamp = now.AddMinutes(2), Utilization = 0.5 },
+            new() { Timestamp = now.AddMinutes(3), Utilization = 0.7 },
+            new() { Timestamp = now.AddMinutes(4), Utilization = 0.9 },
+        };
+
+        var spans = ChartRenderer.GetContiguousSpans(points);
+
+        Assert.Single(spans);
+        Assert.Equal(0, spans[0].StartIndex);
+        Assert.Equal(4, spans[0].EndIndex);
+    }
+
+    [Fact]
+    public void GetContiguousSpans_HundredPoints_ReturnsOneSpan_0_99()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var points = Enumerable.Range(0, 100)
+            .Select(i => new UsageHistoryPoint
+            {
+                Timestamp = now.AddMinutes(i),
+                Utilization = i / 100.0
+            })
+            .ToList();
+
+        var spans = ChartRenderer.GetContiguousSpans(points);
+
+        Assert.Single(spans);
+        Assert.Equal(0, spans[0].StartIndex);
+        Assert.Equal(99, spans[0].EndIndex);
+    }
+
+    // --- BuildGradientStops tests ---
+
+    [Fact]
+    public void BuildGradientStops_SinglePointSpan_ReturnsOneStop_Position0()
+    {
+        var windowStart = DateTimeOffset.UtcNow.AddHours(-2);
+        var points = new List<UsageHistoryPoint>
+        {
+            new() { Timestamp = windowStart.AddHours(1), Utilization = 0.0 }
+        };
+        var colorLookup = ChartColors.BuildColorLookup(isDark: true);
+
+        var stops = ChartRenderer.BuildGradientStops(points, 0, 0, windowStart, 200f, colorLookup);
+
+        Assert.Single(stops);
+        Assert.Equal(0.0f, stops[0].Position, precision: 4);
+    }
+
+    [Fact]
+    public void BuildGradientStops_TwoPointSpan_FirstPosition0_LastPosition1()
+    {
+        var windowStart = DateTimeOffset.UtcNow.AddHours(-4);
+        var points = new List<UsageHistoryPoint>
+        {
+            new() { Timestamp = windowStart.AddHours(1), Utilization = 0.1 },
+            new() { Timestamp = windowStart.AddHours(3), Utilization = 0.9 },
+        };
+        var colorLookup = ChartColors.BuildColorLookup(isDark: true);
+
+        var stops = ChartRenderer.BuildGradientStops(points, 0, 1, windowStart, 200f, colorLookup);
+
+        Assert.Equal(2, stops.Length);
+        Assert.Equal(0.0f, stops[0].Position, precision: 4);
+        Assert.Equal(1.0f, stops[^1].Position, precision: 4);
+    }
+
+    [Fact]
+    public void BuildGradientStops_StopColors_MatchBuildColorLookup()
+    {
+        var windowStart = DateTimeOffset.UtcNow.AddHours(-4);
+        var points = new List<UsageHistoryPoint>
+        {
+            new() { Timestamp = windowStart.AddHours(1), Utilization = 0.0 },
+            new() { Timestamp = windowStart.AddHours(2), Utilization = 0.5 },
+            new() { Timestamp = windowStart.AddHours(3), Utilization = 1.0 },
+        };
+        var colorLookup = ChartColors.BuildColorLookup(isDark: true);
+
+        var stops = ChartRenderer.BuildGradientStops(points, 0, 2, windowStart, 200f, colorLookup);
+
+        Assert.Equal(colorLookup[0], stops[0].Color);
+        Assert.Equal(colorLookup[50], stops[1].Color);
+        Assert.Equal(colorLookup[100], stops[2].Color);
+    }
+
+    [Fact]
+    public void BuildGradientStops_PositionsNormalizedWithinSpan_NotFullChartWidth()
+    {
+        // Points at hours 1, 2, 3 within a window that starts at hour 0 (total 5 hours)
+        // Span relative positions should be 0.0, 0.5, 1.0 (not absolute chart fractions)
+        var windowStart = DateTimeOffset.UtcNow.AddHours(-4);
+        var points = new List<UsageHistoryPoint>
+        {
+            new() { Timestamp = windowStart.AddHours(1), Utilization = 0.2 },
+            new() { Timestamp = windowStart.AddHours(2), Utilization = 0.4 },
+            new() { Timestamp = windowStart.AddHours(3), Utilization = 0.6 },
+        };
+        var colorLookup = ChartColors.BuildColorLookup(isDark: true);
+
+        var stops = ChartRenderer.BuildGradientStops(points, 0, 2, windowStart, 200f, colorLookup);
+
+        Assert.Equal(0.0f, stops[0].Position, precision: 3);
+        Assert.Equal(0.5f, stops[1].Position, precision: 3);
+        Assert.Equal(1.0f, stops[2].Position, precision: 3);
+    }
+
+    [Fact]
+    public void BuildGradientStops_ReturnType_IsTupleArray_NotCanvasGradientStop()
+    {
+        var windowStart = DateTimeOffset.UtcNow.AddHours(-2);
+        var points = new List<UsageHistoryPoint>
+        {
+            new() { Timestamp = windowStart.AddHours(1), Utilization = 0.5 }
+        };
+        var colorLookup = ChartColors.BuildColorLookup(isDark: true);
+
+        var stops = ChartRenderer.BuildGradientStops(points, 0, 0, windowStart, 200f, colorLookup);
+
+        Assert.IsType<(float Position, Color Color)[]>(stops);
+    }
+
+    [Fact]
+    public void BuildGradientStops_AllPositions_ClampedBetween0And1()
+    {
+        var windowStart = DateTimeOffset.UtcNow.AddHours(-4);
+        var points = Enumerable.Range(0, 10)
+            .Select(i => new UsageHistoryPoint
+            {
+                Timestamp = windowStart.AddHours(i * 0.3),
+                Utilization = i / 10.0
+            })
+            .ToList();
+        var colorLookup = ChartColors.BuildColorLookup(isDark: true);
+
+        var stops = ChartRenderer.BuildGradientStops(points, 0, points.Count - 1, windowStart, 200f, colorLookup);
+
+        foreach (var stop in stops)
+        {
+            Assert.InRange(stop.Position, 0.0f, 1.0f);
+        }
     }
 }
