@@ -5,6 +5,7 @@ using CCInfoWindows.ViewModels;
 using CCInfoWindows.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
+using Microsoft.Windows.AppNotifications;
 using WinUI3Localizer;
 
 namespace CCInfoWindows;
@@ -25,6 +26,11 @@ public partial class App : Application
         UnhandledException += OnUnhandledException;
     }
 
+    private static void OnNotificationInvoked(AppNotificationManager sender, AppNotificationActivatedEventArgs args)
+    {
+        // No action needed -- toast click brings app to foreground automatically
+    }
+
     private static void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
     {
         var logPath = Path.Combine(
@@ -42,6 +48,13 @@ public partial class App : Application
             Services = ConfigureServices();
 
             await InitializeLocalizerAsync();
+
+            if (AppNotificationManager.IsSupported())
+            {
+                var notificationManager = AppNotificationManager.Default;
+                notificationManager.NotificationInvoked += OnNotificationInvoked;
+                notificationManager.Register();
+            }
 
             _window = new MainWindow();
             MainWindow = _window;
@@ -144,6 +157,7 @@ public partial class App : Application
                 settingsService: sp.GetRequiredService<ISettingsService>()));
         services.AddSingleton<IUpdateService>(sp =>
             new UpdateService(sp.GetRequiredService<HttpClient>(), sp.GetRequiredService<ISettingsService>()));
+        services.AddSingleton<IBurnRateNotificationService, BurnRateNotificationService>();
 
         // ViewModels
         services.AddTransient<LoginViewModel>();
@@ -156,7 +170,8 @@ public partial class App : Application
             sp.GetRequiredService<IJsonlService>(),
             sp.GetRequiredService<IPricingService>(),
             sp.GetRequiredService<IUpdateService>(),
-            sp.GetRequiredService<IWebViewBridge>()));
+            sp.GetRequiredService<IWebViewBridge>(),
+            sp.GetRequiredService<IBurnRateNotificationService>()));
         services.AddTransient<SettingsViewModel>();
 
         return services.BuildServiceProvider();

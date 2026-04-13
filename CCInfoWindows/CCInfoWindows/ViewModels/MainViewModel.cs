@@ -13,6 +13,7 @@ using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
+using WinUI3Localizer;
 
 namespace CCInfoWindows.ViewModels;
 
@@ -54,6 +55,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     private readonly IPricingService _pricingService;
     private readonly IUpdateService _updateService;
     private readonly IWebViewBridge _bridge;
+    private readonly IBurnRateNotificationService _burnRateNotificationService;
 
     private DispatcherQueueTimer? _pollTimer;
     private DispatcherQueueTimer? _countdownTimer;
@@ -96,6 +98,14 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     private string _fiveHourCountdown = "--";
 
     private DateTimeOffset? _fiveHourResetsAt;
+
+    // --- Burn rate warning ---
+
+    [ObservableProperty]
+    private bool _isBurnRateWarningVisible;
+
+    [ObservableProperty]
+    private string _burnRateWarningText = string.Empty;
 
     // --- Weekly quota (Opus / default) ---
 
@@ -253,7 +263,8 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         IJsonlService jsonlService,
         IPricingService pricingService,
         IUpdateService updateService,
-        IWebViewBridge bridge)
+        IWebViewBridge bridge,
+        IBurnRateNotificationService burnRateNotificationService)
     {
         _credentialService = credentialService;
         _navigationService = navigationService;
@@ -264,6 +275,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         _pricingService = pricingService;
         _updateService = updateService;
         _bridge = bridge;
+        _burnRateNotificationService = burnRateNotificationService;
 
         _updateService.UpdateAvailable += OnUpdateAvailable;
         WeakReferenceMessenger.Default.Register<AuthStateChangedMessage>(this);
@@ -432,6 +444,18 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             FiveHourCountdown = CountdownFormatter.FormatCountdown(data.FiveHour.ResetsAt);
 
             AppendHistoryPoint(data.FiveHour.ResetsAt, util);
+
+            // Burn rate prediction — uses Utilization (0-100) NOT NormalizedUtilization (0-1)
+            var prediction = BurnRateCalculator.Predict(
+                UsageHistoryPoints,
+                data.FiveHour.Utilization,
+                data.FiveHour.ResetsAt);
+
+            IsBurnRateWarningVisible = prediction != null;
+            BurnRateWarningText = prediction != null
+                ? FormatBurnRateText(prediction.MinutesUntilLimit)
+                : string.Empty;
+            _burnRateNotificationService.CheckBurnRate(prediction);
         }
         else
         {
@@ -440,6 +464,9 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             FiveHourPercentageText = "--";
             FiveHourCountdown = "--";
             _fiveHourResetsAt = null;
+            IsBurnRateWarningVisible = false;
+            BurnRateWarningText = string.Empty;
+            _burnRateNotificationService.CheckBurnRate(null);
         }
 
         // WOCHENLIMIT = SevenDayOpus (fallback to SevenDay)
@@ -453,6 +480,14 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         ApplyWeeklyWindow(data.SevenDaySonnet,
             v => SonnetUtilization = v, v => SonnetPercentage = v, v => SonnetPercentageText = v,
             v => SonnetCountdown = v, v => SonnetResetDate = v, v => _sonnetResetsAt = v);
+    }
+
+    private static string FormatBurnRateText(int minutesUntilLimit)
+    {
+        var timeLabel = BurnRateFormatter.FormatTimeLabel(minutesUntilLimit);
+        return string.Format(
+            Localizer.Get().GetLocalizedString("BurnRateBannerText"),
+            timeLabel);
     }
 
     private static void ApplyWeeklyWindow(
