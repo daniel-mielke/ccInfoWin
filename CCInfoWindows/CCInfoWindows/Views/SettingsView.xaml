@@ -6,12 +6,17 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:l="using:WinUI3Localizer"
+    xmlns:controls="using:CommunityToolkit.WinUI.Controls"
     mc:Ignorable="d">
 
-    <Grid Background="{ThemeResource AppBackgroundBrush}" Padding="16,12"
-          RowDefinitions="Auto,*,Auto">
+    <Grid Background="{ThemeResource AppBackgroundBrush}" Padding="16,12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
-        <!-- Header row with back button and title -->
+        <!-- Row 0: Header — back button + title -->
         <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,16">
             <Button l:Uids.Uid="SettingsBackButton"
                     Command="{x:Bind ViewModel.GoBackCommand}"
@@ -25,167 +30,406 @@
                        VerticalAlignment="Center" CharacterSpacing="50" />
         </StackPanel>
 
-        <!-- Settings content -->
-        <StackPanel Grid.Row="1" Spacing="24">
-            <!-- Refresh interval -->
-            <StackPanel Spacing="8">
-                <TextBlock l:Uids.Uid="SettingsRefreshInterval"
-                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}" />
-                <ComboBox l:Uids.Uid="RefreshIntervalComboBox"
-                          ItemsSource="{x:Bind ViewModel.RefreshOptions}"
-                          SelectedItem="{x:Bind ViewModel.SelectedRefreshOption, Mode=TwoWay}"
-                          DisplayMemberPath="Label"
-                          HorizontalAlignment="Stretch" />
-            </StackPanel>
+        <!-- Row 1: Segmented Control — 4 tabs with colored icon badges -->
+        <controls:Segmented Grid.Row="1"
+            HorizontalAlignment="Stretch"
+            Margin="0,0,0,12"
+            SelectedIndex="{x:Bind ViewModel.SelectedTabIndex, Mode=TwoWay}">
 
-            <!-- Divider -->
-            <Border Height="1" Background="{ThemeResource DividerBrush}" />
+            <!-- General tab (green badge) -->
+            <controls:SegmentedItem>
+                <controls:SegmentedItem.Content>
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Border Width="18" Height="18" CornerRadius="4"
+                                Background="{ThemeResource SettingsBadgeGreenBrush}">
+                            <FontIcon Glyph="&#xE713;" FontSize="10" Foreground="White" />
+                        </Border>
+                        <TextBlock l:Uids.Uid="SettingsTabGeneral" FontSize="12" VerticalAlignment="Center" />
+                    </StackPanel>
+                </controls:SegmentedItem.Content>
+            </controls:SegmentedItem>
 
-            <!-- Session activity timeout -->
-            <StackPanel Spacing="8">
-                <TextBlock l:Uids.Uid="SettingsSessionTimeout"
-                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}" />
-                <ComboBox l:Uids.Uid="SessionTimeoutComboBox"
-                          SelectedIndex="{x:Bind ViewModel.SelectedThresholdIndex, Mode=TwoWay}"
-                          HorizontalAlignment="Stretch">
-                    <ComboBoxItem l:Uids.Uid="Timeout15" />
-                    <ComboBoxItem l:Uids.Uid="Timeout30" />
-                    <ComboBoxItem l:Uids.Uid="Timeout60" />
-                    <ComboBoxItem l:Uids.Uid="Timeout120" />
-                </ComboBox>
-            </StackPanel>
+            <!-- Updates tab (blue badge) -->
+            <controls:SegmentedItem>
+                <controls:SegmentedItem.Content>
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Border Width="18" Height="18" CornerRadius="4"
+                                Background="{ThemeResource SettingsBadgeBlueBrush}">
+                            <FontIcon Glyph="&#xE895;" FontSize="10" Foreground="White" />
+                        </Border>
+                        <TextBlock l:Uids.Uid="SettingsTabUpdates" FontSize="12" VerticalAlignment="Center" />
+                    </StackPanel>
+                </controls:SegmentedItem.Content>
+            </controls:SegmentedItem>
 
-            <!-- Divider -->
-            <Border Height="1" Background="{ThemeResource DividerBrush}" />
+            <!-- Account tab (red badge) -->
+            <controls:SegmentedItem>
+                <controls:SegmentedItem.Content>
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Border Width="18" Height="18" CornerRadius="4"
+                                Background="{ThemeResource SettingsBadgeRedBrush}">
+                            <FontIcon Glyph="&#xE77B;" FontSize="10" Foreground="White" />
+                        </Border>
+                        <TextBlock l:Uids.Uid="SettingsTabAccount" FontSize="12" VerticalAlignment="Center" />
+                    </StackPanel>
+                </controls:SegmentedItem.Content>
+            </controls:SegmentedItem>
 
-            <!-- Dark/Light mode -->
+            <!-- About tab (orange badge) -->
+            <controls:SegmentedItem>
+                <controls:SegmentedItem.Content>
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Border Width="18" Height="18" CornerRadius="4"
+                                Background="{ThemeResource SettingsBadgeOrangeBrush}">
+                            <FontIcon Glyph="&#xE946;" FontSize="10" Foreground="White" />
+                        </Border>
+                        <TextBlock l:Uids.Uid="SettingsTabAbout" FontSize="12" VerticalAlignment="Center" />
+                    </StackPanel>
+                </controls:SegmentedItem.Content>
+            </controls:SegmentedItem>
+
+        </controls:Segmented>
+
+        <!-- Row 2: Tab content panels in ScrollViewer -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock l:Uids.Uid="SettingsDarkMode"
-                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                           VerticalAlignment="Center" />
-                <ToggleSwitch Grid.Column="1"
-                              l:Uids.Uid="DarkModeToggle"
-                              IsOn="{x:Bind ViewModel.IsDarkMode, Mode=TwoWay}"
-                              OnContent="" OffContent="" />
+
+                <!-- PANEL 1 — General Tab -->
+                <StackPanel Spacing="8"
+                            Visibility="{x:Bind ViewModel.IsGeneralTabVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+
+                    <TextBlock l:Uids.Uid="SettingsGeneralHeader"
+                               FontSize="11" FontWeight="SemiBold"
+                               Foreground="{ThemeResource SectionHeaderBrush}"
+                               CharacterSpacing="50" Margin="0,0,0,8" />
+
+                    <Border CornerRadius="8"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <StackPanel>
+
+                            <!-- Row 1: Autostart -->
+                            <Grid Height="40" Padding="12,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock l:Uids.Uid="SettingsAutostartLabel"
+                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                                <ToggleSwitch Grid.Column="1"
+                                             l:Uids.Uid="AutostartToggle"
+                                             IsOn="{x:Bind ViewModel.IsAutostart, Mode=TwoWay}"
+                                             MinWidth="0" OnContent="" OffContent=""
+                                             VerticalAlignment="Center" />
+                            </Grid>
+
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+
+                            <!-- Row 2: Refresh Interval -->
+                            <Grid Height="40" Padding="12,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock l:Uids.Uid="SettingsRefreshInterval"
+                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1"
+                                          l:Uids.Uid="RefreshIntervalComboBox"
+                                          ItemsSource="{x:Bind ViewModel.RefreshOptions}"
+                                          SelectedItem="{x:Bind ViewModel.SelectedRefreshOption, Mode=TwoWay}"
+                                          DisplayMemberPath="Label"
+                                          VerticalAlignment="Center" />
+                            </Grid>
+
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+
+                            <!-- Row 3: Session Timeout -->
+                            <Grid Height="40" Padding="12,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock l:Uids.Uid="SettingsSessionTimeout"
+                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1"
+                                          l:Uids.Uid="SessionTimeoutComboBox"
+                                          SelectedIndex="{x:Bind ViewModel.SelectedThresholdIndex, Mode=TwoWay}"
+                                          VerticalAlignment="Center">
+                                    <ComboBoxItem Content="15min" />
+                                    <ComboBoxItem Content="30min" />
+                                    <ComboBoxItem Content="60min" />
+                                    <ComboBoxItem Content="120min" />
+                                </ComboBox>
+                            </Grid>
+
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+
+                            <!-- Row 4: Dark Mode -->
+                            <Grid Height="40" Padding="12,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock l:Uids.Uid="SettingsDarkMode"
+                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                                <ToggleSwitch Grid.Column="1"
+                                             l:Uids.Uid="DarkModeToggle"
+                                             IsOn="{x:Bind ViewModel.IsDarkMode, Mode=TwoWay}"
+                                             MinWidth="0" OnContent="" OffContent=""
+                                             VerticalAlignment="Center" />
+                            </Grid>
+
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+
+                            <!-- Row 5: Language -->
+                            <Grid Height="40" Padding="12,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock l:Uids.Uid="SettingsLanguageLabel"
+                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1"
+                                          l:Uids.Uid="LanguageComboBox"
+                                          Width="120"
+                                          SelectedIndex="{x:Bind ViewModel.SelectedLanguageIndex, Mode=TwoWay}"
+                                          VerticalAlignment="Center">
+                                    <ComboBoxItem Content="Deutsch" />
+                                    <ComboBoxItem Content="English" />
+                                </ComboBox>
+                            </Grid>
+
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+
+                            <!-- Row 6: Sonnet Context -->
+                            <Grid Height="40" Padding="12,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock l:Uids.Uid="SettingsSonnetContextLabel"
+                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1"
+                                          l:Uids.Uid="SonnetContextComboBox"
+                                          Width="120"
+                                          SelectedIndex="{x:Bind ViewModel.SelectedSonnetContextIndex, Mode=TwoWay}"
+                                          VerticalAlignment="Center">
+                                    <ComboBoxItem Content="200K" />
+                                    <ComboBoxItem Content="1M" />
+                                </ComboBox>
+                            </Grid>
+
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+
+                            <!-- Row 7: Reset Window Size -->
+                            <Grid Height="40" Padding="12,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock l:Uids.Uid="SettingsResetWindowSizeLabel"
+                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                                <Button Grid.Column="1"
+                                        l:Uids.Uid="SettingsResetWindowSizeButton"
+                                        Command="{x:Bind ViewModel.ResetWindowSizeCommand}"
+                                        VerticalAlignment="Center" />
+                            </Grid>
+
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- PANEL 2 — Updates Tab -->
+                <StackPanel Spacing="8"
+                            Visibility="{x:Bind ViewModel.IsUpdatesTabVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+
+                    <TextBlock l:Uids.Uid="SettingsUpdatesHeader"
+                               FontSize="11" FontWeight="SemiBold"
+                               Foreground="{ThemeResource SectionHeaderBrush}"
+                               CharacterSpacing="50" Margin="0,0,0,8" />
+
+                    <Border CornerRadius="8"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <StackPanel>
+
+                            <!-- Row 1: App Version -->
+                            <Grid Height="40" Padding="12,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock l:Uids.Uid="SettingsAppVersion"
+                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{x:Bind ViewModel.AppVersionText}"
+                                           FontSize="13" HorizontalAlignment="Right"
+                                           Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+
+                            <!-- Row 2: Pricing Source -->
+                            <Grid Height="40" Padding="12,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock l:Uids.Uid="SettingsPricingSourceLabel"
+                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{x:Bind ViewModel.PricingSourceText}"
+                                           FontSize="13" HorizontalAlignment="Right"
+                                           Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+
+                            <!-- Row 3: Last Pricing Fetch -->
+                            <Grid Height="40" Padding="12,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock l:Uids.Uid="SettingsLastFetchLabel"
+                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{x:Bind ViewModel.LastPricingFetchText}"
+                                           FontSize="13" HorizontalAlignment="Right"
+                                           Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- PANEL 3 — Account Tab -->
+                <StackPanel Spacing="8"
+                            Visibility="{x:Bind ViewModel.IsAccountTabVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+
+                    <TextBlock l:Uids.Uid="SettingsAccountHeader"
+                               FontSize="11" FontWeight="SemiBold"
+                               Foreground="{ThemeResource SectionHeaderBrush}"
+                               CharacterSpacing="50" Margin="0,0,0,8" />
+
+                    <Border CornerRadius="8"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <StackPanel>
+
+                            <!-- Row 1: Token Status -->
+                            <Grid Height="40" Padding="12,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock l:Uids.Uid="SettingsTokenStatus"
+                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock l:Uids.Uid="SettingsTokenValid"
+                                               FontSize="13" Foreground="{ThemeResource ProgressGreenBrush}"
+                                               Visibility="{x:Bind ViewModel.IsTokenValid, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                    <TextBlock l:Uids.Uid="SettingsTokenInvalid"
+                                               FontSize="13" Foreground="{ThemeResource ProgressRedBrush}"
+                                               Visibility="{x:Bind ViewModel.IsTokenValid, Mode=OneWay, Converter={StaticResource InvertedBoolToVisibilityConverter}}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+
+                            <!-- Row 2: Logout Button -->
+                            <Button Command="{x:Bind ViewModel.LogoutCommand}"
+                                    HorizontalAlignment="Stretch"
+                                    Background="{ThemeResource ProgressRedBrush}"
+                                    Foreground="White"
+                                    Margin="12,8,12,8">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xF3B1;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="White" />
+                                    <TextBlock l:Uids.Uid="SettingsLogoutButton" Foreground="White" />
+                                </StackPanel>
+                            </Button>
+
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- PANEL 4 — About Tab -->
+                <StackPanel Spacing="8"
+                            Visibility="{x:Bind ViewModel.IsAboutTabVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+
+                    <TextBlock l:Uids.Uid="SettingsAboutHeader"
+                               FontSize="11" FontWeight="SemiBold"
+                               Foreground="{ThemeResource SectionHeaderBrush}"
+                               CharacterSpacing="50" Margin="0,0,0,8" />
+
+                    <Border CornerRadius="8"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <StackPanel>
+
+                            <!-- Row 1: App Name -->
+                            <Grid Height="40" Padding="12,0">
+                                <TextBlock l:Uids.Uid="SettingsAboutAppName"
+                                           FontSize="15" FontWeight="SemiBold"
+                                           Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+
+                            <!-- Row 2: Version -->
+                            <Grid Height="40" Padding="12,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock l:Uids.Uid="SettingsVersion"
+                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{x:Bind ViewModel.AppVersionText}"
+                                           FontSize="13" HorizontalAlignment="Right"
+                                           Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+
+                            <!-- Row 3: GitHub Link -->
+                            <Grid Height="40" Padding="12,0">
+                                <HyperlinkButton NavigateUri="https://github.com/stefanlange/ccInfo"
+                                                 HorizontalAlignment="Left"
+                                                 VerticalAlignment="Center"
+                                                 Padding="0">
+                                    <TextBlock l:Uids.Uid="SettingsAboutGitHubLink" FontSize="13" />
+                                </HyperlinkButton>
+                            </Grid>
+
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+
+                            <!-- Row 4: Credits -->
+                            <Grid MinHeight="40" Padding="12,8">
+                                <TextBlock l:Uids.Uid="SettingsAboutCredits"
+                                           FontSize="12" Foreground="{ThemeResource SecondaryTextBrush}"
+                                           TextWrapping="Wrap" VerticalAlignment="Center" />
+                            </Grid>
+
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
             </Grid>
-            <!-- Divider before Pricing Info -->
-            <Border Height="1" Background="{ThemeResource DividerBrush}" />
+        </ScrollViewer>
 
-            <!-- Pricing Info (COST-06) -->
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <TextBlock l:Uids.Uid="SettingsPricingSource" Grid.Row="0" Grid.Column="0" FontSize="13"
-                           Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
-                <TextBlock Grid.Row="0" Grid.Column="1"
-                           Text="{x:Bind ViewModel.PricingSourceText}"
-                           FontSize="13" HorizontalAlignment="Right"
-                           Foreground="{ThemeResource PrimaryTextBrush}" />
-                <TextBlock l:Uids.Uid="SettingsLastFetch" Grid.Row="1" Grid.Column="0" FontSize="13"
-                           Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,4,12,0" />
-                <TextBlock Grid.Row="1" Grid.Column="1"
-                           Text="{x:Bind ViewModel.LastPricingFetchText}"
-                           FontSize="13" HorizontalAlignment="Right"
-                           Foreground="{ThemeResource PrimaryTextBrush}" Margin="0,4,0,0" />
-            </Grid>
-
-            <!-- Divider before ANWENDUNG -->
-            <Border Height="1" Background="{ThemeResource DividerBrush}" />
-
-            <!-- ANWENDUNG section -->
-            <StackPanel Spacing="8">
-                <TextBlock l:Uids.Uid="SectionHeaderApp"
-                           FontSize="11" FontWeight="SemiBold"
-                           Foreground="{ThemeResource SectionHeaderBrush}"
-                           CharacterSpacing="50" />
-
-                <!-- Autostart row -->
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock l:Uids.Uid="SettingsAutostartLabel"
-                               FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                               VerticalAlignment="Center" />
-                    <ToggleSwitch Grid.Column="1"
-                                  l:Uids.Uid="AutostartToggle"
-                                  IsOn="{x:Bind ViewModel.IsAutostart, Mode=TwoWay}" />
-                </Grid>
-
-                <!-- Language row -->
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock l:Uids.Uid="SettingsLanguageLabel"
-                               FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                               VerticalAlignment="Center" />
-                    <ComboBox Grid.Column="1"
-                              l:Uids.Uid="LanguageComboBox"
-                              Width="120"
-                              SelectedIndex="{x:Bind ViewModel.SelectedLanguageIndex, Mode=TwoWay}">
-                        <ComboBoxItem Content="Deutsch" />
-                        <ComboBoxItem Content="English" />
-                    </ComboBox>
-                </Grid>
-
-                <!-- Sonnet context row -->
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock l:Uids.Uid="SettingsSonnetContextLabel"
-                               FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                               VerticalAlignment="Center" />
-                    <ComboBox Grid.Column="1"
-                              l:Uids.Uid="SonnetContextComboBox"
-                              Width="120"
-                              SelectedIndex="{x:Bind ViewModel.SelectedSonnetContextIndex, Mode=TwoWay}">
-                        <ComboBoxItem Content="200K" />
-                        <ComboBoxItem Content="1M" />
-                    </ComboBox>
-                </Grid>
-
-                <!-- Reset window size row -->
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock l:Uids.Uid="SettingsResetWindowSizeLabel"
-                               FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                               VerticalAlignment="Center" />
-                    <Button Grid.Column="1"
-                            l:Uids.Uid="SettingsResetWindowSizeButton"
-                            Command="{x:Bind ViewModel.ResetWindowSizeCommand}" />
-                </Grid>
-            </StackPanel>
-        </StackPanel>
-
-        <!-- Logout button at bottom -->
-        <Button Grid.Row="2"
-                Command="{x:Bind ViewModel.LogoutCommand}"
-                HorizontalAlignment="Stretch"
-                Margin="0,16,0,0"
-                Background="{ThemeResource ProgressRedBrush}"
-                Foreground="White">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <FontIcon Glyph="&#xF3B1;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="White" />
-                <TextBlock l:Uids.Uid="SettingsLogoutButton" Foreground="White" />
-            </StackPanel>
-        </Button>
     </Grid>
 </Page>
