@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A Windows 11 desktop application for real-time monitoring of Claude Code usage limits. Port of the macOS app [ccInfo](https://github.com/stefanlange/ccInfo) by Stefan Lange, adapted for Windows with WinUI 3. Shipped as v1.0 (full feature parity, 10 functional areas), v1.1 (UI polish matching macOS reference), and v1.2 (macOS v1.8.3 feature parity — model-based context detection, Sonnet context setting, session cleanup, footer accessibility).
+A Windows 11 desktop application for real-time monitoring of Claude Code usage limits. Port of the macOS app [ccInfo](https://github.com/stefanlange/ccInfo) by Stefan Lange, adapted for Windows with WinUI 3. Shipped as v1.0 (full feature parity, 10 functional areas), v1.1 (UI polish matching macOS reference), v1.2 (macOS v1.8.3 feature parity — model-based context detection, Sonnet context setting, session cleanup, footer accessibility), and working toward v1.3 (macOS v1.10.0 feature parity — burn rate warning, chart gradient, settings redesign).
 
 Target audience: Developers with active Claude Pro/Max subscriptions using Claude Code on Windows.
 
@@ -38,7 +38,22 @@ Developers can see their Claude usage limits (5-hour window, weekly quota, conte
 
 ### Active
 
-(No active requirements — plan next milestone with `/gsd:new-milestone`)
+<!-- Current scope: v1.3 macOS v1.10.0 Feature Parity -->
+
+- [ ] Burn Rate Warning System — prediction engine, inline banner, toast notification
+- [ ] Chart Horizontal Color Gradient — smooth green→yellow→orange→red transitions
+- [ ] Settings View Redesign — Segmented Control with 4 tabs (General, Updates, Account, About)
+- [ ] Session Dropdown Fix — FileSystemWatcher verification for file-level changes
+
+## Current Milestone: v1.3 macOS v1.10.0 Feature Parity
+
+**Goal:** Port macOS v1.9.0 and v1.10.0 features to Windows — burn rate prediction with visual warnings, chart gradient rendering, settings UI redesign, and session watcher hardening.
+
+**Target features:**
+- Burn Rate Warning System (prediction engine + banner + toast notification)
+- Chart Horizontal Color Gradient (smooth transitions replacing flat zone fills)
+- Settings View Redesign (Segmented Control with 4 tabs at 360px width)
+- Session Dropdown Fix (FileSystemWatcher file-level change detection)
 
 ### Future
 
@@ -69,6 +84,7 @@ Shipped v1.2 with macOS v1.8.3 feature parity across 4 phases (14 commits, +966/
 Full v1.2 stats: 4 phases, 6 plans, 17/17 requirements satisfied.
 Cumulative: 15 phases, 33 plans across 3 milestones (v1.0 → v1.1 → v1.2).
 Tech stack: C# 13 / .NET 9 / WinUI 3 (Windows App SDK 1.8) / Win2D / WebView2 / CommunityToolkit.Mvvm 8.4.
+Starting v1.3 milestone targeting macOS v1.10.0 feature parity.
 
 **Known tech debt:**
 - 13 pre-existing unit test failures in JsonlServiceTests (parameter naming mismatch, production unaffected)
@@ -164,4 +180,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-13 after v1.2 milestone completion*
+*Last updated: 2026-04-13 after v1.3 milestone start*
