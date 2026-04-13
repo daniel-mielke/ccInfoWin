@@ -1,16 +1,17 @@
 # Feature Research
 
-**Domain:** Desktop LLM usage monitoring — macOS v1.8.3 feature parity delta for ccInfoWin v1.2
-**Researched:** 2026-04-12
+**Domain:** Desktop LLM usage monitoring — macOS v1.9.0–v1.10.0 feature parity delta for ccInfoWin v1.3
+**Researched:** 2026-04-13
 **Confidence:** HIGH (spec fully defined, reference implementation known, codebase inspected)
 
 ---
 
 ## Scope
 
-This document covers ONLY the five new features being added in v1.2. The existing feature set
-(authentication, charts, weekly limits, context window, token stats, cost, export, settings,
-auto-update, localization) is already implemented and NOT re-analyzed here.
+This document covers ONLY the four new feature areas added in v1.3. The existing feature set
+(authentication, charts with zone-based fills, weekly limits, context window, token stats,
+cost, export, settings flat layout, auto-update, localization, session management) is already
+implemented and NOT re-analyzed here.
 
 ---
 
@@ -20,49 +21,100 @@ auto-update, localization) is already implemented and NOT re-analyzed here.
 
 | Feature | Why Expected | Complexity | Existing Code Impact |
 |---------|--------------|------------|----------------------|
-| Accurate context limit for Opus (1M) | Opus has had 1M context since launch. Displaying 200K for Opus is visibly wrong for any Max subscriber. Trust breaks immediately. | MEDIUM | `ModelContextLimits.cs` dict + `GetMaxContextTokens()` + `GetEffectiveMaxTokens()` + `ShouldWarnAutocompact()` must all change. Propagates to `ContextWindowData.Utilization` and `SubagentContextData.Utilization`. |
-| Stable subagent order | If the subagent list reorders on every refresh, users can't track individual agents visually. Any monitoring tool should have stable display order. | LOW | `BuildSubagentContext()` in `JsonlService.cs` — single `.OrderBy()` addition. No model or view changes. |
-| Session list without ghost projects | Showing sessions for deleted directories is confusing (user clicks session, gets no data). Users expect the dropdown to reflect reality. | LOW | `RebuildSessionsList()` in `JsonlService.cs` — single `.Where(Directory.Exists)` filter addition. Edge: selected session cleared if its directory is deleted. |
-| Tooltips on icon-only buttons | Icon-only buttons without tooltips fail basic discoverability. Any desktop app with icon-only controls must have hover tooltips — this is a Windows design guideline requirement. | LOW | `MainView.xaml` — add `ToolTipService.ToolTip` and `AutomationProperties.Name` to three existing footer buttons. Localization strings for both locales needed. |
+| Proactive limit warning | Any monitoring tool must warn before hitting limits, not after. Silent exhaustion during an active coding session is the core failure mode the app exists to prevent. An app that shows 85% usage without projecting "you'll hit 100% in 18 min" misses its own value proposition. | HIGH | New: `BurnRateCalculator.cs`, `BurnRatePrediction.cs`, `BurnRateNotificationService.cs`. Modify: `MainViewModel.cs` (poll cycle), `MainView.xaml` (banner), `App.xaml.cs` (notification registration), resource files. |
+| Session watcher reliability | If the session dropdown silently falls behind file system reality (stale names, missing updates), users distrust the data. Reliable file-level watching is expected baseline for any file-backed data tool. | LOW | Review `JsonlService.cs` watcher config. **Already configured correctly** — `NotifyFilters.LastWrite \| NotifyFilters.FileName \| NotifyFilters.Size` and `IncludeSubdirectories = true` are in place. Verification test only, likely no code change. |
 
 ### Differentiators (Competitive Advantage)
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Sonnet context size picker (200K / 1M) | Sonnet on Max plan supports 1M context. Letting users configure which size they have makes the context bar accurate for Max subscribers — no other Windows tool offers this. | MEDIUM | New setting in `AppSettings`, new ComboBox row in `SettingsView.xaml`, `SettingsViewModel` property, messenger trigger for live refresh. Depends on Phase 1 model-based detection being in place first. |
-| Model-family-based context detection | Detecting context size from model family (Opus/Sonnet/Haiku) rather than a token-count heuristic is more reliable and future-proof. Prevents false "1M context" display when a Sonnet session grows past 180K tokens. | MEDIUM | Core logic change in `ModelContextLimits.cs`. Introduces `ModelFamily` enum. Unified 33K flat autocompact buffer replaces the two-tier 33K/165K system. Warning threshold changes from percentage-based to flat 20K-remaining. |
+| Burn rate linear regression (not threshold alert) | Most monitoring tools use dumb threshold alerts ("you're at 80%"). Linear regression over the last 15 min extrapolates actual exhaustion time, accounting for usage velocity. "Limit in ~18min" is more actionable than "You're at 85%." | HIGH | Pure math class, no external dependencies. Input: `IReadOnlyList<UsageHistoryPoint>` (normalized 0–1), `double currentUtilization` (0–100 from API), `DateTimeOffset? resetsAt`. **Critical:** history points store utilization as 0–1; algorithm runs on 0–100 scale — conversion required in calculator. |
+| Smooth chart gradient (green→yellow→orange→red) | Flat zone fills make the chart look like a status dashboard. A smooth horizontal gradient makes the velocity of change visually obvious — you see the color shift as usage grows, not just a color jump at a threshold. Visual differentiation from any competing tool. | HIGH | Win2D `CanvasLinearGradientBrush` per gap-free data span. Replaces `GetZoneSegments()` iteration in `DrawChartFills()` and `DrawChartTopLine()`. Requires new `BuildColorLookup(bool isDark) → Color[101]` in `ChartColors.cs` and `BuildGradientStops()` in `ChartRenderer.cs`. |
+| Segmented Control settings UI | Flat StackPanel with all settings is functional but feels unpolished. Tabbed settings with colored icon badges (matching macOS pattern) signals attention to UX quality. `CommunityToolkit.WinUI.Controls.Segmented` is already installed — zero additional NuGet. | MEDIUM | Full rewrite of `SettingsView.xaml`. 4 tabs: General (all existing settings), Updates (version + pricing info), Account (logout + token status), About (version + credits). Uniform 40px row height, 360px width constraint. |
+| Short time notation in dropdowns | "30 Sekunden", "2 Minuten" are too wide for right-aligned controls at 360px. Compact "30s", "2min" notation is language-independent (universal abbreviations) and improves layout density without losing clarity. | LOW | Modify `SettingsViewModel.cs` option lists only. No localization keys needed — s/min are universal. |
 
 ### Anti-Features (Explicitly Out of Scope)
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| Per-model context size override (arbitrary number input) | Power users want full control | Adds validation complexity, UI noise, edge cases (e.g. user sets 500K which doesn't exist). Claude models only come in 200K or 1M. Two-option ComboBox is sufficient and correct. | 200K/1M ComboBox for Sonnet — covers 100% of real-world cases |
-| Auto-detect Sonnet context from API response | Seems elegant — let the API tell us | The API does not expose context window size in the usage endpoint. Would require separate undocumented API call; brittle. | Manual setting with sensible 200K default |
-| Filter sessions by date / age threshold | Related to ghost-project filtering | Different problem domain — old-but-valid sessions should remain visible. Age filtering conflates "stale" with "orphaned". | Directory-existence check only (Phase 3) |
-| Accessibility tree for chart canvas | Full screen reader support for Win2D canvas | Win2D canvas has no accessibility element tree — implementing this would require custom IAccessibleEx implementation, massively complex. | `AutomationProperties.Name` on all interactive controls (Phase 5 covers this for footer buttons) |
-| Sparkle-style in-app update UI (Settings tab) | macOS v1.8.0 added a dedicated Updates settings tab | The macOS version is Sparkle-specific (XPC, EdDSA appcast). Our GitHub Releases poller + InfoBar banner already covers the use case without a dedicated tab. | Existing `UpdateService` + banner (already shipped) |
+| System tray flame icon for burn rate | macOS shows a flame in the menu bar when burn rate is active — users want parity | Implementing a tray icon solely for burn rate requires full system tray infrastructure (H.NotifyIcon.WinUI, context menu, icon management) — significant effort for one indicator. No tray icon exists in ccInfoWin today. | Windows toast notification (FEAT-01c) delivers the same interrupt. Banner in main window delivers persistent state. Tray icon deferred to a dedicated V2 tray initiative. |
+| ML-based usage prediction | "Smarter" prediction sounds better | Linear regression is the correct model for this domain — usage over a 15-min window is linear. ML adds cold-start problems, model training, and false confidence with small data sets. Explicitly out of scope per PROJECT.md. | Linear regression via least-squares on 15-min history window |
+| Performance optimizations (incremental JSONL parsing, LRU cache) | macOS v1.9.0 added byte-offset tracking and a 200-file LRU cache for sessions | Premature optimization. ccInfoWin fetches pre-aggregated API data via WebView2 — it doesn't parse JSONL for usage numbers. JSONL reads are for token stats only. No profiling evidence of bottleneck. | Defer to future milestone if profiling shows CPU spike |
+| Per-tab settings pages (frame navigation) | Separate pages per settings tab adds routing and back-stack | Overkill for a 360px window with 4 tabs and ~7 rows total. Visibility binding is sufficient and standard for this scale. | `Visibility` bindings switching content panels within a single `SettingsView.xaml` |
+| Gradient desaturation for dark mode | Some apps desaturate colors in dark mode to reduce eye strain | Existing dark theme color variants in `ChartColors.cs` are already Apple system color dark variants — they are inherently appropriate for dark backgrounds. Extra desaturation adds complexity and diverges from the macOS reference rendering. | Use existing dark theme color stops as-is |
 
 ---
 
 ## Feature Dependencies
 
 ```
-Phase 1: Model-based context detection (ModelContextLimits.cs refactor)
-    └──required by──> Phase 2: Sonnet context window setting
-                          (GetMaxContextTokens must accept sonnet size parameter
-                           before Settings UI can influence context display)
+FEAT-01: Burn Rate Warning System
+    ├── FEAT-01a: BurnRateCalculator (pure math, no UI deps)
+    │       requires: UsageHistoryPoint list (already in MainViewModel._usageHistoryPoints)
+    │       requires: FiveHour.Utilization from UsageData (already parsed)
+    │       requires: FiveHour.ResetsAt from UsageData (already in _fiveHourResetsAt)
+    ├── FEAT-01b: Warning Banner
+    │       requires: FEAT-01a (BurnRatePrediction.MinutesUntilLimit for display text)
+    │       requires: BurnRateWarningBrush in AppTheme.xaml (new theme resource)
+    └── FEAT-01c: Toast Notification
+            requires: FEAT-01a (prediction result)
+            requires: AppNotificationManager registration in App.xaml.cs
 
-Phase 3: Session filtering          ← independent, no Phase 1/2 dependency
-Phase 4: Subagent sorting           ← independent, no Phase 1/2 dependency
-Phase 5: Footer tooltips            ← independent, no Phase 1/2 dependency
+FEAT-02: Chart Horizontal Gradient
+    ├── FEAT-02a: BuildColorLookup (Color[101]) in ChartColors.cs
+    │       independent, no deps
+    ├── FEAT-02b: BuildGradientStops in ChartRenderer.cs
+    │       requires: FEAT-02a (color lookup as input)
+    └── FEAT-02c/d: Gradient rendering in ChartDrawing.cs
+            requires: FEAT-02a + FEAT-02b
+            replaces: GetZoneSegments() iteration (can delete method after migration)
+
+FEAT-03: Settings Redesign
+    └── all content tabs preserve existing ViewModel bindings
+            no new ViewModel properties needed (General tab reuses all existing bindings)
+            requires: SettingsBadge*Brush resources in AppTheme.xaml
+
+FEAT-05: Session Watcher Fix
+    └── independent verification — no code dependencies
 ```
 
 ### Dependency Notes
 
-- **Phase 1 blocks Phase 2:** The `GetMaxContextTokens()` signature must accept a `sonnetContextSize` parameter (or read from injected settings) before Phase 2 can wire the UI control to live context recalculation. If Phase 2 is implemented first, Sonnet context changes would have no effect.
-- **Phases 3, 4, 5 are fully independent:** Can be implemented in any order or in parallel after Phase 1+2.
-- **`ContextWindowData.Utilization` and `SubagentContextData.Utilization`** both call `GetEffectiveMaxTokens()` directly — Phase 1's signature simplification (`(long maxTokens)` instead of `(long currentTokens, long maxTokens)`) propagates to both records automatically.
-- **`ShouldWarnAutocompact()` behavioral change** (percentage → flat 20K remaining) affects `GetContextWindow()` in `JsonlService.cs` — no view changes, the existing `ShouldWarnAutocompact` bool property on `ContextWindowData` propagates through unchanged.
+- **FEAT-01a must precede FEAT-01b and FEAT-01c:** Both the banner and toast need a `BurnRatePrediction?` from the calculator. The MainViewModel integration point is the same for both — calculate once, publish to both consumers.
+- **FEAT-01 toast requires AppNotificationManager registration:** Windows App SDK desktop apps must call `AppNotificationManager.Default.Register()` at startup. If not already registered, the toast silently fails. Must be in `App.xaml.cs` before any notification is sent.
+- **FEAT-02 gradient replaces zone segments, not extends them:** `GetZoneSegments()` in `ChartRenderer.cs` becomes unused after FEAT-02 migration. Both `DrawChartFills()` and `DrawChartTopLine()` must be updated together — partial migration (fills use gradient, lines use zones) creates visual mismatch.
+- **FEAT-03 is fully independent:** Settings redesign touches only XAML and ViewModel option-list formatting. No service layer changes. Cannot break any existing feature.
+- **`UsageHistoryPoint.Utilization` is normalized 0–1:** This is the critical conversion point for FEAT-01a. The macOS algorithm runs on 0–100. The calculator must multiply history point utilization by 100 before regression, or the slope will be 100x too small and no warnings will ever fire.
+
+---
+
+## MVP Definition for This Milestone
+
+### Ship Together (v1.3)
+
+All four phases constitute the complete milestone. Each delivers a distinct user-visible improvement:
+
+- [ ] Phase 1: Burn Rate Warning (FEAT-01a, 01b, 01c) — headline feature, highest user value
+- [ ] Phase 2: Chart Horizontal Gradient (FEAT-02) — visual differentiator, replaces flat fills
+- [ ] Phase 3: Settings Redesign (FEAT-03) — UX polish, organizes growing settings surface
+- [ ] Phase 4: Session Watcher Verification (FEAT-05) — reliability fix, likely no code change
+
+### Defer to Future Milestones
+
+- FEAT-01d: Tray icon flame indicator — requires full tray icon infrastructure first
+- FEAT-06: Performance optimizations (incremental JSONL, LRU cache) — no profiling evidence of need
+- V2-01: System tray with quick status overview — listed in PROJECT.md future backlog
+
+---
+
+## Feature Prioritization Matrix
+
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| Burn Rate Warning (FEAT-01) | HIGH — prevents silent quota exhaustion | HIGH — new calculator + toast service + banner | P1 |
+| Chart Horizontal Gradient (FEAT-02) | MEDIUM — visual improvement, not functional | HIGH — Win2D gradient brush, path rework | P2 |
+| Settings Redesign (FEAT-03) | MEDIUM — UX organization, not new function | MEDIUM — XAML rewrite, tab structure | P2 |
+| Session Watcher Fix (FEAT-05) | LOW — already working, verification only | LOW — review + test, likely no change | P3 |
 
 ---
 
@@ -70,11 +122,10 @@ Phase 5: Footer tooltips            ← independent, no Phase 1/2 dependency
 
 | Phase | Effort | Files Changed | Risk |
 |-------|--------|---------------|------|
-| Phase 1: 1M context window + model detection | MEDIUM | `ModelContextLimits.cs`, `ContextWindowData.cs`, `JsonlService.cs`, `MainViewModel.cs` (verify) | LOW — pure logic, no new infrastructure, comprehensive existing test surface for `JsonlServiceTests` |
-| Phase 2: Sonnet context setting | MEDIUM | `AppSettings.cs`, `SettingsView.xaml`, `SettingsViewModel.cs`, `JsonlService.cs`, 2x `.resw` files | LOW — follows established pattern (Language picker is identical pattern already implemented) |
-| Phase 3: Session filtering | LOW | `JsonlService.cs` — one filter clause in `RebuildSessionsList()` | LOW — `Directory.Exists()` is a standard .NET API. Edge case: selected session invalidation handled by existing "no active session" fallback in `MainViewModel` |
-| Phase 4: Subagent sorting | TRIVIAL | `JsonlService.cs` — one `.OrderBy()` call in `BuildSubagentContext()` | NEGLIGIBLE |
-| Phase 5: Footer tooltips | LOW | `MainView.xaml`, 2x `.resw` files | LOW — `ToolTipService.ToolTip` via `l:Uids.Uid` needs verification: WinUI3Localizer property path syntax for attached properties. Existing localization pattern (`l:Uids.Uid`) may require the property segment `[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip` in the Uid name — verify against existing `l:Uids.Uid` usage before assuming standard WinUI Uid pattern works here. |
+| Phase 1: Burn Rate Warning | HIGH | New: `BurnRateCalculator.cs`, `BurnRatePrediction.cs`, `BurnRateNotificationService.cs`, `IBurnRateNotificationService.cs`. Modify: `MainViewModel.cs`, `MainView.xaml`, `App.xaml.cs`, `AppTheme.xaml`, 2x `.resw` | MEDIUM — `AppNotificationManager` requires startup registration; toast behavior differs from macOS; utilization scale conversion is a subtle bug magnet |
+| Phase 2: Chart Gradient | HIGH | `ChartColors.cs`, `ChartRenderer.cs`, `ChartDrawing.cs` (both methods), verify `ExportHelper.cs` | MEDIUM — Win2D `CanvasLinearGradientBrush` lifetime must be inside draw session scope; many gradient stops at low data densities; performance on lower-end hardware needs spot-check |
+| Phase 3: Settings Redesign | MEDIUM | Rewrite `SettingsView.xaml`, modify `SettingsViewModel.cs` (option lists only), `AppTheme.xaml` (badge brushes), 2x `.resw` | LOW — pure XAML restructure, no service layer; `CommunityToolkit.WinUI.Controls.Segmented` already installed and in use |
+| Phase 4: Watcher Verification | LOW | Verify `JsonlService.cs` only — `NotifyFilter` already correct | NEGLIGIBLE — already configured with `LastWrite \| FileName \| Size` and `IncludeSubdirectories = true` |
 
 ---
 
@@ -82,45 +133,28 @@ Phase 5: Footer tooltips            ← independent, no Phase 1/2 dependency
 
 | Phase | Key Pitfall |
 |-------|-------------|
-| Phase 1 | `GetMaxContextTokens()` currently has no parameter for `sonnetContextSize` — the signature change must be designed so `JsonlService` can supply the configured value without creating a circular dependency (service reads settings, settings are loaded by `SettingsService`). Inject `ISettingsService` into `JsonlService` constructor, or pass the value as a method parameter. |
-| Phase 1 | The existing `ExtendedContextDetectionThreshold = 180_000` heuristic must be fully removed — not just unused. Leaving it in code creates future confusion about which path is active. |
-| Phase 2 | `settings.json` deserialization: `System.Text.Json` will use the default value (200,000) if `sonnetContextSize` key is missing. No migration code needed — this is the correct zero-effort migration path. |
-| Phase 3 | The `Cwd` field can be an empty string for sessions parsed before v1.0 (pre-`Cwd` JSONL format). The filter must guard: `!string.IsNullOrEmpty(s.Cwd) && Directory.Exists(s.Cwd)`. Sessions with empty Cwd are effectively unvalidatable orphans and should also be excluded. |
-| Phase 5 | `AutomationProperties.Name` should be the English string (screen readers expect non-localized control names in most assistive tech conventions). The tooltip can be localized; the automation name should stay English and be hardcoded, not run through the localizer. |
-
----
-
-## MVP Definition for This Milestone
-
-### Ship Together (v1.2)
-
-All five phases constitute the complete milestone. There is no partial-ship that makes sense:
-
-- [ ] Phase 1 (1M context + model detection) — correctness fix, not optional
-- [ ] Phase 2 (Sonnet picker) — requires Phase 1, low additional effort
-- [ ] Phase 3 (session filtering) — independent, small scope
-- [ ] Phase 4 (subagent sorting) — independent, trivial
-- [ ] Phase 5 (footer tooltips) — independent, Windows design guideline compliance
-
-### Defer to Future Milestones
-
-- Accessibility tree for Win2D chart canvas — complex, niche
-- Updates Settings tab — macOS-specific pattern, existing banner sufficient
-- Per-model context size override beyond Sonnet — no real-world use case exists
+| Phase 1 | `UsageHistoryPoint.Utilization` is 0–1 (normalized). The burn rate algorithm runs on 0–100. Multiply history point utilization by 100 in `BurnRateCalculator.Predict()` before regression. Failing to do this makes the slope 100x too small — no warning ever fires. |
+| Phase 1 | Toast notification requires `AppNotificationManager.Default.Register()` in `App.xaml.cs` before first use. Unpackaged apps (no MSIX) must also ensure the app's display name is registered — check Windows App SDK 1.8 docs for unpackaged toast registration requirements. |
+| Phase 1 | One-shot notification per cycle: the `_notifiedBurnRate` flag must reset when the prediction clears (slope reverses, window resets, utilization drops below 20%). Otherwise the user gets no notification on the next warning cycle. |
+| Phase 2 | `CanvasLinearGradientBrush` must be created and disposed within the draw session. It is an `IDisposable` — use `using`. Creating it outside the `Draw` event and caching it will cause `ObjectDisposedException` on the second draw. |
+| Phase 2 | When all data points have zero utilization, skip gradient rendering entirely (same as current `DrawChartFills` behavior for empty data). A gradient brush from X=0 to X=0 is undefined behavior in Win2D. |
+| Phase 3 | `CommunityToolkit.WinUI.Controls.Segmented` tab switching via `SelectedIndex` binding: ensure the content switcher uses `Visibility.Collapsed` (not `Visibility.Hidden`) for non-active tabs — WinUI 3 does not have `Hidden`. |
+| Phase 3 | Colored icon badges in `SegmentedItem.Icon` require a `DataTemplate` wrapping a `Border` + `FontIcon`. The `SegmentedItem` does not accept direct content in its `Icon` property in all SDK versions — verify the correct property path for `CommunityToolkit.WinUI.Controls.Segmented` 8.x. |
+| Phase 4 | The watcher is already configured correctly (`NotifyFilters.LastWrite \| NotifyFilters.FileName \| NotifyFilters.Size`, `IncludeSubdirectories = true`). The verification test is: rename a Claude Code project directory externally while ccInfoWin is open, then confirm the session dropdown updates. If it does, no code change is needed. |
 
 ---
 
 ## Sources
 
-- `spec-release-from-1.7.1-to-1.8.3.md` — Primary specification document (HIGH confidence)
-- `.planning/PROJECT.md` — Project context and constraints (HIGH confidence)
-- `CCInfoWindows/CCInfoWindows/Helpers/ModelContextLimits.cs` — Current implementation (HIGH confidence)
-- `CCInfoWindows/CCInfoWindows/Models/AppSettings.cs` — Current settings model (HIGH confidence)
-- `CCInfoWindows/CCInfoWindows/Models/ContextWindowData.cs` — Utilization calculation chain (HIGH confidence)
-- `CCInfoWindows/CCInfoWindows/Services/JsonlService.cs` — `BuildSubagentContext()`, `RebuildSessionsList()` (HIGH confidence)
-- `CCInfoWindows/CCInfoWindows/Views/MainView.xaml` — Footer button structure (HIGH confidence)
-- `CCInfoWindows/CCInfoWindows/Views/SettingsView.xaml` — Existing ComboBox pattern for Language picker (HIGH confidence)
+- `spec/v1.10.0-macOS/spec-release-1.8.3-to-1.10.0.md` — Primary specification (HIGH confidence)
+- `.planning/PROJECT.md` — Project context, constraints, key decisions (HIGH confidence)
+- `CCInfoWindows/CCInfoWindows/Helpers/ChartDrawing.cs` — Current zone-segment fill implementation (HIGH confidence)
+- `CCInfoWindows/CCInfoWindows/Helpers/ChartColors.cs` — Existing color table, dark/light stops (HIGH confidence)
+- `CCInfoWindows/CCInfoWindows/Helpers/ChartRenderer.cs` — `GetZoneSegments()`, coordinate math (HIGH confidence)
+- `CCInfoWindows/CCInfoWindows/Models/UsageHistory.cs` — `UsageHistoryPoint.Utilization` is 0–1 normalized (HIGH confidence)
+- `CCInfoWindows/CCInfoWindows/Services/JsonlService.cs` — FileSystemWatcher already configured correctly (HIGH confidence)
+- `CCInfoWindows/CCInfoWindows/ViewModels/MainViewModel.cs` — `_usageHistoryPoints`, `_fiveHourResetsAt` already available (HIGH confidence)
 
 ---
-*Feature research for: ccInfoWin v1.2 macOS v1.8.3 parity delta*
-*Researched: 2026-04-12*
+*Feature research for: ccInfoWin v1.3 macOS v1.9.0–v1.10.0 parity delta*
+*Researched: 2026-04-13*

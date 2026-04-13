@@ -1,305 +1,543 @@
 # Architecture Patterns
 
-**Domain:** WinUI 3 desktop app — macOS v1.8.3 feature parity integration
-**Researched:** 2026-04-12
+**Domain:** WinUI 3 desktop app — macOS v1.10.0 feature parity integration (v1.3)
+**Researched:** 2026-04-13
+**Confidence:** HIGH (direct code inspection of every affected file)
 
 ---
 
-## v1.2 Integration Analysis
+## v1.3 Integration Analysis
 
-All five v1.2 features integrate cleanly into the existing MVVM layer structure. No new services, no new View pages, and no changes to the DI registration are required. The dependency chain is linear from the bottom up:
+v1.3 introduces four features across four implementation phases. Unlike v1.2, which only modified existing components, v1.3 adds two new services and one new helper class. The dependency graph is still linear but wider:
 
 ```
-Phase 1: ModelContextLimits (Helper) — core logic rewrite
-    ↓ signature change propagates to ContextWindowData callers
-Phase 2: AppSettings + SettingsViewModel + SonnetContextChangedMessage + JsonlService
-    (no dependency on phases below)
-Phase 3: JsonlService.RebuildSessionsList() — one-line filter
-Phase 4: JsonlService.BuildSubagentContext() — one-line sort
-Phase 5: MainView.xaml + localization files — XAML only
+Phase 1: BurnRateCalculator (new Helper) + BurnRatePrediction (new Model)
+    ↓ consumed by MainViewModel
+Phase 1: BurnRateNotificationService (new Service, registered in DI)
+    ↓ called from MainViewModel after prediction is computed
+Phase 1: MainView.xaml (inline banner added to 5h section)
+    ↓ binds to new ViewModel properties
+
+Phase 2: ChartColors.cs + ChartRenderer.cs + ChartDrawing.cs (gradient replaces zones)
+    ↓ ExportHelper.cs uses ChartDrawing — automatically inherits gradient
+    (independent of Phase 1)
+
+Phase 3: SettingsView.xaml (full XAML rewrite) + SettingsViewModel.cs (label text)
+    (independent of Phases 1 and 2)
+
+Phase 4: JsonlService.cs (watcher verification only — already correct per inspection)
+    (independent of all other phases)
 ```
 
 ---
 
-## Component Map: Modified vs New
+## Component Map: New vs Modified
+
+### New Components
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `BurnRatePrediction` | `Models/BurnRatePrediction.cs` | Data class: `HitsLimitAt`, `MinutesUntilLimit`, `FormattedTimeUntilLimit` |
+| `BurnRateCalculator` | `Helpers/BurnRateCalculator.cs` | Static class: linear regression prediction engine |
+| `IBurnRateNotificationService` | `Services/Interfaces/IBurnRateNotificationService.cs` | Service contract: `CheckBurnRate(prediction)`, `Reset()` |
+| `BurnRateNotificationService` | `Services/BurnRateNotificationService.cs` | Windows App SDK `AppNotificationManager` toast, one-shot guard |
 
 ### Modified Components
 
 | Component | File | What Changes |
 |-----------|------|--------------|
-| `ModelContextLimits` | `Helpers/ModelContextLimits.cs` | Remove 3 obsolete constants, add `ExtendedContextLimit` and `AutocompactWarningBuffer`, add `ModelFamily` enum, add `GetModelFamily()`, rewrite `GetMaxContextTokens()` to accept `sonnetContextSize` parameter, simplify `GetEffectiveMaxTokens()` to single-parameter flat buffer, rewrite `ShouldWarnAutocompact()` to flat 20K buffer |
-| `ContextWindowData` | `Models/ContextWindowData.cs` | `Utilization` property calls `GetEffectiveMaxTokens(TotalTokens, MaxTokens)` — must update call site when signature drops `currentTokens` parameter |
-| `SubagentContextData` | `Models/ContextWindowData.cs` | Same `Utilization` call site propagation as above |
-| `AppSettings` | `Models/AppSettings.cs` | Add `SonnetContextSize` int property with `[JsonPropertyName("sonnetContextSize")]` and default value `200_000` |
-| `JsonlService` | `Services/JsonlService.cs` | (1) Constructor: add `ISettingsService` parameter; (2) `GetContextWindow()`: pass `settings.SonnetContextSize` to `GetMaxContextTokens()`; (3) `BuildSubagentContext()`: add `.OrderBy(a => a.AgentId, StringComparer.Ordinal).ToList()` before return; (4) `RebuildSessionsList()`: extend the `.Where()` filter to include `Directory.Exists(s.Cwd)` |
-| `SettingsViewModel` | `ViewModels/SettingsViewModel.cs` | Add `_selectedSonnetContextIndex` `[ObservableProperty]`, initialize in `Initialize()`, persist and send `SonnetContextChangedMessage` in `OnSelectedSonnetContextIndexChanged()` |
-| `MainViewModel` | `ViewModels/MainViewModel.cs` | Register handler for `SonnetContextChangedMessage` → call the existing local data refresh path (`UpdateSessionData` or equivalent) |
-| `MainView.xaml` | `Views/MainView.xaml` | Add `ToolTipService.ToolTip` (localized via l:Uids.Uid) and `AutomationProperties.Name` (static English) to the three footer buttons |
-| `SettingsView.xaml` | `Views/SettingsView.xaml` | Add Sonnet Context `ComboBox` section (label + two-item picker) after the Language selector |
-| `Resources.resw` (both locales) | `Strings/de-DE/` and `Strings/en-US/` | Phase 2: Sonnet context label keys; Phase 5: three footer tooltip keys |
-
-### New Components
-
-| Component | Type | Purpose |
-|-----------|------|---------|
-| `ModelFamily` | Enum (nested in `ModelContextLimits` or standalone in `Helpers/`) | Represents `Opus`, `Sonnet`, `Haiku`, `Unknown` — consumed by `GetModelFamily()` and `GetMaxContextTokens()` |
-| `SonnetContextChangedMessage` | `Messages/SonnetContextChangedMessage.cs` | Typed messenger notification that Sonnet context size changed; follows the `ValueChangedMessage<int>` pattern of the existing `RefreshIntervalChangedMessage` |
-
-No new services. No new Views. No DI registration changes.
+| `MainViewModel` | `ViewModels/MainViewModel.cs` | Add `_burnRateNotificationService` field (ctor injection), add `[ObservableProperty] BurnRatePrediction?`, add `IsBurnRateWarningVisible` computed property, add `BurnRateWarningText` computed property, call `BurnRateCalculator.Predict()` + `CheckBurnRate()` at end of `UpdateUsageProperties()` |
+| `MainView.xaml` | `Views/MainView.xaml` | Add `Border` burn rate banner immediately below the percentage/countdown row in the 5h section |
+| `ChartColors.cs` | `Helpers/ChartColors.cs` | Add `BuildColorLookup(bool isDark)` returning `Color[101]` with linear RGB interpolation between 4 stops |
+| `ChartRenderer.cs` | `Helpers/ChartRenderer.cs` | Add `BuildGradientStops(points, windowStart, plotWidth, colorLookup)` returning list of `(float position, Color color)`; keep `GetZoneSegments()` for glow indicator which still uses zone-based color |
+| `ChartDrawing.cs` | `Helpers/ChartDrawing.cs` | Rewrite `DrawChartFills()` and `DrawChartTopLine()` to use `CanvasLinearGradientBrush` per gap-free span instead of per-zone segment iteration |
+| `ExportHelper.cs` | `Helpers/ExportHelper.cs` | Verify — no changes expected; gradient is applied at ChartDrawing level and export already calls the same methods |
+| `SettingsView.xaml` | `Views/SettingsView.xaml` | Full XAML rewrite: flat `StackPanel` → `Segmented` + 4 tab content panels |
+| `SettingsViewModel.cs` | `ViewModels/SettingsViewModel.cs` | Change `RefreshOptions` labels to short notation (30s, 1min, etc.); timeout labels already inline in XAML (no VM change needed there); add version string property for About tab; add `SelectedTabIndex` observable property for `Segmented` control |
+| `App.xaml.cs` | `App.xaml.cs` | Register `IBurnRateNotificationService` as singleton; register `AppNotificationManager` if required; inject into `MainViewModel` constructor |
+| `App.xaml` | `App.xaml` | Add `BurnRateWarningBrush`, `BurnRateWarningTextBrush`, four `SettingsBadge*Brush` theme resources |
+| `Resources.resw` (both locales) | `Strings/de-DE/` and `Strings/en-US/` | Add all burn rate string keys and settings tab label keys |
+| `JsonlService.cs` | `Services/JsonlService.cs` | No changes required — watcher already has correct `NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size` and `IncludeSubdirectories = true` |
 
 ---
 
-## Detailed Data Flow per Feature
+## Detailed Integration Points per Feature
 
-### Phase 1: Model-Based Context Detection
+### Feature 1: Burn Rate Warning
 
-```
-JsonlService.GetContextWindow(sessionId)
-  → ResolveModelName() → string modelName
-  → ISettingsService.LoadSettings().SonnetContextSize → int sonnetContextSize
-  → ModelContextLimits.GetMaxContextTokens(modelName, sonnetContextSize) → long maxTokens
-  → ModelContextLimits.ShouldWarnAutocompact(totalTokens, maxTokens)
-       uses: totalTokens >= maxTokens - AutocompactWarningBuffer (20K flat)
-  → ContextWindowData { MaxTokens = maxTokens, ... }
-
-ContextWindowData.Utilization (computed property)
-  → ModelContextLimits.GetEffectiveMaxTokens(maxTokens)
-       returns: Math.Max(1, maxTokens - StandardAutocompactBuffer) // 33K flat
-  → Math.Clamp(TotalTokens / effectiveMax, 0.0, 1.0)
-```
-
-The `GetEffectiveMaxTokens()` signature drops the `currentTokens` parameter (it was only used for the heuristic that is being removed). Both `ContextWindowData.Utilization` and `SubagentContextData.Utilization` contain call sites — both must be updated in the same commit as the helper change to avoid a build break.
-
-### Phase 2: Sonnet Context Setting
+**Data flow through existing architecture:**
 
 ```
-SettingsView.xaml ComboBox (index 0 = 200K, 1 = 1M)
-  → SettingsViewModel._selectedSonnetContextIndex [ObservableProperty]
-  → OnSelectedSonnetContextIndexChanged()
-       → settings.SonnetContextSize = index == 0 ? 200_000 : 1_000_000
-       → ISettingsService.SaveSettings(settings)
-       → WeakReferenceMessenger.Default.Send(new SonnetContextChangedMessage(settings.SonnetContextSize))
-
-MainViewModel receives SonnetContextChangedMessage
-  → calls the local data refresh path (re-reads context window data for current session)
-
-JsonlService.GetContextWindow(sessionId)
-  → reads AppSettings.SonnetContextSize via cached ISettingsService.LoadSettings()
-  → passes value to ModelContextLimits.GetMaxContextTokens(modelName, sonnetContextSize)
+PollUsageAsync() [MainViewModel.cs, line 385]
+  → _apiService.FetchUsageAsync() → UsageResponse
+  → UpdateUsageProperties(result)
+       [existing path: sets FiveHourUtilization, FiveHourPercentage, _fiveHourResetsAt]
+       → AppendHistoryPoint() → UsageHistoryPoints updated
+       [NEW path appended at end of UpdateUsageProperties()]:
+       → BurnRateCalculator.Predict(
+             UsageHistoryPoints,           // IReadOnlyList<UsageHistoryPoint>
+             data.FiveHour.Utilization,    // double 0-100 (API scale, NOT normalized)
+             data.FiveHour.ResetsAt        // DateTimeOffset?
+           ) → BurnRatePrediction? prediction
+       → BurnRatePrediction = prediction   // [ObservableProperty] → triggers banner
+       → _burnRateNotificationService.CheckBurnRate(prediction)
 ```
 
-**ISettingsService injection into JsonlService:** The cleanest approach is constructor injection — `JsonlService` already accepts `IPricingService` via constructor for cost calculations. Adding `ISettingsService` follows the same pattern. Settings are read fresh on each `GetContextWindow()` call by reading from the service (which already caches the deserialized `AppSettings` in memory). No stale-value risk. The `IJsonlService` public interface does not need to change.
+**Critical data type contract:** `UsageHistoryPoint.Utilization` is stored as normalized `0.0–1.0` (confirmed in `UsageHistory.cs`). `BurnRateCalculator` must multiply by 100 internally before applying the `MinimumUtilization = 20.0` guard and regression math. The `currentUtilization` parameter from `data.FiveHour.Utilization` is already `0–100` (API scale), consistent with `FiveHourPercentage`. The calculator must handle both scales consistently — safest design: accept normalized `0.0–1.0` for history points and `double currentUtilization` in `0–100` scale for the current value (matching `FiveHourPercentage`), then convert history internally.
 
-An alternative is caching the sonnet context size as a field in `JsonlService` and updating it when `SonnetContextChangedMessage` is received (by registering on the messenger in the constructor). This avoids one service dependency but adds messenger coupling in the service layer, which is less clean. Prefer the ISettingsService injection approach.
+**MainViewModel observable properties to add:**
 
-### Phase 3: Session Filtering
+```csharp
+[ObservableProperty]
+private BurnRatePrediction? _burnRatePrediction;
 
-```
-JsonlService.RebuildSessionsList()
-  current:  .Where(s => s is not null)
-  change:   .Where(s => s is not null
-                     && !string.IsNullOrEmpty(s.Cwd)
-                     && Directory.Exists(s.Cwd))
-```
-
-`Sessions` is already an `IReadOnlyList<SessionInfo>` read by `MainViewModel` on the `DataUpdated` event. The filtered list propagates through the existing event-driven refresh path without any ViewModel or UI changes.
-
-`s.Cwd` originates from JSONL file content (external data). `Directory.Exists()` is safe on NTFS paths and is already used elsewhere in WinUI 3 apps for this pattern. The existing path-validation guard in `DiscoverSessions()` already filters paths during initial indexing, so `Cwd` values stored in `_projectData` have already passed basic path sanitization.
-
-### Phase 4: Subagent Sorting
-
-```
-JsonlService.BuildSubagentContext(subagentFiles)
-  current:  return result;
-  change:   return result.OrderBy(a => a.AgentId, StringComparer.Ordinal).ToList();
+public bool IsBurnRateWarningVisible => BurnRatePrediction is not null;
+public string BurnRateWarningText => BurnRatePrediction is not null
+    ? string.Format(ResourceLoader.GetForCurrentView().GetString("BurnRateBannerText"),
+                    BurnRatePrediction.FormattedTimeUntilLimit)
+    : string.Empty;
 ```
 
-One line before the return. The returned `IReadOnlyList<SubagentContextData>` is consumed by `MainViewModel` without any re-sorting. The `SubagentContextData.AgentId` values are already strings (e.g. `"abc123"` extracted from `agent-abc123.jsonl`), so ordinal sort produces a stable alphabetical order.
+`OnBurnRatePredictionChanged` must notify `IsBurnRateWarningVisible` and `BurnRateWarningText` using `OnPropertyChanged()`.
 
-### Phase 5: Footer Accessibility
+**BurnRateNotificationService state machine:**
 
 ```
-MainView.xaml — three existing footer Button elements:
-  Add: ToolTipService.ToolTip="{l:Uids.Uid FooterRefreshTooltip}"
-  Add: AutomationProperties.Name="Refresh"   (static, not localized)
+state: _notifiedBurnRate = false (initial, after Reset(), after logout)
 
-Repeat for Settings ("Einstellungen" / "Settings") and Quit ("Beenden" / "Quit").
+CheckBurnRate(prediction):
+  if prediction != null AND _notifiedBurnRate == false:
+    → send toast via AppNotificationManager
+    → _notifiedBurnRate = true
+  if prediction == null AND _notifiedBurnRate == true:
+    → _notifiedBurnRate = false  (ready for next warning cycle)
 
-Resources.resw (both locales) — add:
-  FooterRefreshTooltip.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip
-  FooterSettingsTooltip.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip
-  FooterQuitTooltip.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip
+Reset():
+  → _notifiedBurnRate = false
 ```
 
-No ViewModel changes. No messenger messages. Pure XAML and resource file edits.
+`Reset()` is called from `MainViewModel.Logout()` (existing logout path) to ensure the notification guard clears on session change.
 
-**WinUI3Localizer ToolTipService.ToolTip syntax — verify before writing XAML.** The existing localization pattern for text properties uses the short form (`Label.Text = "value"`). For attached properties like `ToolTipService.ToolTip`, WinUI3Localizer requires the full namespace-qualified property path in the `.resw` key. Confirm the exact key format expected by the installed WinUI3Localizer version against the library's own documentation or test suite before committing the XAML. An incorrect Uid path silently falls back to an empty tooltip.
+**DI wiring in App.xaml.cs:**
+
+```csharp
+services.AddSingleton<IBurnRateNotificationService, BurnRateNotificationService>();
+// MainViewModel constructor gains one more parameter:
+services.AddTransient<MainViewModel>(sp => new MainViewModel(
+    ...,
+    sp.GetRequiredService<IBurnRateNotificationService>()));
+```
+
+`AppNotificationManager` registration: call `AppNotificationManager.Default.Register()` in `App.OnLaunched()` before any notification is sent. No additional NuGet package required — already bundled in `Microsoft.WindowsAppSDK 1.8`.
 
 ---
 
-## Component Boundary Diagram
+### Feature 2: Chart Horizontal Gradient
+
+**Existing rendering path (v1.2):**
 
 ```
-┌─────────────────────────────────────────────────────┐
-│ Views                                                │
-│  MainView.xaml        Phase 5: add tooltip/a11y     │
-│  SettingsView.xaml    Phase 2: add Sonnet ComboBox  │
-└────────────────┬────────────────────────────────────┘
-                 │ x:Bind (compiled bindings)
-┌────────────────▼────────────────────────────────────┐
-│ ViewModels                                           │
-│  MainViewModel        Phase 2: register msg handler │
-│  SettingsViewModel    Phase 2: add ObservableProperty│
-└──────────┬──────────────────────┬───────────────────┘
-           │ service calls        │ messenger
-┌──────────▼───────┐   ┌──────────▼─────────────────┐
-│ Messages         │   │ Services                    │
-│ SonnetContext-   │   │  JsonlService               │
-│ ChangedMessage   │   │    Phase 2: ISettingsService│
-│ (NEW)            │   │    Phase 3: Cwd filter      │
-└──────────────────┘   │    Phase 4: agentId sort    │
-                       └──────────┬──────────────────┘
-                                  │ calls
-┌─────────────────────────────────▼───────────────────┐
-│ Models                                               │
-│  AppSettings          Phase 2: SonnetContextSize    │
-│  ContextWindowData    Phase 1: Utilization call site │
-│  SubagentContextData  Phase 1: Utilization call site │
-└─────────────────────────────────┬───────────────────┘
-                                  │ calls
-┌─────────────────────────────────▼───────────────────┐
-│ Helpers                                              │
-│  ModelContextLimits   Phase 1: core rewrite          │
-│  ModelFamily enum     Phase 1: NEW                   │
-└─────────────────────────────────────────────────────┘
+MainView.xaml [CanvasAnimatedControl]
+  → ChartInvalidateMessage → InvalidateChart()
+  → Win2D Draw event
+  → ChartDrawing.DrawAxesAndLabels()
+  → ChartDrawing.DrawChartFills()     [zone segments → solid fill per zone]
+  → ChartDrawing.DrawChartTopLine()   [zone segments → solid stroke per zone]
+  → ChartDrawing.DrawGlowIndicator()  [zone color lookup — UNCHANGED]
+```
+
+**New rendering path (v1.3):**
+
+```
+ChartDrawing.DrawChartFills()
+  → ChartColors.BuildColorLookup(isDark) → Color[101]
+  → [for each continuous span in points (no gap markers in ccInfoWin — single span)]:
+      → ChartRenderer.BuildGradientStops(points, windowStart, plotWidth, colorLookup)
+           → for each point: x = ToX(point.Timestamp, ...) / plotWidth (normalized 0.0-1.0)
+                             color = colorLookup[(int)(point.Utilization * 100)]
+           → returns List<(float position, Color color)>
+      → build closed path (area fill)
+      → CanvasLinearGradientBrush with stops, spanning leftX to rightX of span
+      → set brush alpha to 64 (25% opacity) on fill color stops
+      → FillGeometry(closedPath, gradientBrush)
+
+ChartDrawing.DrawChartTopLine()
+  → same gradient stop calculation
+  → CanvasLinearGradientBrush at 100% opacity
+  → DrawGeometry(openPath, gradientBrush, lineWidth: 2.0f)
+```
+
+**Win2D `CanvasLinearGradientBrush` creation pattern:**
+
+```csharp
+var stops = gradientStops
+    .Select(s => new CanvasGradientStop { Position = s.Position, Color = s.Color })
+    .ToArray();
+using var brush = new CanvasLinearGradientBrush(resourceCreator, stops)
+{
+    StartPoint = new System.Numerics.Vector2(leftX, 0),
+    EndPoint   = new System.Numerics.Vector2(rightX, 0)
+};
+session.FillGeometry(geometry, brush);
+```
+
+`CanvasLinearGradientBrush` is `IDisposable` — wrap in `using`. The `resourceCreator` parameter matches the existing method signatures (already passed as `ICanvasResourceCreator`).
+
+**`GetZoneSegments()` in `ChartRenderer` remains unchanged** — still used by `DrawGlowIndicator()` to determine the current zone color for the endpoint dot. Only `DrawChartFills()` and `DrawChartTopLine()` switch from zone segments to gradient stops.
+
+**Export compatibility:** `ExportHelper.cs` calls `ChartDrawing.DrawChartFills()` and `DrawChartTopLine()` with the same method signatures (plus offset parameters). No changes needed in `ExportHelper` — gradient rendering propagates automatically. Export uses `lineWidth: 2.5f` vs live chart's `2.0f`; this is passed as a parameter at the call site in the export path.
+
+---
+
+### Feature 3: Settings View Redesign
+
+**Current SettingsView.xaml structure:**
+
+```
+Grid [3 rows: header, content, logout]
+  Row 0: StackPanel [back button + title]
+  Row 1: StackPanel [flat list of all settings with dividers]
+  Row 2: Button [logout, red]
+```
+
+**New structure:**
+
+```
+Grid [3 rows: header, segmented+content, footer]
+  Row 0: StackPanel [back button + title]   [UNCHANGED]
+  Row 1: Grid [2 rows: segmented control, content area]
+    SubRow 0: controls:Segmented [4 items, colored icon badges]
+    SubRow 1: Grid [content panels, one per tab, visibility-switched]
+      Panel "General":  7 rows (autostart, refresh, timeout, dark mode, language, sonnet context, reset window)
+      Panel "Updates":  version, pricing source, last fetch
+      Panel "Account":  token status, logout button
+      Panel "About":    app name, version, GitHub link, credits
+  Row 2: [empty — logout moved into Account tab]
+```
+
+**SettingsViewModel changes — minimal:**
+
+1. `RefreshOptions` labels change from "30 Sekunden" → "30s", "1 Minute" → "1min", etc. No new properties.
+2. Add `int SelectedTabIndex { get; set; }` as `[ObservableProperty]` to track which `Segmented` tab is selected. No persistence needed (tabs reset to General on each navigation).
+3. Add `string AppVersion` property (computed, reads from `Package.Current.Id.Version` or `Assembly.GetEntryAssembly().GetName().Version`) for About tab display.
+4. Logout command moves from the page footer `Button` to the Account tab content. The command itself (`LogoutCommand`) is unchanged.
+
+**Segmented control binding pattern:**
+
+```xml
+<controls:Segmented SelectedIndex="{x:Bind ViewModel.SelectedTabIndex, Mode=TwoWay}"
+                    HorizontalAlignment="Stretch">
+    <controls:SegmentedItem>
+        <controls:SegmentedItem.Icon>
+            <IconSourceElement>
+                <!-- colored badge DataTemplate here -->
+            </IconSourceElement>
+        </controls:SegmentedItem.Icon>
+    </controls:SegmentedItem>
+    ...
+</controls:Segmented>
+```
+
+**Tab content visibility switching pattern:**
+
+```xml
+<Grid x:Name="GeneralPanel"
+      Visibility="{x:Bind ViewModel.SelectedTabIndex, Mode=OneWay, Converter={StaticResource TabIndexToVisibilityConverter_0}}">
+```
+
+Alternative (simpler): use `x:Bind` with a converter that compares an integer to a constant, or use code-behind for tab switching since SettingsView.xaml.cs can legally manage visibility as a pure presentation concern with no business logic. The code-behind approach is simpler given WinUI 3's limited converter support for integer comparison. Either approach is valid.
+
+**No new messenger messages.** All existing `SettingsViewModel` side effects (RefreshInterval, Threshold, Autostart, Language, SonnetContext, WindowSize, Logout) remain attached to the same observable property change handlers. The XAML restructuring does not affect the data flow.
+
+---
+
+### Feature 4: Session Watcher Fix
+
+**Finding from direct code inspection:** `JsonlService.cs` at `StartWatching()` (line 812–818) already configures:
+
+```csharp
+NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+IncludeSubdirectories = true,
+```
+
+This is exactly the correct configuration for file-level change detection. The macOS FSEvents bug that triggered this feature (directory-level coalescing) does not apply to Windows `FileSystemWatcher`. **No code changes required in `JsonlService.cs`.**
+
+The Phase 4 deliverable is a verified confirmation with test documentation, not a code change.
+
+---
+
+## Component Boundary Diagram (v1.3)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ Views                                                         │
+│  MainView.xaml     [burn rate banner added to 5h section]    │
+│  SettingsView.xaml [full XAML rewrite — Segmented Control]   │
+└───────────────────────────┬──────────────────────────────────┘
+                            │ x:Bind (compiled bindings)
+┌───────────────────────────▼──────────────────────────────────┐
+│ ViewModels                                                    │
+│  MainViewModel   [+BurnRatePrediction, +IsBurnRateWarning-   │
+│                   Visible, +BurnRateWarningText,             │
+│                   +_burnRateNotificationService field]       │
+│  SettingsViewModel [RefreshOptions labels, +SelectedTab-      │
+│                     Index, +AppVersion]                      │
+└────────────┬──────────────────────────┬──────────────────────┘
+             │ service calls            │ static class calls
+┌────────────▼────────────┐ ┌───────────▼──────────────────────┐
+│ Services                │ │ Helpers                           │
+│  BurnRateNotification-  │ │  BurnRateCalculator (NEW)         │
+│  Service (NEW)          │ │    input: history, utilization,   │
+│    AppNotificationMgr   │ │           resetsAt                │
+│    one-shot guard       │ │    output: BurnRatePrediction?    │
+│  [all existing services │ │  ChartColors (MODIFIED)           │
+│   unchanged]            │ │    +BuildColorLookup(isDark)      │
+└────────────┬────────────┘ │  ChartRenderer (MODIFIED)        │
+             │              │    +BuildGradientStops(...)       │
+┌────────────▼────────────┐ │  ChartDrawing (MODIFIED)         │
+│ Models                  │ │    DrawChartFills → gradient      │
+│  BurnRatePrediction     │ │    DrawChartTopLine → gradient    │
+│  (NEW)                  │ │  ExportHelper (VERIFY ONLY)       │
+│  [all existing models   │ └──────────────────────────────────┘
+│   unchanged]            │
+└────────────┬────────────┘
+             │
+┌────────────▼────────────┐
+│ DI Container (App.xaml) │
+│  +IBurnRateNotification │
+│   Service singleton      │
+│  MainViewModel ctor     │
+│   gains 1 new param     │
+└─────────────────────────┘
+```
+
+---
+
+## Data Flow Diagrams
+
+### Burn Rate Warning: Full Cycle
+
+```
+[Poll timer tick, every N seconds]
+    ↓
+PollUsageAsync() → FetchUsageAsync() → UsageResponse
+    ↓
+UpdateUsageProperties(data)
+    ├── [existing] Update FiveHourUtilization, etc.
+    ├── [existing] AppendHistoryPoint() → UsageHistoryPoints
+    └── [NEW] BurnRateCalculator.Predict(
+                 UsageHistoryPoints,          // history: normalized 0.0-1.0
+                 data.FiveHour.Utilization,   // current: 0-100 API scale
+                 data.FiveHour.ResetsAt)
+             → BurnRatePrediction? prediction
+                 ↓
+             BurnRatePrediction = prediction
+                 ↓ (property change notification)
+             IsBurnRateWarningVisible + BurnRateWarningText updated
+                 ↓ (x:Bind OneWay in MainView)
+             Banner Border.Visibility toggled
+                 ↓
+             _burnRateNotificationService.CheckBurnRate(prediction)
+                 ↓ (if first time in this warning cycle)
+             AppNotificationManager.Default.Show(toast)
+```
+
+### Chart Gradient: Render Cycle
+
+```
+[ChartInvalidateMessage received or CanvasAnimatedControl tick]
+    ↓
+Win2D Draw event handler (MainView.xaml.cs)
+    ↓
+ChartDrawing.DrawChartFills(session, resourceCreator, points, ...)
+    ├── ChartColors.BuildColorLookup(isDark) → Color[101]
+    ├── ChartRenderer.BuildGradientStops(points, windowStart, plotWidth, colorLookup)
+    │       → List<(float position, Color color)>
+    ├── Build closed area path (identical geometry to v1.2, path construction unchanged)
+    ├── CanvasLinearGradientBrush(resourceCreator, stops) { StartPoint=leftX, EndPoint=rightX }
+    │   → set alpha=64 on all stop colors for fill
+    └── session.FillGeometry(geometry, brush)  [REPLACES: session.FillGeometry(geometry, solidColor)]
+
+ChartDrawing.DrawChartTopLine(session, resourceCreator, points, ...)
+    ├── same BuildColorLookup + BuildGradientStops
+    ├── Build open line path (identical geometry to v1.2)
+    ├── CanvasLinearGradientBrush at alpha=255 (full opacity)
+    └── session.DrawGeometry(geometry, brush, 2.0f)
+```
+
+### Settings Tab Switching: No New Messages
+
+```
+[User clicks Segmented Control tab]
+    ↓
+controls:Segmented.SelectedIndex changes
+    ↓ (TwoWay binding)
+SettingsViewModel.SelectedTabIndex [ObservableProperty]
+    ↓ (OneWay binding in XAML)
+Tab content panel Visibility toggled (Converter or code-behind)
+    [NO service calls, NO messenger messages, NO persistence]
 ```
 
 ---
 
 ## Suggested Build Order
 
-Dependency-driven. Each phase is an atomic commit. Phases 3, 4, 5 are independent of Phase 2 and can be done in any order after Phase 1.
+Dependency-driven. Each phase is an independent track; Phase 1 is highest value and must be first given spec priority.
 
-### Step 1 — ModelContextLimits rewrite (Phase 1)
+### Step 1 — Burn Rate Warning end-to-end (Phase 1)
 
-Files: `ModelContextLimits.cs`, `ContextWindowData.cs`
+**New files:**
+- `Models/BurnRatePrediction.cs`
+- `Helpers/BurnRateCalculator.cs`
+- `Services/Interfaces/IBurnRateNotificationService.cs`
+- `Services/BurnRateNotificationService.cs`
 
-Must be first. Removes `ExtendedAutocompactBuffer`, `ExtendedContextDetectionThreshold`, and the token-count heuristic from `GetEffectiveMaxTokens()`. Adds `ModelFamily` enum, `GetModelFamily()`, updated `GetMaxContextTokens(modelName, sonnetContextSize)`, simplified `GetEffectiveMaxTokens(maxTokens)`, and flat-buffer `ShouldWarnAutocompact()`. Both `ContextWindowData.Utilization` and `SubagentContextData.Utilization` call `GetEffectiveMaxTokens()` — update both call sites in this same commit to keep the build green.
+**Modified files:**
+- `ViewModels/MainViewModel.cs` — inject service, add observable properties, add prediction call
+- `Views/MainView.xaml` — add burn rate banner Border in 5h section
+- `App.xaml.cs` — register service, inject into MainViewModel, register AppNotificationManager
+- `App.xaml` — add `BurnRateWarningBrush`, `BurnRateWarningTextBrush`
+- `Strings/de-DE/Resources.resw` + `Strings/en-US/Resources.resw` — add burn rate string keys
 
-At this point `GetMaxContextTokens()` accepts a `sonnetContextSize` parameter. Temporary call sites in `JsonlService` can pass the hardcoded constant `200_000` until Phase 2 wires up the live setting.
+Build order within Phase 1:
+1. `BurnRatePrediction` model (no dependencies)
+2. `BurnRateCalculator` static helper (depends only on `BurnRatePrediction` + `UsageHistoryPoint`)
+3. `IBurnRateNotificationService` interface + `BurnRateNotificationService` implementation
+4. `MainViewModel` integration (depends on all above)
+5. `MainView.xaml` banner (depends on MainViewModel properties)
+6. `App.xaml.cs` DI + `App.xaml` resources
+7. Localization strings
 
-### Step 2 — Sonnet Context Setting end-to-end (Phase 2)
+### Step 2 — Chart Horizontal Gradient (Phase 2)
 
-Files: `AppSettings.cs`, `SonnetContextChangedMessage.cs` (new), `JsonlService.cs` (ISettingsService constructor injection + GetMaxContextTokens call update), `SettingsViewModel.cs`, `MainViewModel.cs`, `SettingsView.xaml`, `Strings/de-DE/Resources.resw`, `Strings/en-US/Resources.resw`
+**Modified files only:**
+- `Helpers/ChartColors.cs` — add `BuildColorLookup(bool isDark)`
+- `Helpers/ChartRenderer.cs` — add `BuildGradientStops()`
+- `Helpers/ChartDrawing.cs` — rewrite `DrawChartFills()` and `DrawChartTopLine()`
+- `Helpers/ExportHelper.cs` — verify no changes needed (no expected modification)
 
-Requires Step 1 because it passes a live `sonnetContextSize` to the updated `GetMaxContextTokens()` signature. After this step, Opus, Sonnet, and Haiku all display the correct context limits, and the Settings view exposes the picker.
+Build order within Phase 2:
+1. `ChartColors.BuildColorLookup()` (no dependencies on other changes)
+2. `ChartRenderer.BuildGradientStops()` (depends on ColorLookup being callable)
+3. `ChartDrawing` rewrite (depends on both above)
+4. `ExportHelper` verification (no code change, just test export)
 
-### Step 3 — Session Filtering (Phase 3)
+This phase is self-contained. Zero impact on any ViewModel, service, or model.
 
-Files: `JsonlService.cs` (one filter expression in `RebuildSessionsList()`)
+### Step 3 — Settings View Redesign (Phase 3)
 
-Independent of Step 2. Can be done any time after Step 1. Low-risk single-method change.
+**Modified files:**
+- `Views/SettingsView.xaml` — full XAML rewrite
+- `ViewModels/SettingsViewModel.cs` — add `SelectedTabIndex`, `AppVersion`, update label strings
+- `Strings/de-DE/Resources.resw` + `Strings/en-US/Resources.resw` — add settings tab label keys
 
-### Step 4 — Subagent Sorting (Phase 4)
+Build order within Phase 3:
+1. `SettingsViewModel` additions first (so XAML bindings compile)
+2. `SettingsView.xaml` rewrite
+3. Localization strings (can be parallel with XAML work)
 
-Files: `JsonlService.cs` (one `.OrderBy()` call in `BuildSubagentContext()`)
+This phase has zero impact on `MainViewModel`, services, or chart helpers.
 
-Independent of everything. Can be batched with Step 3 into a single "JsonlService polish" commit if desired, or kept separate for cleaner git history.
+### Step 4 — Session Watcher Verification (Phase 4)
 
-### Step 5 — Footer Accessibility (Phase 5)
-
-Files: `MainView.xaml`, `Strings/de-DE/Resources.resw`, `Strings/en-US/Resources.resw`
-
-Purely additive. No logic changes. Zero regression risk. Do last.
+**No code changes.** Write a test script or manual test plan to verify session name updates when switching Claude Code projects. Document the confirmed-correct `NotifyFilter` configuration in the phase plan.
 
 ---
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Leaving the `currentTokens` parameter on `GetEffectiveMaxTokens`
+### Anti-Pattern 1: Calling `BurnRateCalculator.Predict()` in `AppendHistoryPoint()` instead of `UpdateUsageProperties()`
 
-**What goes wrong:** Keeping `GetEffectiveMaxTokens(long currentTokens, long maxTokens)` "for backwards compatibility." The `isExtended = currentTokens > 180_000` heuristic path survives and silently overrides model-based detection for Opus sessions with low current token counts (e.g. an Opus session at 50K tokens would use the standard 200K limit instead of 1M).
+**What goes wrong:** `AppendHistoryPoint()` runs inside the same method chain but after updating `_fiveHourResetsAt`. If called there, the prediction result is computed before the UI properties are fully updated. More critically, `AppendHistoryPoint()` is also called from the initial cache load path (`cached != null` branch in `InitializeAsync()`), which would fire a burn rate notification on app startup from stale cached data.
 
-**Prevention:** Remove all three obsolete constants (`ExtendedAutocompactBuffer`, `ExtendedContextDetectionThreshold`, `LargeModelAutocompactThreshold`, `SmallModelAutocompactThreshold`, `LargeModelThresholdTokens`) and both parameters in one atomic commit. Update both `Utilization` call sites in the same commit.
+**Do this instead:** Call `BurnRateCalculator.Predict()` and `CheckBurnRate()` at the end of `UpdateUsageProperties()`, after `AppendHistoryPoint()` has completed and only in the live poll path.
 
-### Anti-Pattern 2: Passing `sonnetContextSize` through the IJsonlService public interface
+### Anti-Pattern 2: Storing `BurnRatePrediction` history or persisting it to disk
 
-**What goes wrong:** Adding `sonnetContextSize` to `GetContextWindow(string sessionId, int sonnetContextSize)`. Every caller — `MainViewModel` has at least two call sites — must retrieve and pass the value. The `IJsonlService` interface changes, breaking any existing mock implementations used in tests.
+**What goes wrong:** The prediction is a derived, ephemeral value from live data. Persisting it creates stale state that would show a false warning after app restart (e.g., a prediction from hours ago that no longer applies).
 
-**Prevention:** Inject `ISettingsService` into `JsonlService` constructor. The setting is an implementation detail of the service layer.
+**Do this instead:** Compute prediction fresh on every poll cycle. The `BurnRatePrediction` observable property on MainViewModel is the only storage. It clears on the next poll cycle if the prediction no longer applies.
 
-### Anti-Pattern 3: Performing file I/O under the sessions lock on every context window read
+### Anti-Pattern 3: Creating `CanvasLinearGradientBrush` outside the Win2D draw session
 
-**What goes wrong:** Calling `ISettingsService.LoadSettings()` (which reads `settings.json`) inside `GetContextWindow()` while `_sessionsLock` is held. `GetContextWindow()` is called on every UI refresh cycle. File I/O under lock blocks other threads from accessing session data.
+**What goes wrong:** `CanvasLinearGradientBrush` is a Win2D graphics resource tied to the `ICanvasResourceCreator` (the `CanvasDrawingSession`). Creating it outside the draw handler and caching it as a field causes a `COMException` when the device is reset (e.g., on display mode change) or a resource leak if `Dispose()` is not called.
 
-**Prevention:** `ISettingsService.LoadSettings()` already deserializes from an in-memory cache in the current implementation (verify, but this is the standard pattern). If it does cache, no action needed. If it does disk I/O, read the setting before acquiring the lock and pass it in as a local variable.
+**Do this instead:** Create and dispose the `CanvasLinearGradientBrush` within each draw call using `using var brush = new CanvasLinearGradientBrush(...)`. Win2D resources created in the draw session are cheap — there is no meaningful performance benefit to caching them across frames.
 
-### Anti-Pattern 4: Localizing `AutomationProperties.Name` for footer buttons
+### Anti-Pattern 4: Using `AppNotificationManager` before `Register()` is called
 
-**What goes wrong:** Attempting to drive `AutomationProperties.Name` through WinUI3Localizer using the same Uid pattern as tooltips. Screen readers use the OS locale, not the app's runtime locale. The localization switch would not affect what the screen reader announces.
+**What goes wrong:** On WinUI 3 unpackaged apps, calling `AppNotificationManager.Default.Show()` before `AppNotificationManager.Default.Register()` throws or silently fails. The registration must happen at app startup.
 
-**Prevention:** Use static English strings (`"Refresh"`, `"Settings"`, `"Quit"`) for `AutomationProperties.Name`. Localize only the visible `ToolTipService.ToolTip`.
+**Do this instead:** Call `AppNotificationManager.Default.Register()` in `App.OnLaunched()`, before routing to MainView or LoginView. No activation handler is needed for this use case (notifications are fire-and-forget, no action buttons that launch the app).
 
-### Anti-Pattern 5: Filtering sessions inside `GetContextWindow()` instead of `RebuildSessionsList()`
+### Anti-Pattern 5: Putting business logic in SettingsView code-behind for tab switching
 
-**What goes wrong:** Adding the `Directory.Exists(s.Cwd)` check inside `GetContextWindow()` or `UpdateSessionData()`. The session would still appear in the dropdown but return `ContextWindowData.Empty` when selected, which would look like a data error to the user.
+**What goes wrong:** Adding `OnSegmentedSelectionChanged()` in `SettingsView.xaml.cs` with tab-switching logic that depends on settings service calls or cross-component state. This embeds presentation logic that is hard to test and violates the no-code-behind-logic rule.
 
-**Prevention:** Filter in `RebuildSessionsList()` so deleted sessions never enter the `_sessions` list at all. The dropdown stays clean.
+**Do this instead:** Tab content visibility is purely a presentation concern — it is acceptable to handle it in code-behind as a single `switch` on `SelectedTabIndex` that sets `Visibility` on four panels. Alternatively, use an integer-to-visibility converter in XAML. No service calls, no messenger messages, no state changes beyond the tab index.
+
+### Anti-Pattern 6: Not handling the utilization scale mismatch in `BurnRateCalculator`
+
+**What goes wrong:** `UsageHistoryPoint.Utilization` is `0.0–1.0` (normalized). `UsageWindow.Utilization` (from the API via `data.FiveHour.Utilization`) is `0–100`. Using them interchangeably without conversion produces a regression slope off by a factor of 100, resulting in either no predictions ever firing (slope too small, projects exhaustion far in future) or constant false alarms.
+
+**Do this instead:** Define the calculator's internal scale explicitly. The spec algorithm uses 0–100 scale. Convert history point utilization to 0–100 by multiplying by 100 inside `BurnRateCalculator.Predict()` before computing regression. Document the expected scale in the method signature.
 
 ---
 
 ## Scalability Considerations
 
-These are all read-path or additive changes for a single-user desktop app. No scalability concerns.
+Single-user desktop app. No distributed concerns. Relevant performance notes:
 
-| Concern | Before v1.2 | After v1.2 |
+| Concern | v1.3 Impact | Mitigation |
 |---------|-------------|------------|
-| Session list rebuild | O(n) `OrderByDescending` | O(n) `OrderByDescending` + O(n) `Directory.Exists` per session |
-| Subagent list build | O(n) unordered | O(n log n) `OrderBy agentId` |
-| Context window reads | O(1) in-memory, `GetMaxContextTokens` dict lookup | O(1) same + O(1) settings cache read |
-
-`Directory.Exists` on local NTFS paths is sub-millisecond per call. With 5–30 sessions, `RebuildSessionsList()` overhead is negligible. UNC/network drive paths are a known edge case — acceptable since the method is only called on `FileSystemWatcher` events and initial scan, not on every UI tick.
+| `CanvasLinearGradientBrush` creation per draw frame | Created/disposed on every Win2D draw event | Acceptable — Win2D optimizes resource creation; profile only if frame rate drops below 30fps |
+| `BuildColorLookup()` called on every draw | Returns `Color[101]`, all heap allocation | Cache per `isDark` value as a static field in `ChartColors`; only recompute on theme change |
+| `BurnRateCalculator.Predict()` on every poll | O(n) over last 15 min of history points; ~15-30 points at 30s interval | Negligible — 30 iterations of arithmetic on the UI thread |
+| `AppNotificationManager.Show()` | Async OS call | Already guarded by `_notifiedBurnRate` flag — fires at most once per warning cycle |
 
 ---
 
-## Retained: Existing Architecture (v1.0–v1.1)
+## Retained: Existing Architecture (v1.0–v1.2)
 
-The sections below document the stable architectural foundation that v1.2 builds on.
+The stable architectural foundation that v1.3 builds on. No changes to these fundamentals.
 
 ### Component Responsibilities
 
 | Component | Responsibility | Communicates With |
 |-----------|----------------|-------------------|
-| **MainView + MainViewModel** | Primary dashboard: 5h chart, weekly usage, context window, session picker, token stats, cost display | ClaudeApiService, JsonlService, PricingService, NavigationService |
-| **LoginView + LoginViewModel** | WebView2 login flow, cookie extraction from claude.ai | CredentialService, NavigationService |
+| **MainView + MainViewModel** | Primary dashboard: 5h chart, weekly usage, context window, session picker, token stats | ClaudeApiService, JsonlService, PricingService, NavigationService, BurnRateNotificationService (new) |
+| **LoginView + LoginViewModel** | WebView2 login flow, cookie extraction | CredentialService, NavigationService |
 | **SettingsView + SettingsViewModel** | App preferences (refresh interval, theme, language, autostart, sonnet context) | SettingsService, NavigationService |
-| **ClaudeApiService** | HTTP polling for 5h/weekly usage data from claude.ai via WebView2 bridge | CredentialService |
-| **JsonlService** | Parses JSONL log files for token/session/cost data, FileSystemWatcher | PricingService, ISettingsService |
-| **PricingService** | Fetches and caches LiteLLM pricing, tiered pricing calculation | Local cache file, GitHub raw content |
-| **CredentialService** | Win32 CredRead/CredWrite for session token storage | Windows Credential Manager via AdysTech.CredentialManager |
-| **SettingsService** | Read/write settings.json | Local JSON files in %LOCALAPPDATA% |
-| **UpdateService** | Periodic GitHub Releases API check, version comparison | GitHub API, MainViewModel (banner notification) |
-| **NavigationService** | Frame-based page navigation within single window | All Views |
+| **ClaudeApiService** | HTTP polling via WebView2 bridge, bypasses Cloudflare | CredentialService |
+| **JsonlService** | JSONL parsing, session index, FileSystemWatcher | PricingService, ISettingsService |
+| **BurnRateNotificationService** | Toast notification one-shot guard | AppNotificationManager (Windows App SDK) |
+| **PricingService** | LiteLLM pricing fetch, cache, tiered calculation | Local cache, GitHub |
+| **CredentialService** | Win32 CredRead/CredWrite for session token | Windows Credential Manager |
+| **SettingsService** | Read/write settings.json in %LOCALAPPDATA% | Local filesystem |
+| **UpdateService** | GitHub Releases version check | GitHub API |
+| **NavigationService** | Frame-based page navigation | All Views |
 
 ### Key Architectural Patterns
 
-**DI-Based MVVM:** All services registered as singletons in `Microsoft.Extensions.DependencyInjection`. ViewModels receive services via constructor injection. Source generators (`[ObservableProperty]`, `[RelayCommand]`) eliminate boilerplate.
+**DI-Based MVVM:** All services registered as singletons. Source generators eliminate boilerplate. `BurnRateNotificationService` follows the same singleton registration pattern as all other services.
 
-**WeakReferenceMessenger:** Cross-ViewModel communication via typed messages. `SonnetContextChangedMessage` follows the exact same pattern as the existing `RefreshIntervalChangedMessage`.
+**WeakReferenceMessenger:** Cross-ViewModel communication via typed messages. v1.3 adds no new messages — burn rate state is owned exclusively by `MainViewModel` with no cross-ViewModel sharing needed.
 
-**Timer-Driven Polling + FileSystemWatcher:** Claude API data polled at configurable interval (30s–10min). JSONL data reactive via debounced FileSystemWatcher (2s debounce). Both paths marshal to UI thread via `DispatcherQueue.TryEnqueue()`.
+**Timer-Driven Polling:** Burn rate prediction piggybacks on the existing poll cycle — no new timer, no new async background work.
 
-**DispatcherQueue.TryEnqueue():** Mandatory for all observable property updates originating from background threads. WinUI 3 does not auto-marshal (unlike WPF).
+**DispatcherQueue.TryEnqueue():** Still mandatory for any property updates from background threads. The `BurnRateNotificationService` call originates from the poll timer tick, which runs on the `DispatcherQueue` (UI thread already). No additional marshaling needed for the banner update. Toast notification call is a fire-and-forget OS API call, safe from any thread.
 
 ---
 
 ## Sources
 
-- `spec-release-from-1.7.1-to-1.8.3.md` — Authoritative implementation spec (HIGH confidence, authored for this milestone)
-- `CCInfoWindows/CCInfoWindows/Helpers/ModelContextLimits.cs` — Current implementation, direct code read
-- `CCInfoWindows/CCInfoWindows/Models/ContextWindowData.cs` — Utilization computation, direct code read
-- `CCInfoWindows/CCInfoWindows/Services/JsonlService.cs` — `RebuildSessionsList()`, `BuildSubagentContext()`, `GetContextWindow()`, direct code read
-- `CCInfoWindows/CCInfoWindows/Models/AppSettings.cs` — Current settings schema, direct code read
-- `CCInfoWindows/CCInfoWindows/ViewModels/SettingsViewModel.cs` — Settings property and messenger patterns, direct code read
-- `CCInfoWindows/CCInfoWindows/Messages/RefreshIntervalChangedMessage.cs` — Messenger message pattern reference, direct code read
-- `CCInfoWindows/CCInfoWindows/Services/Interfaces/IJsonlService.cs` — Public service contract, direct code read
+- `spec/v1.10.0-macOS/spec-release-1.8.3-to-1.10.0.md` — Authoritative implementation spec (HIGH confidence, authored for this milestone)
+- `CCInfoWindows/CCInfoWindows/ViewModels/MainViewModel.cs` — `PollUsageAsync()`, `UpdateUsageProperties()`, `AppendHistoryPoint()`, full field inventory — direct code read
+- `CCInfoWindows/CCInfoWindows/Helpers/ChartDrawing.cs` — `DrawChartFills()`, `DrawChartTopLine()`, `DrawGlowIndicator()` — direct code read
+- `CCInfoWindows/CCInfoWindows/Helpers/ChartRenderer.cs` — `GetZoneSegments()`, `ToX()`, `ToY()`, `GetRightEdgeAbsoluteX()` — direct code read
+- `CCInfoWindows/CCInfoWindows/Helpers/ChartColors.cs` — color table structure, `GetZoneColor()` — direct code read
+- `CCInfoWindows/CCInfoWindows/Models/UsageHistory.cs` — `UsageHistoryPoint.Utilization` scale (0.0–1.0 normalized) — direct code read
+- `CCInfoWindows/CCInfoWindows/ViewModels/SettingsViewModel.cs` — current `RefreshOptions` labels, `Initialize()` pattern — direct code read
+- `CCInfoWindows/CCInfoWindows/Views/SettingsView.xaml` — current flat StackPanel structure — direct code read
+- `CCInfoWindows/CCInfoWindows/Services/JsonlService.cs` — `StartWatching()` NotifyFilter config — direct code read (lines 812–818)
+- `CCInfoWindows/CCInfoWindows/App.xaml.cs` — DI registration pattern — direct code read

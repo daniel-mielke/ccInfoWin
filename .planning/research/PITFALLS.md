@@ -1,159 +1,256 @@
 # Pitfalls Research
 
-**Domain:** Adding model-based context detection, settings-driven data logic, FS-state filtering, sort stabilization, and WinUI 3 tooltip localization to an existing MVVM app (ccInfoWin v1.2)
-**Researched:** 2026-04-12
-**Confidence:** HIGH — all findings derived from direct codebase analysis of the live implementation
+**Domain:** WinUI 3 desktop app — adding burn rate prediction (linear regression), Win2D gradient rendering, Segmented Control settings redesign, AppNotificationManager toasts, FileSystemWatcher verification to an existing MVVM app (ccInfoWin v1.3)
+**Researched:** 2026-04-13
+**Confidence:** HIGH — all findings derived from direct codebase analysis + official documentation (AppNotificationManager quickstart, Win2D docs, CommunityToolkit Segmented docs)
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: `GetEffectiveMaxTokens` Signature Change Silently Breaks `ContextWindowData`
+### Pitfall 1: Linear Regression Denominator Produces NaN — Passes Guards Silently
 
 **What goes wrong:**
-`GetEffectiveMaxTokens(long currentTokens, long maxTokens)` is called in two computed properties inside the immutable records `ContextWindowData.Utilization` and `SubagentContextData.Utilization`. If the Phase 1 refactor changes or removes this method without updating both records, the app compiles but calculates utilization against the old effective-max, producing wrong progress bar fills and percentage text — with no runtime error.
+`BurnRateCalculator.Predict()` computes `slope = (n·Σxy − Σx·Σy) / (n·Σx² − (Σx)²)`. When all data points share the same timestamp — or when exactly three points all occur at startup in the same debounce window — the denominator `(n·Σx² − (Σx)²)` is exactly zero. C# `double` division returns `Double.NaN`. The spec's `slope > 0` guard silently returns `false` for NaN (correct outcome), but `(100 - currentUtilization) / NaN` also evaluates to NaN. If the NaN escapes into `MinutesUntilLimit`, the `Math.Max(1, ...)` clamp evaluates to `1`, and the banner shows a false "~1min" warning at app start.
 
 **Why it happens:**
-Both computed properties live in `Models/ContextWindowData.cs`, not in `JsonlService` where most of the Phase 1 changes land. The refactor removes `currentTokens` from the signature (no longer needed after the buffer is flattened to 33K). Forgetting to update the model callers means they still pass two arguments, or — worse — the old two-argument overload is kept for "compatibility" and the model properties silently keep calling the heuristic path.
+The minimum-data-points guard (≥ 3 points) does not prevent this. Three points are sufficient to pass the guard even if two share identical timestamps — common during cache replay at startup or rapid successive API responses. The algorithm assumes strictly increasing x-values.
 
 **How to avoid:**
-Delete `ExtendedAutocompactBuffer` and `ExtendedContextDetectionThreshold` from `ModelContextLimits` in the same commit that changes the signature, so the compiler immediately flags all unresolved references in `ContextWindowData.cs`. Do not leave deprecated constants as stubs.
+Add an explicit denominator guard immediately before the slope calculation, and assert finiteness before constructing the return value:
+
+```csharp
+var ssX = (n * sumX2) - (sumX * sumX);
+if (ssX <= 0.0) return null;
+var slope = ((n * sumXY) - (sumX * sumY)) / ssX;
+if (!double.IsFinite(slope) || slope <= 0.0) return null;
+var secondsToLimit = (MaxUtilization - currentUtilization) / slope;
+if (!double.IsFinite(secondsToLimit) || secondsToLimit <= 0) return null;
+```
 
 **Warning signs:**
-- Opus session shows a context bar below 100% when tokens exceed 200K (capped at the old 200K effective max)
-- Utilization for any session is negative or exceeds 1.0 (division by wrong effective max)
+- Unit test for "flat usage / slope ≈ 0" crashes instead of returning null
+- Banner shows "~1min" immediately after login at low utilization
+- `MinutesUntilLimit` is 1 at startup even without any burn rate data
 
-**Phase to address:** Phase 1
+**Phase to address:** Phase 1 (Burn Rate Warning). Write all nine unit test cases from the spec before wiring to `MainViewModel`, including the degenerate case of three identical timestamps.
 
 ---
 
-### Pitfall 2: `JsonlService` Reads `AppSettings` On Every `GetContextWindow` Call — Or Never
+### Pitfall 2: Utilization Scale Mismatch — BurnRateCalculator Always Returns Null
 
 **What goes wrong:**
-Phase 1 makes `GetMaxContextTokens` for Sonnet depend on the configured value. `JsonlService` does not currently take `ISettingsService` as a dependency (it only takes `IPricingService`). There are two bad implementations:
-
-1. Calling `_settingsService.LoadSettings()` on each `GetContextWindow` invocation — which hits the disk on every UI refresh cycle inside `_sessionsLock`, causing read-under-lock on the hot path.
-2. Reading the setting once in the constructor and caching it locally — which means a Phase 2 setting change never takes effect until app restart.
-
-Both break a correctness or performance invariant.
-
-**How to avoid:**
-Inject `ISettingsService` into `JsonlService` via the constructor (update `App.xaml.cs` DI registration at line 141). Store `SonnetContextSize` in a private field. Add a `public void UpdateSonnetContextSize(long size)` method — or register for `SonnetContextChangedMessage` inside `JsonlService` — so the value can be updated without disk I/O on every call. Keep `_sessionsLock` free of any I/O.
-
-**Warning signs:**
-- `_sessionsLock` is held while `File.ReadAllText` or `LoadSettings()` is called
-- Changing the Sonnet Context setting has no effect on the displayed context bar until app restart
-
-**Phase to address:** Phase 1 (inject dependency), Phase 2 (wire up live update)
-
----
-
-### Pitfall 3: `ContextLimits` Dictionary Still Has `200_000` for All Opus Keys
-
-**What goes wrong:**
-`ModelContextLimits.cs` contains a hard-coded dictionary with explicit entries like `["claude-opus-4-6"] = 200_000`. After Phase 1 adds `GetModelFamily` family-based logic, `GetMaxContextTokens` may route through the dictionary first for known model names. If the dictionary is not updated (or removed), a real Opus session returns 200K because the dictionary short-circuits the new family-based logic for exact-match model names.
+`UsageHistoryPoint.Utilization` is stored as **0.0–1.0** (confirmed in `UsageHistory.cs` with comment "Utilization is stored as 0.0-1.0 (normalized), not the API's 0-100"). The spec's algorithm uses the **0–100 scale** throughout. If the calculator receives raw history points without converting, the minimum-utilization guard of `20.0` is never satisfied (actual value: `0.20`). The calculator always returns null. The burn rate banner never appears, and the feature appears to work (no crashes) but is completely non-functional.
 
 **Why it happens:**
-The dictionary was the original source of truth. After Phase 1, there are two competing sources: the dictionary (fast-path for known models) and `GetModelFamily` (family-based for all models). The refactor must make a clear decision: keep the dictionary and update all Opus entries to 1,000,000, or delete the dictionary entirely and rely only on family detection. Leaving the dictionary with stale 200K Opus values is the worst of both worlds.
+The spec explicitly calls this out under FEAT-01a: "The utilization in `UsageHistoryPoint` is stored normalized (0.0–1.0) in ccInfoWin. The calculator must convert to the 0–100 scale used by the algorithm." Developers porting from the macOS reference (which stores 0–100) miss this step because the algorithm's constants (20.0, 100.0) look plausible at face value.
 
 **How to avoid:**
-In Phase 1: decide once whether to keep or remove the dictionary. If keeping it, update every `"claude-opus-*"` entry to `1_000_000`. If removing it, delete the dictionary entirely. Add a unit test: `Assert.Equal(1_000_000, ModelContextLimits.GetMaxContextTokens("claude-opus-4-6"))`.
+In `BurnRateCalculator.Predict()`, multiply each history point's utilization by 100.0 when building the y-values:
+
+```csharp
+var y = point.Utilization * 100.0; // stored 0.0-1.0 → algorithm 0-100 scale
+```
+
+The `currentUtilization` parameter comes from `UsageWindow.Utilization` which is already 0–100 from the API — do not convert it again.
 
 **Warning signs:**
-- An Opus session shows ~167K effective context instead of ~967K
-- The `ContextLimits` dictionary still contains `["claude-opus-4-6"] = 200_000` after Phase 1 is committed
+- All unit tests for "fast burn" scenarios return null when they should return a prediction
+- Debug logging shows the MinimumUtilization guard firing at values like `0.55` instead of `55`
+- Banner never appears even during a session that consumed tokens rapidly
 
-**Phase to address:** Phase 1
+**Phase to address:** Phase 1 (Burn Rate Warning). Write a unit test that directly asserts: given a point with `Utilization = 0.55`, the slope calculation uses `y = 55.0`, not `y = 0.55`.
 
 ---
 
-### Pitfall 4: `Initialize()` in `SettingsViewModel` Fires `OnSelectedSonnetContextIndexChanged` Prematurely
+### Pitfall 3: AppNotificationManager Ordering — NotificationInvoked Must Precede Register()
 
 **What goes wrong:**
-`SettingsViewModel.Initialize()` (lines 85–100) follows a specific pattern: it assigns the *backing field* (`_selectedRefreshOption = ...`) then calls `OnPropertyChanged` explicitly. This avoids triggering the `partial void OnXChanged` side-effect handler during initialization. A developer adding the Sonnet picker may assign the generated property (`SelectedSonnetContextIndex = ...`) instead of the backing field. This fires `partial void OnSelectedSonnetContextIndexChanged` immediately during initialization, saving to settings and sending a messenger message before the view is ready — potentially overwriting a previously saved `1000000` value with the default `0 = 200K`.
-
-**How to avoid:**
-Follow the exact existing pattern in `Initialize()`: assign `_selectedSonnetContextIndex` (backing field), then call `OnPropertyChanged(nameof(SelectedSonnetContextIndex))`. Never assign the generated property setter inside `Initialize()`.
-
-**Warning signs:**
-- On app startup, a Sonnet session briefly shows 1M context then reverts to 200K
-- `settings.json` shows `sonnetContextSize: 200000` even though the user previously saved `1000000`
-
-**Phase to address:** Phase 2
-
----
-
-### Pitfall 5: Session Filter Removes the Currently Selected Session Without UI Recovery
-
-**What goes wrong:**
-`RebuildSessionsList()` will filter out orphaned sessions on the next FileSystemWatcher tick or manual refresh. If `MainViewModel.SelectedSession` is one of the filtered sessions, the ComboBox binding removes it, but `MainViewModel` does not detect the removal: `SelectedSession` becomes null or stale, `UpdateSessionData` is called with a null session, and the UI displays empty context data indefinitely — or crashes on a null dereference.
+For unpackaged apps, `AppNotificationManager.Default.Register()` registers the current process as the COM server for notification callbacks. If a notification is clicked while the app is running and `NotificationInvoked` has not been subscribed yet, Windows launches a **new process instance** to handle the activation instead of routing to the running instance. The user sees a second app window open.
 
 **Why it happens:**
-`RebuildSessionsList()` builds a new `_sessions` list and fires `DataUpdated`. `MainViewModel.RefreshSessionList()` re-selects based on `lastSelectedSessionId`. If the selected session's `Cwd` no longer exists, it disappears from the filtered list but `RefreshSessionList` may not recognize it as absent if the session ID still appears in `_settings.LastSelectedSessionId`.
+The official Microsoft documentation states: "To ensure all Notification handling happens in this process instance, register for `NotificationInvoked` before calling `Register()`." The natural order for a developer reading the spec is to call `Register()` first in `App.xaml.cs` startup. The spec for FEAT-01c says to register at startup but does not explicitly repeat this ordering constraint.
 
 **How to avoid:**
-After applying the `Directory.Exists` filter in `RebuildSessionsList`, ensure the resulting `_sessions` list is the authoritative source. `MainViewModel.RefreshSessionList()` already handles the "not found" case by falling back to the most-recent session — this works correctly as long as the filtered `_sessions` list is consistent before `DataUpdated` fires. The key: do not keep the orphaned session in `_sessions` as a tombstone.
+Always subscribe before registering in `App.xaml.cs` or the notification service init method:
+
+```csharp
+AppNotificationManager.Default.NotificationInvoked += OnNotificationInvoked; // FIRST
+AppNotificationManager.Default.Register();                                    // SECOND
+```
+
+Also call `AppNotificationManager.Default.Unregister()` in process exit. The existing `OnUnhandledException` handler in `App.xaml.cs` logs to crash.log and calls `e.Handled = true` — add a `ProcessExit` hook alongside it:
+
+```csharp
+AppDomain.CurrentDomain.ProcessExit += (_, _) => AppNotificationManager.Default.Unregister();
+```
 
 **Warning signs:**
-- After deleting a project directory, the session dropdown shows "No active session" but context bars still show old non-zero values
-- `NullReferenceException` in `UpdateSessionData` after project directory deletion
+- Clicking the toast opens a second app window instead of focusing the running instance
+- No second window but notification activation is silently dropped
 
-**Phase to address:** Phase 3
+**Phase to address:** Phase 1 (Burn Rate Warning). Test: send toast, click it while app is running — confirm no second window appears.
 
 ---
 
-### Pitfall 6: `Directory.Exists` Called on Unvalidated External Path (NTLM Hash Leak)
+### Pitfall 4: AppNotificationManager.Register() Throws E_FAIL on Double Registration
 
 **What goes wrong:**
-`SessionInfo.Cwd` is populated from JSONL file content — external, untrusted data. Passing it directly to `Directory.Exists(s.Cwd)` violates the project's secure coding rule ("Restrict file paths — never pass user-supplied paths directly"). A crafted JSONL file with a UNC path (`\\attacker-server\share`) causes `Directory.Exists` to initiate an SMB connection attempt, leaking the Windows hostname and NTLM hash to a rogue server.
+`AppNotificationManager.Default.Register()` throws `COMException` (E_FAIL, HRESULT 0x80004005) if called more than once per process lifetime. This happens if `BurnRateNotificationService` calls `Register()` in its constructor AND `App.xaml.cs` calls it at startup, or if the service is registered as `AddTransient` in DI and each resolution triggers a new `Register()` call.
 
 **Why it happens:**
-The spec describes the filter as a one-liner `.Where(s => Directory.Exists(s.Cwd))`. The simplicity makes it easy to skip path validation. Claude Code writes the JSONL files, so in normal use the paths are benign — but the rule exists for any input that the app does not control.
+Registration is process-scoped and not idempotent. Calling it twice is a hard error, not a no-op. The existing `WebViewBridge` pattern in `App.xaml.cs` (registered as `AddSingleton`) avoids this problem — the notification service must follow the same pattern.
 
 **How to avoid:**
-Guard the path before calling `Directory.Exists`: validate that `Cwd` is a rooted, non-UNC, local path: `!string.IsNullOrEmpty(s.Cwd) && Path.IsPathRooted(s.Cwd) && !s.Cwd.StartsWith(@"\\") && Directory.Exists(s.Cwd)`. This is two conditions, not a rewrite.
+- Register `BurnRateNotificationService` as `AddSingleton` in `ConfigureServices()`.
+- Call `AppNotificationManager.Default.Register()` exactly once, from `App.xaml.cs` `OnLaunched`, not from the service constructor.
+- The service's responsibility is to call `Show()` (send notifications). It does not own the `Register()`/`Unregister()` lifecycle.
 
 **Warning signs:**
-- Absence of any path validation guard around the `Directory.Exists` call in `RebuildSessionsList`
-- Wireshark shows SMB traffic on app startup when a UNC path is present in a JSONL file
+- App crashes on first launch after adding the notification service; crash.log shows `COMException`
+- Works on the first run, fails on subsequent launches because the COM server slot was not cleaned up (missing `Unregister()`)
 
-**Phase to address:** Phase 3
+**Phase to address:** Phase 1 (Burn Rate Warning). Follow the `WebViewBridge` DI pattern exactly.
 
 ---
 
-### Pitfall 7: Subagent Sort Applied at Call Site Instead of Inside `BuildSubagentContext`
+### Pitfall 5: CanvasLinearGradientBrush Created Without `using` — GPU Resource Leak
 
 **What goes wrong:**
-`BuildSubagentContext` is a private static method called from both `GetContextWindow` (line 153) and `GetSubagentContext` (line 174). If the Phase 4 `OrderBy` is added at one call site instead of inside the method, the list is sorted in one context and unsorted in the other — the same instability that Phase 4 aims to fix.
-
-**How to avoid:**
-Add `return result.OrderBy(a => a.AgentId, StringComparer.Ordinal).ToList();` as the final statement inside `BuildSubagentContext` before returning. No changes to `GetContextWindow` or `GetSubagentContext` are needed. After Phase 4: grep for `OrderBy.*AgentId` — it must appear exactly once, inside `BuildSubagentContext`.
-
-**Warning signs:**
-- Subagent bars jump order on FSW-triggered refreshes but not on manual refresh (or vice versa)
-- The `OrderBy` appears in `GetContextWindow` or `GetSubagentContext` instead of inside `BuildSubagentContext`
-
-**Phase to address:** Phase 4
-
----
-
-### Pitfall 8: `ToolTipService.ToolTip` Set as XAML Attribute Overrides WinUI3Localizer
-
-**What goes wrong:**
-WinUI3Localizer applies `ToolTipService.ToolTip` by reading the resw key `ButtonUid.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip` and setting it as an attached property at runtime. If a developer also adds `ToolTipService.ToolTip="Refresh"` as a XAML attribute on the button, this static value is applied at XAML load time and overwrites what the localizer sets at runtime. The tooltip freezes in the build-time language and never changes when the user switches languages.
+`CanvasLinearGradientBrush` implements `IDisposable` and holds an unmanaged GPU resource. If brushes are created inside `DrawChartFills()` or `DrawChartTopLine()` per span without `using`, each chart redraw leaks one or more GPU objects. At a 30-second poll interval with two spans (area fill + line stroke), this is 4 leaked objects per minute. Memory grows monotonically; after extended use the app can exhaust GPU resources or trigger a Win2D device-lost exception.
 
 **Why it happens:**
-The spec example shows `<Button ToolTipService.ToolTip="{l:Uids.Uid FooterRefreshTooltip}" ...>` as a possible implementation. This is the wrong approach. The correct approach is the pure-resw method: only define the tooltip in resw with the attached-property key syntax, and let the existing `l:Uids.Uid="FooterRefreshButton"` pick it up automatically. The three footer buttons already have their Uid attributes — no XAML change is needed beyond verifying the resw entries exist.
+Developers used to plain .NET objects forget that Win2D brushes are COM-backed resources. The existing `ChartDrawing.cs` already wraps `CanvasPathBuilder` and `CanvasGeometry` in `using` — this discipline must extend to brushes. The gradient implementation adds one `CanvasLinearGradientBrush` per gap-free span (area path) plus one for the line stroke, for a minimum of two per draw call.
 
 **How to avoid:**
-Do not add any `ToolTipService.ToolTip` attribute to `MainView.xaml`. Add only the `.ToolTipService.ToolTip` and `.AutomationProperties.Name` entries to both resw files. The `en-US/Resources.resw` entries already exist (confirmed at lines 101–118). Verify `de-DE/Resources.resw` also has all six entries before marking Phase 5 done.
+Strictly follow the `using` pattern already established in the same file:
+
+```csharp
+using var gradientBrush = new CanvasLinearGradientBrush(resourceCreator, gradientStops)
+{
+    StartPoint = new System.Numerics.Vector2(spanStartX, 0),
+    EndPoint   = new System.Numerics.Vector2(spanEndX, 0)
+};
+session.FillGeometry(geometry, gradientBrush);
+// brush disposed here — same as CanvasPathBuilder and CanvasGeometry
+```
 
 **Warning signs:**
-- Tooltip shows "Refresh" in German mode (static override beating the localizer)
-- Language switch leaves tooltip in the previous language
-- Grep of `MainView.xaml` shows `ToolTipService.ToolTip` as a XAML attribute
+- Memory usage grows visibly in Task Manager over 10+ minutes of active polling
+- Win2D device-lost exception after extended run (especially on lower-end GPUs)
+- Export path creates brushes in a loop without `using` — the export is directly testable
 
-**Phase to address:** Phase 5
+**Phase to address:** Phase 2 (Chart Gradient). Code review hard requirement: every `new CanvasLinearGradientBrush(...)` must have a `using` keyword. Verify in both `ChartDrawing.cs` and `ExportHelper.cs` call paths.
+
+---
+
+### Pitfall 6: Zero-Width Gradient Span Produces Invisible Stroke
+
+**What goes wrong:**
+`CanvasLinearGradientBrush` requires `StartPoint != EndPoint`. If a gap-free span contains only one data point, or if all points map to the same X coordinate (app just launched, one history entry), `spanStartX == spanEndX`. Win2D does not throw — it silently applies the first gradient stop color to all pixels, but with a zero-width linear gradient the result on the area fill is invisible (no extent to interpolate across). The chart appears blank on first launch after login.
+
+**Why it happens:**
+The existing zone-based code handles single-point segments via `GetRightEdgeAbsoluteX()` which synthesizes a right edge at the current-time X position. The new gradient path must replicate this protection. The spec says "add boundary stops at the start and end of the data range" — this does not guard against the StartPoint == EndPoint case.
+
+**How to avoid:**
+Before creating any `CanvasLinearGradientBrush`, check span width:
+
+```csharp
+if (Math.Abs(spanEndX - spanStartX) < 1.0f)
+{
+    // Fall back to solid color from first gradient stop
+    var solidColor = gradientStops.First().Color;
+    session.FillGeometry(geometry, solidColor);
+    continue;
+}
+```
+
+**Warning signs:**
+- Chart renders blank area immediately after login (one history point from the first poll)
+- Export PNG shows no fill on the first generated image after session start
+
+**Phase to address:** Phase 2 (Chart Gradient). Test with zero history points (empty state) and one history point (first poll after login).
+
+---
+
+### Pitfall 7: Segmented Tab Content Switching with x:Bind Inline Expressions Fails to Compile
+
+**What goes wrong:**
+The spec uses `Visibility` bindings to show/hide tab content panels. If implemented as inline `x:Bind` equality expressions like `{x:Bind ViewModel.SelectedTabIndex == 0}`, the XAML compiler rejects the expression — WinUI 3 `x:Bind` does not support comparison operators in path expressions. The build fails with a cryptic error, not a runtime exception.
+
+**Why it happens:**
+Developers familiar with WPF `DataTrigger` or Uno Platform patterns try to write conditional visibility inline. WinUI 3 `x:Bind` only supports property paths, method calls with known signatures, and ternary-via-converter. The comparison operator is not supported.
+
+**How to avoid:**
+Use `SwitchPresenter` + `Case` from `CommunityToolkit.WinUI.Controls` (already a dependency). Tag each `SegmentedItem` and bind `SwitchPresenter.Value` to the selected item's tag — zero code-behind needed:
+
+```xml
+<controls:Segmented x:Name="Tabs" SelectedIndex="0">
+    <controls:SegmentedItem Content="General" Tag="general" />
+    <controls:SegmentedItem Content="Updates" Tag="updates" />
+    ...
+</controls:Segmented>
+<controls:SwitchPresenter Value="{Binding SelectedItem.Tag, ElementName=Tabs}">
+    <controls:Case Value="general"> ... </controls:Case>
+    <controls:Case Value="updates"> ... </controls:Case>
+</controls:SwitchPresenter>
+```
+
+Alternatively, add four `bool` `[ObservableProperty]` fields to `SettingsViewModel` and toggle them in a `SelectionChanged` handler — more code but no XAML compilation surprises.
+
+**Warning signs:**
+- XAML build error during Phase 3 mentioning `x:Bind` path syntax
+- Designer shows all tab panels stacked (all `Visibility="Visible"`) instead of switching
+
+**Phase to address:** Phase 3 (Settings Redesign). Decide the tab-switching strategy during planning before writing XAML — `SwitchPresenter` is the idiomatic CommunityToolkit approach.
+
+---
+
+### Pitfall 8: Segmented Control AutoSelection Fires SelectionChanged During XAML Init
+
+**What goes wrong:**
+`Segmented` control with `SelectionMode="Single"` (default) automatically selects the first item. If a `SelectionChanged` handler is wired in XAML or code-behind, it fires during the initial layout pass before `ViewModel` is fully initialized. Any ViewModel mutation in the handler (e.g., publishing a messenger message, saving a setting) runs prematurely with uninitialized state.
+
+**Why it happens:**
+The CommunityToolkit docs state: "When SelectionMode is set to Single the first item will be selected by default." This auto-selection fires the `SelectionChanged` event at XAML initialization time. The handler does not distinguish initial selection from user-driven selection.
+
+**How to avoid:**
+Set `SelectedIndex="0"` in XAML (already enforces the default) and use the `AutoSelection` property set to `false` if you need to defer the first selection. In the `SelectionChanged` handler, guard against empty `AddedItems`:
+
+```csharp
+private void Tabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+{
+    if (e.AddedItems.Count == 0) return; // ignore spurious init event
+    // handle actual selection change
+}
+```
+
+Or: use `SwitchPresenter` with `ElementName` binding (no code-behind needed, no initialization hazard).
+
+**Warning signs:**
+- A setting is written to disk during `SettingsView` page navigation (before user touches anything)
+- `SelectionChanged` fires before `ViewModel.Initialize()` completes
+
+**Phase to address:** Phase 3 (Settings Redesign). Use `SwitchPresenter` pattern to avoid the handler entirely.
+
+---
+
+### Pitfall 9: FileSystemWatcher Configuration Is Already Correct — Do Not "Fix" It
+
+**What goes wrong:**
+FEAT-05 was ported from macOS FSEvents, which had a directory-level coalescing bug. Treating this as a code-change requirement in ccInfoWin leads to replacing the working watcher configuration with a directory-only watcher, removing `NotifyFilters.FileName`, or changing `InternalBufferSize` — all of which regress working behavior.
+
+**Why it happens:**
+The macOS FSEvents bug was OS-specific. The ccInfoWin `FileSystemWatcher` at `JsonlService.cs` line 816 already has `NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size` with `IncludeSubdirectories = true` — this covers file-level changes precisely. The Windows `FileSystemWatcher` does not coalesce events the way FSEvents did.
+
+**How to avoid:**
+FEAT-05 is a **verification task, not an implementation task**. Read the watcher configuration, confirm `FileName | LastWrite` are both present, perform manual testing (switch Claude Code project while ccInfoWin runs, confirm session dropdown updates within 2 seconds), and document the finding. If the configuration is already correct, ship it with a code comment explaining why no change was needed.
+
+**Warning signs:**
+- A Phase 4 PR modifies `StartWatching()` without a reproducible regression that motivated the change
+- The watcher `Filter` or `NotifyFilter` is changed from its current values
+
+**Phase to address:** Phase 4 (Session Dropdown Fix). Acceptance criterion: do not change the watcher configuration unless a reproducible regression is first identified and documented.
 
 ---
 
@@ -161,12 +258,10 @@ Do not add any `ToolTipService.ToolTip` attribute to `MainView.xaml`. Add only t
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Keep `ContextLimits` dictionary with partial updates (only Opus entries changed) | Low-effort Phase 1 | Dictionary and family-based logic diverge on new model releases; two places to update per new model | Never — pick one canonical source of truth |
-| Pass `SonnetContextSize` as parameter without DI into `JsonlService` | Avoids constructor change | Callers must obtain the setting themselves; `MainViewModel` and `JsonlService` both read settings independently and can drift | Never for this app — DI is already wired |
-| Call `Directory.Exists` on `Cwd` without path validation | One-liner implementation | NTLM hash leak to UNC paths in crafted JSONL files | Never — the validation guard is two conditions |
-| Add `ToolTipService.ToolTip` as XAML attribute instead of resw entry | No resw file edits needed | Breaks runtime language switching; tooltip is frozen in build-time language | Never — defeats WinUI3Localizer entirely |
-| Skip `de-DE` resw entries for Phase 5 | Half the work | German users see English tooltip strings on hover | Never — both resw files must be in sync |
-| Keep deprecated constants (`ExtendedAutocompactBuffer`, `ExtendedContextDetectionThreshold`) as stubs | No compiler errors during refactor | Dead code in static class; callers may revert to using them; heuristic path silently lives on | Never — delete them in the same commit |
+| `isDark: true` hardcoded in `ExportHelper.cs` line 245 | No behavior change | Export chart always uses dark palette regardless of user theme; gradient colors will look wrong in light-mode export | Acceptable as pre-existing v1.1 tech debt; flag for v1.4 if light export quality matters |
+| Inline boolean tab visibility properties (4 booleans in SettingsViewModel) | Avoids `SwitchPresenter` dependency | 4 extra ViewModel properties that must stay in sync with tab count | Acceptable for v1.3 — `SwitchPresenter` is cleaner but both compile |
+| Storing `BurnRatePrediction` as nullable `[ObservableProperty]` on `MainViewModel` | Simple, no extra abstraction | Banner state is coupled to VM; harder to unit test without full VM instantiation | Acceptable — prediction is derived state, not persistence |
+| Skipping `Unregister()` on app close | One less shutdown call | COM server slot stays registered; can cause E_FAIL on the next `Register()` call | Never acceptable — always call `Unregister()` in process exit |
 
 ---
 
@@ -174,12 +269,12 @@ Do not add any `ToolTipService.ToolTip` attribute to `MainView.xaml`. Add only t
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| WinUI3Localizer + `ToolTipService.ToolTip` | Setting the attached property as a XAML attribute overrides what the localizer writes at runtime | Only define it in resw with the attached-property path syntax; the button's existing `l:Uids.Uid` picks it up automatically |
-| WinUI3Localizer + `AutomationProperties.Name` | Wrong namespace prefix in resw key | Copy the exact pattern from `en-US/Resources.resw` line 47: `SessionComboBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name` |
-| `ModelContextLimits` static helper + runtime setting | Static methods have no DI access; embedding `ISettingsService` in a static class breaks testability | Pass `sonnetContextSize` as a parameter to `GetMaxContextTokens`; the DI-injected `JsonlService` holds the setting |
-| CommunityToolkit `[ObservableProperty]` + `Initialize()` | Assigning the generated property setter in `Initialize()` fires `OnXChanged` before view is ready | Assign the backing field (`_x`) in `Initialize()`, then call `OnPropertyChanged(nameof(X))` explicitly — match the existing pattern on lines 95–99 |
-| `FileSystemWatcher` + session filter + `Directory.Exists` | Calling `Directory.Exists` inside the FSW callback (hot path, called on every file change) | Only call `Directory.Exists` inside `RebuildSessionsList`, which runs after the 2-second debounce — never in `OnFileChanged` |
-| `IJsonlService` interface + new `UpdateSonnetContextSize` method | Adding a method to `JsonlService` without updating `IJsonlService` | Update the interface and any test doubles; the interface is the contract, not the concrete class |
+| `AppNotificationManager` + DI | Registering as `AddTransient` causes double `Register()` → E_FAIL on second resolution | Register as `AddSingleton`; call `Register()` once from `App.xaml.cs` `OnLaunched`, not from the service constructor |
+| `AppNotificationManager` + event ordering | Calling `Register()` before `NotificationInvoked` subscription → new process launched on toast click | Subscribe to `NotificationInvoked` first; then call `Register()` |
+| `CanvasLinearGradientBrush` in draw loop | Creating brush without `using` → GPU resource leak per poll cycle | Always `using var brush = new CanvasLinearGradientBrush(...)` — match the `CanvasPathBuilder` discipline already in `ChartDrawing.cs` |
+| `SwitchPresenter` with `Segmented` | Binding `SwitchPresenter.Value` to `SelectedIndex` (int) when `Case` values are strings | Tag each `SegmentedItem` (string) and bind `Value` to `SelectedItem.Tag` via `ElementName` |
+| `BurnRateCalculator` history input | Passing raw `UsageHistoryPoint.Utilization` (0.0–1.0) to algorithm expecting 0–100 | Convert `point.Utilization * 100.0` for y-values; `currentUtilization` from API is already 0–100 |
+| `Segmented` init in SettingsView | `SelectionChanged` fires at XAML init time, mutating ViewModel before it is ready | Use `SwitchPresenter` pattern (no handler needed) or guard: `if (e.AddedItems.Count == 0) return` |
 
 ---
 
@@ -187,9 +282,9 @@ Do not add any `ToolTipService.ToolTip` attribute to `MainView.xaml`. Add only t
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| `LoadSettings()` (disk read) inside `_sessionsLock` in `GetContextWindow` | UI thread stalls on refresh; lock contention under rapid FSW events | Load setting once into a field; update via messenger | Any FSW burst (10+ file changes/second during active Claude session) |
-| `Directory.Exists` on every entry in `RebuildSessionsList` | Slow rebuild with many orphaned network-path projects | Acceptable per spec — only called on rebuild, not every tick; guard against UNC to avoid SMB latency | Negligible at expected scale; only problematic if >100 orphaned UNC-path sessions |
-| Calling `BuildSubagentContext` twice per `GetContextWindow` + `GetSubagentContext` | Double disk read for subagent files | Pre-existing; Phase 4 does not make it worse — the sort is O(n log n) on a tiny list | No new degradation from Phase 4 |
+| `CanvasLinearGradientBrush` leak in draw loop | Memory grows 2–5 MB per minute during active polling; Win2D device-lost exception after extended use | `using` on every brush; verify in `ExportHelper.cs` call path which is directly testable | After ~30 minutes at 30-second poll interval |
+| Linear regression over unbounded history | CPU spike on long sessions | Mitigated by spec's 15-minute lookback window — filter before calling the algorithm | Not a v1.3 concern; lookback window is explicit in the spec |
+| `CanvasLinearGradientBrush` with 100+ gradient stops | GPU stall on gradient setup per draw | The 101-element lookup table is the source; emit stops only where color changes meaningfully; for typical 30s polling, ~30 stops per 15-minute window is fine | Only a concern if poll interval is reduced to 1s; not in-scope for v1.3 |
 
 ---
 
@@ -197,9 +292,8 @@ Do not add any `ToolTipService.ToolTip` attribute to `MainView.xaml`. Add only t
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Passing `Cwd` from JSONL (external data) directly to `Directory.Exists` | SMB NTLM hash leak to crafted UNC path | `Path.IsPathRooted(cwd) && !cwd.StartsWith(@"\\")` guard before `Directory.Exists` |
-| Storing `SonnetContextSize` as an unvalidated integer in settings JSON | Invalid value (e.g., `999`) causes nonsensical context display or divide-by-near-zero | On load, clamp/reject values not in `{200_000, 1_000_000}`; fall back to `DefaultContextLimit` |
-| Sending `SonnetContextChangedMessage` with an unvalidated value from `SelectedSonnetContextIndex` | Out-of-bounds index maps to wrong context size | Use a fixed-size array `long[] { 200_000L, 1_000_000L }` indexed by `SelectedSonnetContextIndex`; bounds-check before access |
+| Toast notification body contains session path or token | Path/token visible in Windows Action Center (notifications persist) | Toast content uses only time labels (`~1h 33min`) and generic copy — never file paths, session IDs, or credentials |
+| `NotificationInvoked` handler navigates based on unvalidated `Arguments` string | Crafted notification payload launches unintended views | For v1.3 burn rate toast: ignore notification activation entirely — awareness only, no deep-link action needed |
 
 ---
 
@@ -207,27 +301,25 @@ Do not add any `ToolTipService.ToolTip` attribute to `MainView.xaml`. Add only t
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Context bar stays at 0% after changing Sonnet setting to 1M | User thinks the setting did not apply | `MainViewModel` subscribes to `SonnetContextChangedMessage` and calls `UpdateSessionData` immediately on receipt |
-| Selected session vanishes silently after project deletion | User sees empty context bars with no explanation | After filtering, auto-select the most recent remaining session — do not leave the ComboBox blank without a placeholder |
-| Subagent bars reorder on every FSW tick | Visual instability during active coding session | Phase 4 sort must be inside `BuildSubagentContext`, not at call sites |
-| Tooltips frozen in one language after runtime language switch | German user sees "Refresh" after switching to DE | Never hard-code `ToolTipService.ToolTip` in XAML — resw-only approach lets WinUI3Localizer control the value |
+| Burn rate toast fires every poll cycle when warning is active | Notification spam — potentially dozens of toasts per active coding session | One-shot per warning cycle: set `_notifiedBurnRate = true` on first toast; reset only when `BurnRatePrediction` becomes null |
+| Banner appears at exactly 20% due to float precision loss | False positive at the threshold boundary | Use `currentUtilization >= MinimumUtilization` with a small tolerance; `20.0` as a `const double` avoids precision issues |
+| Settings tab resets to General on every back-navigation | User must re-navigate to the tab they were on | Expected WinUI 3 Frame navigation behavior — `AddTransient` creates a new VM each time; this is acceptable for v1.3; note in user-visible behavior if questioned |
+| Gradient chart shows solid color on first poll | Users may think chart broke | Zero-width span fallback (Pitfall 6) ensures a solid color renders instead of blank — visually equivalent to previous zone-based behavior for single-point history |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Phase 1 — Opus context limit:** `GetMaxContextTokens("claude-opus-4-6")` returns `1_000_000`. The `ContextLimits` dictionary has an explicit 200K entry for this model — it must be updated or the dictionary must be removed.
-- [ ] **Phase 1 — `GetEffectiveMaxTokens` callers:** Search for `GetEffectiveMaxTokens` after Phase 1 — zero two-argument calls should remain. Both `ContextWindowData.Utilization` and `SubagentContextData.Utilization` must use the new single-parameter signature.
-- [ ] **Phase 1 — `ShouldWarnAutocompact` updated:** Confirm the new flat-buffer warning (`maxTokens − 20K`) is in place and the two-tier utilization percentage logic is removed.
-- [ ] **Phase 1 — Deprecated constants deleted:** `ExtendedAutocompactBuffer` and `ExtendedContextDetectionThreshold` do not appear anywhere in the codebase after Phase 1.
-- [ ] **Phase 2 — `de-DE` resw:** `SettingsSonnetContextLabel.Text`, `SettingsSonnetContext200K.Content`, `SettingsSonnetContext1M.Content` exist in both `de-DE` and `en-US` resource files.
-- [ ] **Phase 2 — Settings persistence:** Open Settings, change to 1M, close app, reopen — the picker must still show 1M, not reset to 200K.
-- [ ] **Phase 2 — `IJsonlService` interface updated:** If `JsonlService` gains a `UpdateSonnetContextSize` method, the `IJsonlService` interface must also declare it.
-- [ ] **Phase 3 — Null/empty `Cwd` guard:** Sessions with `Cwd = null` or `Cwd = ""` are filtered out explicitly, not passed to `Directory.Exists` (which silently returns false for empty strings).
-- [ ] **Phase 3 — Path validation guard present:** The `RebuildSessionsList` filter includes a `!cwd.StartsWith(@"\\")` UNC guard before calling `Directory.Exists`.
-- [ ] **Phase 4 — Sort inside the method:** Search for `OrderBy.*AgentId` — exactly one occurrence, inside `BuildSubagentContext`. Zero occurrences at call sites.
-- [ ] **Phase 5 — `de-DE` resw completeness:** Six entries required: `FooterRefreshButton`, `FooterSettingsButton`, `FooterQuitButton` × (`ToolTipService.ToolTip` + `AutomationProperties.Name`). All six exist in `de-DE/Resources.resw` (the `en-US` entries already exist).
-- [ ] **Phase 5 — No XAML attribute override:** Grep `MainView.xaml` for `ToolTipService.ToolTip` — zero matches.
+- [ ] **BurnRateCalculator:** Returns null for all edge cases — null `resetsAt`, utilization < 20, fewer than 3 points, `ssX == 0`, negative slope, projected time > `resetsAt`, utilization at exactly 100. Verify with unit tests before connecting to UI.
+- [ ] **Utilization scale:** Unit test confirms a point with `Utilization = 0.55` produces `y = 55.0` in the regression, not `y = 0.55`.
+- [ ] **Burn rate toast one-shot:** Send 5 poll cycles with active prediction — exactly 1 toast fires. `_notifiedBurnRate` resets when prediction becomes null, not on utilization drop alone.
+- [ ] **AppNotificationManager:** `Unregister()` called in `ProcessExit` handler. No `COMException` in crash.log on any launch after the first.
+- [ ] **Toast ordering:** `NotificationInvoked` subscribed before `Register()` call in `App.xaml.cs`. Clicking toast while app runs does not open a second window.
+- [ ] **Gradient brush disposal:** Every `new CanvasLinearGradientBrush(...)` in `ChartDrawing.cs` and `ExportHelper.cs` has `using`. Zero exceptions.
+- [ ] **Export chart gradient:** `ExportHelper.cs` hardcodes `isDark: true` at line 245. Gradient uses dark palette in export — confirm this is visually acceptable or flag the pre-existing tech debt explicitly.
+- [ ] **Zero-width span:** Manual test with 0 and 1 history points — chart renders without Win2D exception.
+- [ ] **Segmented tab switching:** All four tabs render content in both dark and light themes. Badge colors use `ThemeResource` references, not hardcoded hex values.
+- [ ] **FEAT-05 watcher:** Manual test — switch Claude Code to a different project while ccInfoWin runs. Session dropdown updates within the 2-second debounce window. Watcher `NotifyFilter` is unchanged from `LastWrite | FileName | Size`.
 
 ---
 
@@ -235,13 +327,13 @@ Do not add any `ToolTipService.ToolTip` attribute to `MainView.xaml`. Add only t
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Opus sessions showing 200K after Phase 1 | LOW | Update or remove `ContextLimits` dictionary; rebuild and verify unit test |
-| Sonnet setting not persisting (reverts to 200K on restart) | LOW | Debug `Initialize()` — confirm backing-field assignment pattern; verify `JsonPropertyName("sonnetContextSize")` on `AppSettings` property |
-| Setting change not reflected live (requires restart) | LOW | Ensure `JsonlService` subscribes to `SonnetContextChangedMessage` or has an `UpdateSonnetContextSize` method; verify `MainViewModel` calls the update method on message receipt |
-| Session filter removes selected session without fallback | LOW | Add guard in `MainViewModel.RefreshSessionList()` — check if `LastSelectedSessionId` still exists in the new filtered `_sessions` before selecting; fallback is already implemented for the "not found" case |
-| Tooltip hard-coded in XAML breaks language switch | LOW | Remove `ToolTipService.ToolTip` XAML attribute; verify resw entry exists for both languages; rebuild |
-| `GetEffectiveMaxTokens` called with wrong signature | LOW | Compiler error catches this immediately if deprecated constants are deleted in same commit as signature change |
-| Path validation missing on `Directory.Exists` | MEDIUM | Add `Path.IsPathRooted` + UNC guard; this is a correctness fix even if no exploit has occurred in practice |
+| NaN from regression denominator causes false banner | LOW | Add `ssX <= 0` guard + `double.IsFinite()` assertions; redeploy; no data loss |
+| Utilization scale mismatch (feature silently non-functional) | LOW | Add `* 100.0` conversion for history points; verify with existing unit test suite |
+| Brush leak identified post-ship | MEDIUM | Add `using` keyword to each leaked brush; ship patch release; no data loss |
+| Double `Register()` E_FAIL on cold launch | LOW | Move `Register()` call to `App.xaml.cs` singleton pattern; crash.log confirms HRESULT; one-line fix |
+| Toast spam reaches user before one-shot guard is in place | LOW | Add `_notifiedBurnRate` flag; existing toasts in Action Center cannot be recalled but future spam stops immediately |
+| Segmented tab content invisible due to `x:Bind` compile error | LOW | Switch to `SwitchPresenter` pattern — build-time error is caught before shipping |
+| Incorrect watcher change regresses session detection | LOW | Revert `StartWatching()` to the original `NotifyFilter = LastWrite | FileName | Size` configuration |
 
 ---
 
@@ -249,27 +341,29 @@ Do not add any `ToolTipService.ToolTip` attribute to `MainView.xaml`. Add only t
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| `GetEffectiveMaxTokens` signature mismatch in records | Phase 1 | Zero two-argument calls to `GetEffectiveMaxTokens` in codebase |
-| Opus still showing 200K (dictionary not updated) | Phase 1 | `GetMaxContextTokens("claude-opus-4-6")` returns 1,000,000 |
-| Deprecated constants not deleted | Phase 1 | `ExtendedAutocompactBuffer` and `ExtendedContextDetectionThreshold` absent from codebase |
-| `JsonlService` reads settings on every call under lock | Phase 1 | No `LoadSettings()` call inside `_sessionsLock` in `GetContextWindow` |
-| `Initialize()` fires `OnSelectedSonnetContextIndexChanged` prematurely | Phase 2 | Sonnet 1M setting persists across app restarts; no spurious 200K override on startup |
-| Sonnet setting change not reflected live | Phase 2 | Changing setting immediately updates context bar without app restart |
-| Session filter removes selected session without fallback | Phase 3 | After deleting project directory, app auto-selects next session cleanly |
-| `Directory.Exists` called on UNC/unvalidated path | Phase 3 | Path validation guard present in `RebuildSessionsList` |
-| Sort applied at call site instead of inside method | Phase 4 | Single `OrderBy.*AgentId` in codebase, inside `BuildSubagentContext` |
-| `ToolTipService.ToolTip` set as XAML attribute | Phase 5 | Grep `MainView.xaml` for `ToolTipService.ToolTip` — zero matches |
-| Missing `de-DE` resw entries for Phase 5 | Phase 5 | Language switch to German: all three footer button tooltips show German text |
+| Linear regression NaN / zero denominator | Phase 1: Burn Rate Warning | Unit test: three identical timestamps returns null, not `~1min` |
+| Utilization scale mismatch (0-1 vs 0-100) | Phase 1: Burn Rate Warning | Unit test: `point.Utilization = 0.55` → slope uses `y = 55.0` |
+| Burn rate toast double-fire spam | Phase 1: Burn Rate Warning | Integration test: 5 poll cycles with active warning fires exactly 1 toast |
+| AppNotificationManager double Register() E_FAIL | Phase 1: Burn Rate Warning | App launches cleanly 3 times in a row; no COMException in crash.log |
+| NotificationInvoked ordering → second window on click | Phase 1: Burn Rate Warning | Click toast while app running → no second window |
+| Brush leak in draw loop | Phase 2: Chart Gradient | Code review: every `new CanvasLinearGradientBrush` has `using` |
+| Zero-width gradient span → blank chart on cold start | Phase 2: Chart Gradient | Manual test: launch with empty history → chart renders solid color, no exception |
+| Segmented `x:Bind` inline expression compile error | Phase 3: Settings Redesign | Build succeeds; tab switching works in dark and light mode |
+| Segmented `SelectionChanged` fires during XAML init | Phase 3: Settings Redesign | No settings written to disk during SettingsView page load |
+| Incorrect watcher change regresses session detection | Phase 4: Session Dropdown Fix | Watcher `NotifyFilter` unchanged; session names update on project switch within 2s |
 
 ---
 
 ## Sources
 
-- Direct codebase analysis: `ModelContextLimits.cs` (lines 1–157), `JsonlService.cs` (lines 666–779), `ContextWindowData.cs` (lines 1–54), `AppSettings.cs`, `SettingsViewModel.cs` (lines 85–100), `MainViewModel.cs`, `MainView.xaml` (lines 579–624), `SettingsView.xaml`, `en-US/Resources.resw` (lines 100–118), `App.xaml.cs` (lines 141–142)
-- `spec-release-from-1.7.1-to-1.8.3.md` — implementation spec for all five phases including cross-cutting concerns
-- `.planning/PROJECT.md` — current milestone context, known tech debt, key decisions log
-- `MEMORY.md` — Cloudflare fix architecture and Phase 2 execution history
+- Official AppNotificationManager quickstart (2025-07-25): https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/notifications/app-notifications/app-notifications-quickstart
+- AppNotificationManager.Register E_FAIL issue: https://github.com/microsoft/WindowsAppSDK/issues/3540
+- Win2D memory leak avoidance: https://microsoft.github.io/Win2D/WinUI3/html/RefCycles.htm
+- Win2D CanvasLinearGradientBrush API: https://microsoft.github.io/Win2D/WinUI3/html/T_Microsoft_Graphics_Canvas_Brushes_CanvasLinearGradientBrush.htm
+- CommunityToolkit Segmented control docs: https://learn.microsoft.com/en-us/dotnet/communitytoolkit/windows/segmented/
+- Spec FEAT-01a utilization scale note: `spec/v1.10.0-macOS/spec-release-1.8.3-to-1.10.0.md` line 61
+- Codebase: `UsageHistory.cs` (Utilization stored 0.0–1.0 with explicit comment), `ChartDrawing.cs` (existing `using` discipline on `CanvasPathBuilder` + `CanvasGeometry`), `JsonlService.cs` line 816 (watcher config already correct), `ExportHelper.cs` line 245 (hardcoded `isDark: true`)
 
 ---
-*Pitfalls research for: ccInfoWin v1.2 — macOS v1.8.3 feature parity additions*
-*Researched: 2026-04-12*
+*Pitfalls research for: ccInfoWin v1.3 — burn rate prediction, Win2D gradient, Segmented settings, AppNotificationManager, FileSystemWatcher*
+*Researched: 2026-04-13*
