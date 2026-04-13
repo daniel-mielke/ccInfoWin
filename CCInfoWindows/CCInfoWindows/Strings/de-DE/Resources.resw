@@ -237,6 +237,62 @@
     <value>Update verfügbar</value>
   </data>
 
+  <!-- Settings Tabs (Phase 18) -->
+  <data name="SettingsTabGeneral.Text" xml:space="preserve">
+    <value>Allgemein</value>
+  </data>
+  <data name="SettingsTabUpdates.Text" xml:space="preserve">
+    <value>Updates</value>
+  </data>
+  <data name="SettingsTabAccount.Text" xml:space="preserve">
+    <value>Konto</value>
+  </data>
+  <data name="SettingsTabAbout.Text" xml:space="preserve">
+    <value>Über</value>
+  </data>
+  <data name="SettingsGeneralHeader.Text" xml:space="preserve">
+    <value>ALLGEMEIN</value>
+  </data>
+  <data name="SettingsUpdatesHeader.Text" xml:space="preserve">
+    <value>UPDATES</value>
+  </data>
+  <data name="SettingsAccountHeader.Text" xml:space="preserve">
+    <value>KONTO</value>
+  </data>
+  <data name="SettingsAboutHeader.Text" xml:space="preserve">
+    <value>ÜBER</value>
+  </data>
+  <data name="SettingsAboutAppName.Text" xml:space="preserve">
+    <value>CCInfoWindows</value>
+  </data>
+  <data name="SettingsAboutGitHubLink.Content" xml:space="preserve">
+    <value>GitHub-Repository</value>
+  </data>
+  <data name="SettingsAboutCredits.Text" xml:space="preserve">
+    <value>Basierend auf ccInfo für macOS von Stefan Lange</value>
+  </data>
+  <data name="SettingsTokenStatus.Text" xml:space="preserve">
+    <value>Token-Status:</value>
+  </data>
+  <data name="SettingsTokenValid.Text" xml:space="preserve">
+    <value>Gültig</value>
+  </data>
+  <data name="SettingsTokenInvalid.Text" xml:space="preserve">
+    <value>Ungültig</value>
+  </data>
+  <data name="SettingsVersion.Text" xml:space="preserve">
+    <value>Version:</value>
+  </data>
+  <data name="SettingsAppVersion.Text" xml:space="preserve">
+    <value>Version</value>
+  </data>
+  <data name="SettingsPricingSourceLabel.Text" xml:space="preserve">
+    <value>Preisdaten:</value>
+  </data>
+  <data name="SettingsLastFetchLabel.Text" xml:space="preserve">
+    <value>Zuletzt aktualisiert:</value>
+  </data>
+
   <!-- Burn Rate Warning -->
   <data name="BurnRateBannerText" xml:space="preserve">
     <value>Token-Limit erreicht in {0}</value>

@@ -25,6 +25,10 @@
             <SolidColorBrush x:Key="ShimmerBaseBrush" Color="#38383A" />
             <SolidColorBrush x:Key="ShimmerHighlightBrush" Color="#555558" />
             <SolidColorBrush x:Key="BurnRateWarningBrush" Color="#FF453A" />
+            <SolidColorBrush x:Key="SettingsBadgeGreenBrush"  Color="#30D158" />
+            <SolidColorBrush x:Key="SettingsBadgeBlueBrush"   Color="#0A84FF" />
+            <SolidColorBrush x:Key="SettingsBadgeRedBrush"    Color="#FF453A" />
+            <SolidColorBrush x:Key="SettingsBadgeOrangeBrush" Color="#FF9F0A" />
         </ResourceDictionary>
 
         <!-- Light theme -->
@@ -48,6 +52,10 @@
             <SolidColorBrush x:Key="ShimmerBaseBrush" Color="#E5E5EA" />
             <SolidColorBrush x:Key="ShimmerHighlightBrush" Color="#D1D1D6" />
             <SolidColorBrush x:Key="BurnRateWarningBrush" Color="#FF3B30" />
+            <SolidColorBrush x:Key="SettingsBadgeGreenBrush"  Color="#34C759" />
+            <SolidColorBrush x:Key="SettingsBadgeBlueBrush"   Color="#007AFF" />
+            <SolidColorBrush x:Key="SettingsBadgeRedBrush"    Color="#FF3B30" />
+            <SolidColorBrush x:Key="SettingsBadgeOrangeBrush" Color="#FF9500" />
         </ResourceDictionary>
 
     </ResourceDictionary.ThemeDictionaries>
