@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A Windows 11 desktop application for real-time monitoring of Claude Code usage limits. Port of the macOS app [ccInfo](https://github.com/stefanlange/ccInfo) (v1.7.1) by Stefan Lange, adapted for Windows with WinUI 3. Shipped as v1.0 with full feature parity across all 10 functional areas, v1.1 with UI polish matching the updated macOS reference design, and v1.2 bringing parity with macOS ccInfo v1.8.3.
+A Windows 11 desktop application for real-time monitoring of Claude Code usage limits. Port of the macOS app [ccInfo](https://github.com/stefanlange/ccInfo) by Stefan Lange, adapted for Windows with WinUI 3. Shipped as v1.0 (full feature parity, 10 functional areas), v1.1 (UI polish matching macOS reference), and v1.2 (macOS v1.8.3 feature parity — model-based context detection, Sonnet context setting, session cleanup, footer accessibility).
 
 Target audience: Developers with active Claude Pro/Max subscriptions using Claude Code on Windows.
 
@@ -31,19 +31,14 @@ Developers can see their Claude usage limits (5-hour window, weekly quota, conte
 - ✓ Unified visual style: 6px progress bars with semi-transparent gray track, rounded ComboBox, pill model badges, matching chart axis colors, consistent Statistics label styling — v1.1
 - ✓ Timer formatting: values ≥24h displayed as "Xd Yh" with localized units — v1.1
 - ✓ Interaction polish: logout button red with icon, login button with icon, smooth refresh animation completing full 360° rotation before stopping — v1.1
+- ✓ Model-based context detection: Opus=1M, Sonnet=configurable (200K/1M), Haiku=200K, flat 33K buffer, 20K warning threshold — v1.2
+- ✓ Sonnet context window setting: 200K/1M ComboBox in Settings with immediate live refresh via messenger — v1.2
+- ✓ Session orphan filtering: hide sessions for deleted project directories, UNC path guard, alphabetical subagent sort — v1.2
+- ✓ Footer tooltip and accessibility: localized ToolTipService.ToolTip and AutomationProperties.Name on all footer buttons — v1.2
 
 ### Active
 
-## Current Milestone: v1.2 macOS v1.8.3 Feature Parity
-
-**Goal:** Bring ccInfoWin to feature parity with macOS ccInfo v1.8.3 — model-based context detection, Sonnet context setting, session cleanup, stable subagent order, and footer accessibility.
-
-**Target features:**
-- 1M context window support with model-based detection (Opus=1M, Sonnet=configurable, Haiku=200K)
-- Sonnet context window setting in Settings (200K/1M picker)
-- Session filtering — hide sessions for deleted project directories
-- Subagent sorting stabilization (alphabetical by agentId)
-- Footer tooltip and accessibility enhancement (localized tooltips, AutomationProperties.Name)
+(No active requirements — plan next milestone with `/gsd:new-milestone`)
 
 ### Future
 
@@ -70,13 +65,10 @@ Developers can see their Claude usage limits (5-hour window, weekly quota, conte
 
 ### Current State
 
-Shipped v1.1 with UI polish across 3 phases (41 commits, ~1,470 net LOC changes from v1.0 baseline).
-Full v1.1 stats: 3 phases, 6 plans, 10 tasks, 18/18 requirements satisfied.
-Phase 12 complete — model-based context detection (Opus=1M, Haiku=200K, Sonnet=configurable default 200K, flat 33K buffer, 20K warning).
-Phase 13 complete — Sonnet context window setting (200K/1M ComboBox picker in Settings, live refresh via messenger, persisted to settings.json).
-Phase 14 complete — Session management polish (orphaned session filter with UNC guard, alphabetical subagent sort).
+Shipped v1.2 with macOS v1.8.3 feature parity across 4 phases (14 commits, +966/-106 lines).
+Full v1.2 stats: 4 phases, 6 plans, 17/17 requirements satisfied.
+Cumulative: 15 phases, 33 plans across 3 milestones (v1.0 → v1.1 → v1.2).
 Tech stack: C# 13 / .NET 9 / WinUI 3 (Windows App SDK 1.8) / Win2D / WebView2 / CommunityToolkit.Mvvm 8.4.
-Detailed upgrade spec available: `spec-release-from-1.7.1-to-1.8.3.md` (5 phases, dependency chain documented).
 
 **Known tech debt:**
 - 13 pre-existing unit test failures in JsonlServiceTests (parameter naming mismatch, production unaffected)
@@ -148,6 +140,11 @@ License: MIT
 | CornerRadius=11 for model badges (v1.1) | CornerRadius=999 causes WinUI 3 pill rendering issues at 22px height | ⚠️ Revisit — spec says 999, live is 11; visually equivalent now |
 | _stopOnComplete flag for refresh animation (v1.1) | WinUI 3 Storyboard must complete current rotation before Stop() — no built-in API | ✓ Good — smooth completion without snap |
 | Footer into ScrollViewer (v1.1) | Fixed footer created dead space; macOS reference scrolls footer with content | ✓ Good — matches macOS behavior |
+| ModelFamily enum over token heuristic (v1.2) | Token-count guessing was fragile; model name is authoritative | ✓ Good — clean switch, future-proof |
+| Flat 20K autocompact warning (v1.2) | Percentage thresholds gave wildly different absolute values per model | ✓ Good — consistent UX across 200K and 1M |
+| Optional settingsService in JsonlService (v1.2) | Default null preserves 13+ existing test constructors unchanged | ✓ Good — zero test breakage |
+| UNC path guard before Directory.Exists (v1.2) | Windows Directory.Exists hangs on unreachable UNC servers | ✓ Good — prevents app freeze |
+| Explicit ToolTipService.ToolTip in XAML (v1.2) | WinUI3Localizer Uid-only injection doesn't create tooltip UI at parse time | ✓ Good — discovered and fixed via UAT |
 
 ## Evolution
 
@@ -167,4 +164,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-12 after Phase 14 completion*
+*Last updated: 2026-04-13 after v1.2 milestone completion*

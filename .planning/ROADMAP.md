@@ -39,71 +39,19 @@ Audit: `.planning/milestones/v1.1-MILESTONE-AUDIT.md`
 
 </details>
 
-### ✅ v1.2 macOS v1.8.3 Feature Parity (Complete — 2026-04-12)
+<details>
+<summary>✅ v1.2 macOS v1.8.3 Feature Parity (Phases 12-15) — SHIPPED 2026-04-12</summary>
 
-**Milestone Goal:** Bring ccInfoWin to feature parity with macOS ccInfo v1.8.3 — model-based context detection, user-configurable Sonnet context, session cleanup, stable subagent ordering, and footer accessibility.
+- [x] Phase 12: Model-Based Context Detection (1/1 plans) — completed 2026-04-12
+- [x] Phase 13: Sonnet Context Window Setting (2/2 plans) — completed 2026-04-12
+- [x] Phase 14: Session Management Polish (1/1 plans) — completed 2026-04-12
+- [x] Phase 15: Footer Tooltip & Accessibility (1/1 plans) — completed 2026-04-12
 
-- [x] **Phase 12: Model-Based Context Detection** — Rewrite ModelContextLimits with ModelFamily enum; correct Opus to 1M, Haiku to 200K, flat autocompact warning (completed 2026-04-12)
-- [x] **Phase 13: Sonnet Context Window Setting** — End-to-end: AppSettings, Settings UI picker, messenger, live refresh on change (completed 2026-04-12)
-- [x] **Phase 14: Session Management Polish** — Filter ghost sessions by Directory.Exists; stabilize subagent sort order alphabetically (completed 2026-04-12)
-- [x] **Phase 15: Footer Tooltip & Accessibility** — Localized tooltips on all footer buttons, AutomationProperties.Name for screen readers (completed 2026-04-12)
+Full details: `.planning/milestones/v1.2-ROADMAP.md`
+Requirements: `.planning/milestones/v1.2-REQUIREMENTS.md`
+Audit: `.planning/milestones/v1.2-MILESTONE-AUDIT.md`
 
-## Phase Details
-
-### Phase 12: Model-Based Context Detection
-**Goal**: Users see correct context window sizes based on the actual model family — 1M for Opus, 200K for Haiku, and model-family-resolved values for all subagents
-**Depends on**: Phase 11 (previous milestone complete)
-**Requirements**: CTX-01, CTX-02, CTX-03, CTX-04, CTX-05, CTX-06
-**Success Criteria** (what must be TRUE):
-  1. User sees ~967K effective context for an Opus session (1M minus 33K buffer)
-  2. User sees ~167K effective context for a Haiku session (200K minus 33K buffer)
-  3. User sees autocompact warning when any session has ≤20K tokens remaining, regardless of model
-  4. User sees correct progress bar percentage for both main session and all subagent bars
-  5. User sees correct model-based context limits on all subagent context progress bars
-**Plans**: 1 plan
-Plans:
-- [x] 12-01-PLAN.md — Rewrite ModelContextLimits with ModelFamily enum, update callers, update tests
-
-### Phase 13: Sonnet Context Window Setting
-**Goal**: Users can configure Sonnet's context window size in Settings and see the change reflected immediately in the context display
-**Depends on**: Phase 12
-**Requirements**: SET-01, SET-02, SET-03, SET-04, SET-05
-**Success Criteria** (what must be TRUE):
-  1. User sees a 200K / 1M ComboBox picker in the Settings view
-  2. User sees 200K selected by default when no preference has been saved
-  3. User sees the context window display update immediately after changing the picker (no manual refresh)
-  4. User sees the same Sonnet context setting after restarting the app
-  5. User sees the picker label and options in the correct language (de-DE and en-US)
-**Plans**: 2 plans
-Plans:
-- [x] 13-01-PLAN.md — AppSettings property, SonnetContextChangedMessage, SettingsViewModel, XAML ComboBox, localization
-- [x] 13-02-PLAN.md — JsonlService ISettingsService injection, DI wiring, MainViewModel live refresh
-**UI hint**: yes
-
-### Phase 14: Session Management Polish
-**Goal**: Users see only sessions for existing project directories, and subagent context bars appear in a stable, predictable order
-**Depends on**: Phase 11 (independent of Phases 12-13)
-**Requirements**: SES-01, SES-02, SES-03
-**Success Criteria** (what must be TRUE):
-  1. User does not see sessions whose project directory has been deleted in the session dropdown
-  2. User sees the session selection reset to the next valid session when the active project directory is deleted
-  3. User sees subagent context bars in the same alphabetical order on every refresh
-**Plans**: 1 plan
-Plans:
-- [x] 14-01-PLAN.md — IsValidProjectDirectory filter in RebuildSessionsList, alphabetical sort in BuildSubagentContext, unit tests
-
-### Phase 15: Footer Tooltip & Accessibility
-**Goal**: Users can discover footer button functions via tooltips and screen readers can announce button purposes
-**Depends on**: Phase 11 (independent of Phases 12-14)
-**Requirements**: ACC-01, ACC-02, ACC-03
-**Success Criteria** (what must be TRUE):
-  1. User sees a localized tooltip when hovering over each footer button (Refresh, Settings, Quit)
-  2. User's screen reader announces the purpose of each footer button via AutomationProperties.Name
-  3. User sees tooltip text in the language currently selected in the app (de-DE or en-US)
-**Plans**: 1 plan
-Plans:
-- [x] 15-01-PLAN.md — Build verification of existing resw/XAML wiring, runtime tooltip and accessibility human verification
-**UI hint**: yes
+</details>
 
 ## Progress
 
@@ -123,4 +71,4 @@ Plans:
 | 12. Model-Based Context Detection | v1.2 | 1/1 | Complete    | 2026-04-12 |
 | 13. Sonnet Context Window Setting | v1.2 | 2/2 | Complete    | 2026-04-12 |
 | 14. Session Management Polish | v1.2 | 1/1 | Complete    | 2026-04-12 |
-| 15. Footer Tooltip & Accessibility | v1.2 | 1/1 | Complete    | 2026-04-12 |
+| 15. Footer Tooltip & Accessibility | v1.2 | 2/2 | Complete    | 2026-04-13 |
