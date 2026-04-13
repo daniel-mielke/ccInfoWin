@@ -108,7 +108,7 @@ Plans:
   5. Switching tabs is smooth without page reload and all labels and content are localized in German and English
 **Plans**: 2 plans
 Plans:
-- [ ] 18-01-PLAN.md — ViewModel tab switching + short labels + version/token properties, theme badge brushes, localization keys, unit tests
+- [x] 18-01-PLAN.md — ViewModel tab switching + short labels + version/token properties, theme badge brushes, localization keys, unit tests
 - [ ] 18-02-PLAN.md — Complete XAML rewrite with Segmented Control + 4 tab panels, visual verification
 **UI hint**: yes
 
@@ -142,5 +142,5 @@ Plans:
 | 15. Footer Tooltip & Accessibility | v1.2 | 2/2 | Complete | 2026-04-13 |
 | 16. Burn Rate Warning | v1.3 | 2/2 | Complete    | 2026-04-13 |
 | 17. Chart Horizontal Gradient | v1.3 | 2/2 | Complete    | 2026-04-13 |
-| 18. Settings Redesign | v1.3 | 0/2 | Planned | - |
+| 18. Settings Redesign | v1.3 | 1/2 | In Progress|  |
 | 19. Session Watcher Verification | v1.3 | 0/? | Not started | - |
