@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: macOS v1.10.0 Feature Parity
-status: ready
-stopped_at: Phase 16 (burn-rate-warning) complete — burn rate banner and toast verified by user
-last_updated: "2026-04-13T18:00:00.000Z"
+status: executing
+stopped_at: Completed 17-01-PLAN.md
+last_updated: "2026-04-13T18:50:05.359Z"
 last_activity: 2026-04-13
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 4
+  completed_plans: 3
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-13)
 
 **Core value:** Developers can see their Claude usage limits (5-hour window, weekly quota, context window) at a glance in real-time, preventing unexpected throttling.
-**Current focus:** Phase 16 — burn-rate-warning
+**Current focus:** Phase 17 — chart-horizontal-gradient
 
 ## Current Position
 
-Phase: 16 (burn-rate-warning) — COMPLETE
+Phase: 17 (chart-horizontal-gradient) — EXECUTING
 Plan: 2 of 2
-Status: Phase 16 complete — burn rate banner and toast verified
+Status: Ready to execute
 Last activity: 2026-04-13
 
 Progress: [░░░░░░░░░░] 0%
@@ -49,6 +49,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 16-burn-rate-warning P01 | 12 | 2 tasks | 10 files |
 | Phase 16-burn-rate-warning P02 | 10 | 2 tasks | 5 files |
+| Phase 17-chart-horizontal-gradient P01 | 4 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,8 @@ Recent decisions affecting current work:
 - [Phase 16-burn-rate-warning]: InternalsVisibleTo in csproj for BurnRateFormatter.ParseTime testability without public exposure
 - [Phase 16-burn-rate-warning]: Explicit guard for currentUtilization >= 100 in BurnRateCalculator.Predict to prevent zero-seconds prediction edge case
 - [Phase 16-burn-rate-warning]: SendToast is static in BurnRateNotificationService — only the one-shot flag _notifiedBurnRate needs instance state
+- [Phase 17-chart-horizontal-gradient]: Single-point span Position=0.0f only — boundary clamping splits count==1 vs count>1 to prevent overwrite of sole element
+- [Phase 17-chart-horizontal-gradient]: GetContiguousSpans returns [(0, count-1)] unconditionally — no IsGap field on UsageHistoryPoint, signature future-proof
 
 ### Critical Pitfalls for v1.3
 
@@ -88,6 +91,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-13T18:00:00.000Z
-Stopped at: Phase 16 complete — burn rate warning feature verified and approved
+Last session: 2026-04-13T18:50:05.356Z
+Stopped at: Completed 17-01-PLAN.md
 Resume file: None

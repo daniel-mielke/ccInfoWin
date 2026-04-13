@@ -92,7 +92,7 @@ Plans:
   5. The gradient renders correctly without desaturation artifacts in both dark and light themes
 **Plans**: 2 plans
 Plans:
-- [ ] 17-01-PLAN.md — Color interpolation lookup, gradient stop calculation, contiguous spans (pure math + TDD)
+- [x] 17-01-PLAN.md — Color interpolation lookup, gradient stop calculation, contiguous spans (pure math + TDD)
 - [ ] 17-02-PLAN.md — Win2D gradient brush rendering in ChartDrawing, ExportHelper line width, visual verification
 **UI hint**: yes
 
@@ -138,6 +138,6 @@ Plans:
 | 14. Session Management Polish | v1.2 | 1/1 | Complete | 2026-04-12 |
 | 15. Footer Tooltip & Accessibility | v1.2 | 2/2 | Complete | 2026-04-13 |
 | 16. Burn Rate Warning | v1.3 | 2/2 | Complete    | 2026-04-13 |
-| 17. Chart Horizontal Gradient | v1.3 | 0/2 | Not started | - |
+| 17. Chart Horizontal Gradient | v1.3 | 1/2 | In Progress|  |
 | 18. Settings Redesign | v1.3 | 0/? | Not started | - |
 | 19. Session Watcher Verification | v1.3 | 0/? | Not started | - |
