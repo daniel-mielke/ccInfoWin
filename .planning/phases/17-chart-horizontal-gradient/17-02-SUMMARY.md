@@ -104,14 +104,13 @@ None — plan executed exactly as written.
 
 None — gradient fully wired from infrastructure (Plan 01) to rendering (Plan 02).
 
-## Checkpoint: Visual Verification Pending
+## Checkpoint: Visual Verification APPROVED
 
-Task 2 is a `checkpoint:human-verify`. The user must:
-1. Run the app: `dotnet run --project CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj`
-2. Verify gradient fill (green→yellow→orange→red) with 25% opacity
-3. Verify line stroke at 100% opacity matching gradient colors
-4. Verify no color bleed into empty chart area
-5. Export PNG and verify 2.5px thicker line + matching gradient
+Task 2 (`checkpoint:human-verify`) was approved by the user. Verified:
+- Smooth gradient fill (green-to-yellow-to-orange-to-red) with 25% opacity
+- Line stroke at 100% opacity with correct gradient colors
+- No color bleed into empty chart area
+- Export PNG matches live chart with 2.5px thicker line stroke
 
 ## Self-Check: PASSED
 - `D:/myProjects/ccInfoWin/CCInfoWindows/CCInfoWindows/Helpers/ChartDrawing.cs` — FOUND (modified)
