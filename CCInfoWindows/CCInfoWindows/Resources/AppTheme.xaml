@@ -24,6 +24,7 @@
             <SolidColorBrush x:Key="SegmentedActiveBackgroundBrush" Color="#636366" />
             <SolidColorBrush x:Key="ShimmerBaseBrush" Color="#38383A" />
             <SolidColorBrush x:Key="ShimmerHighlightBrush" Color="#555558" />
+            <SolidColorBrush x:Key="BurnRateWarningBrush" Color="#FF453A" />
         </ResourceDictionary>
 
         <!-- Light theme -->
@@ -46,6 +47,7 @@
             <SolidColorBrush x:Key="SegmentedActiveBackgroundBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="ShimmerBaseBrush" Color="#E5E5EA" />
             <SolidColorBrush x:Key="ShimmerHighlightBrush" Color="#D1D1D6" />
+            <SolidColorBrush x:Key="BurnRateWarningBrush" Color="#FF3B30" />
         </ResourceDictionary>
 
     </ResourceDictionary.ThemeDictionaries>

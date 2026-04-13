@@ -237,4 +237,24 @@
     <value>Update verfügbar</value>
   </data>
 
+  <!-- Burn Rate Warning -->
+  <data name="BurnRateBannerText" xml:space="preserve">
+    <value>Token-Limit erreicht in {0}</value>
+  </data>
+  <data name="BurnRateFormat_HoursMinutes" xml:space="preserve">
+    <value>~{0}h {1}min</value>
+  </data>
+  <data name="BurnRateFormat_HoursOnly" xml:space="preserve">
+    <value>~{0}h</value>
+  </data>
+  <data name="BurnRateFormat_MinutesOnly" xml:space="preserve">
+    <value>~{0}min</value>
+  </data>
+  <data name="BurnRateNotificationTitle" xml:space="preserve">
+    <value>Burn-Rate-Warnung</value>
+  </data>
+  <data name="BurnRateNotificationBody" xml:space="preserve">
+    <value>Bei aktuellem Tempo wird das Token-Limit in {0} erreicht.</value>
+  </data>
+
 </root>
