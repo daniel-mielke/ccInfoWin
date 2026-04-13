@@ -301,6 +301,25 @@
                                 Foreground="{ThemeResource SecondaryTextBrush}" />
                         </StackPanel>
                     </Grid>
+
+                    <!-- Burn rate warning banner -->
+                    <Border Background="{ThemeResource BurnRateWarningBrush}"
+                            CornerRadius="6"
+                            Padding="8,4"
+                            Margin="0,8,0,0"
+                            Visibility="{x:Bind ViewModel.IsBurnRateWarningVisible, Mode=OneWay,
+                                         Converter={StaticResource BoolToVisibilityConverter}}"
+                            AutomationProperties.Name="{x:Bind ViewModel.BurnRateWarningText, Mode=OneWay}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <FontIcon Glyph="&#xECAD;"
+                                      FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                      FontSize="12"
+                                      Foreground="White" />
+                            <TextBlock Text="{x:Bind ViewModel.BurnRateWarningText, Mode=OneWay}"
+                                       Foreground="White"
+                                       FontSize="12" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- Divider -->
