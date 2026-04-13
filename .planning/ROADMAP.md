@@ -90,7 +90,10 @@ Plans:
   3. The gradient spans only the actual data range, with correct gap handling — no gradient bleed into empty chart space
   4. Exported PNG matches the live gradient exactly, including theme (dark and light)
   5. The gradient renders correctly without desaturation artifacts in both dark and light themes
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 17-01-PLAN.md — Color interpolation lookup, gradient stop calculation, contiguous spans (pure math + TDD)
+- [ ] 17-02-PLAN.md — Win2D gradient brush rendering in ChartDrawing, ExportHelper line width, visual verification
 **UI hint**: yes
 
 ### Phase 18: Settings Redesign
@@ -134,7 +137,7 @@ Plans:
 | 13. Sonnet Context Window Setting | v1.2 | 2/2 | Complete | 2026-04-12 |
 | 14. Session Management Polish | v1.2 | 1/1 | Complete | 2026-04-12 |
 | 15. Footer Tooltip & Accessibility | v1.2 | 2/2 | Complete | 2026-04-13 |
-| 16. Burn Rate Warning | v1.3 | 2/2 | Complete   | 2026-04-13 |
-| 17. Chart Horizontal Gradient | v1.3 | 0/? | Not started | - |
+| 16. Burn Rate Warning | v1.3 | 2/2 | Complete    | 2026-04-13 |
+| 17. Chart Horizontal Gradient | v1.3 | 0/2 | Not started | - |
 | 18. Settings Redesign | v1.3 | 0/? | Not started | - |
 | 19. Session Watcher Verification | v1.3 | 0/? | Not started | - |
