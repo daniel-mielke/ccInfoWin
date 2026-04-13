@@ -28,13 +28,35 @@ public partial class SettingsViewModel : ObservableObject
 
     public List<RefreshOption> RefreshOptions { get; } =
     [
-        new("30 Sekunden", 30),
-        new("1 Minute", 60),
-        new("2 Minuten", 120),
-        new("5 Minuten", 300),
-        new("10 Minuten", 600),
+        new("30s", 30),
+        new("1min", 60),
+        new("2min", 120),
+        new("5min", 300),
+        new("10min", 600),
         new("Manuell", 0)
     ];
+
+    [ObservableProperty]
+    private int _selectedTabIndex = 0;
+
+    public bool IsGeneralTabVisible => _selectedTabIndex == 0;
+    public bool IsUpdatesTabVisible => _selectedTabIndex == 1;
+    public bool IsAccountTabVisible => _selectedTabIndex == 2;
+    public bool IsAboutTabVisible  => _selectedTabIndex == 3;
+
+    partial void OnSelectedTabIndexChanged(int value)
+    {
+        OnPropertyChanged(nameof(IsGeneralTabVisible));
+        OnPropertyChanged(nameof(IsUpdatesTabVisible));
+        OnPropertyChanged(nameof(IsAccountTabVisible));
+        OnPropertyChanged(nameof(IsAboutTabVisible));
+    }
+
+    public string AppVersionText =>
+        System.Reflection.Assembly.GetExecutingAssembly()
+            .GetName().Version?.ToString(3) ?? "1.0.0";
+
+    public bool IsTokenValid => _credentialService.HasValidToken();
 
     [ObservableProperty]
     private RefreshOption _selectedRefreshOption = null!;

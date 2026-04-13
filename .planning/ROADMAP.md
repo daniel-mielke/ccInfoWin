@@ -106,7 +106,10 @@ Plans:
   3. The Updates tab shows app version, pricing source info, and last pricing fetch timestamp
   4. The Account tab shows token status and the logout button; the About tab shows app name, version, GitHub link, and macOS original credits
   5. Switching tabs is smooth without page reload and all labels and content are localized in German and English
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 18-01-PLAN.md — ViewModel tab switching + short labels + version/token properties, theme badge brushes, localization keys, unit tests
+- [ ] 18-02-PLAN.md — Complete XAML rewrite with Segmented Control + 4 tab panels, visual verification
 **UI hint**: yes
 
 ### Phase 19: Session Watcher Verification
@@ -138,6 +141,6 @@ Plans:
 | 14. Session Management Polish | v1.2 | 1/1 | Complete | 2026-04-12 |
 | 15. Footer Tooltip & Accessibility | v1.2 | 2/2 | Complete | 2026-04-13 |
 | 16. Burn Rate Warning | v1.3 | 2/2 | Complete    | 2026-04-13 |
-| 17. Chart Horizontal Gradient | v1.3 | 2/2 | Complete   | 2026-04-13 |
-| 18. Settings Redesign | v1.3 | 0/? | Not started | - |
+| 17. Chart Horizontal Gradient | v1.3 | 2/2 | Complete    | 2026-04-13 |
+| 18. Settings Redesign | v1.3 | 0/2 | Planned | - |
 | 19. Session Watcher Verification | v1.3 | 0/? | Not started | - |
