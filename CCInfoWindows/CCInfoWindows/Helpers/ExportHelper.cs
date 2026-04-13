@@ -243,7 +243,7 @@ public static class ExportHelper
 
         ChartDrawing.DrawAxesAndLabels(session, plotWidth, plotHeight, isDark: true, chartLeft, plotOffsetY);
         ChartDrawing.DrawChartFills(session, resourceCreator, points, windowStart.Value, plotWidth, plotHeight, isDark: true, chartLeft, plotOffsetY);
-        ChartDrawing.DrawChartTopLine(session, resourceCreator, points, windowStart.Value, plotWidth, plotHeight, isDark: true, chartLeft, plotOffsetY);
+        ChartDrawing.DrawChartTopLine(session, resourceCreator, points, windowStart.Value, plotWidth, plotHeight, isDark: true, chartLeft, plotOffsetY, lineWidth: 2.5f);
         ChartDrawing.DrawGlowIndicator(session, resourceCreator, points, windowStart.Value, plotWidth, plotHeight, isDark: true, chartLeft, plotOffsetY);
     }
 

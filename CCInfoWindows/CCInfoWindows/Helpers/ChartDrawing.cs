@@ -1,3 +1,4 @@
+using System.Numerics;
 using CCInfoWindows.Models;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Brushes;
@@ -14,6 +15,8 @@ namespace CCInfoWindows.Helpers;
 /// </summary>
 public static class ChartDrawing
 {
+    private const byte FillAlpha = 64;
+
     private static readonly CanvasStrokeStyle DashStrokeStyle = new()
     {
         CustomDashStyle = [4f, 4f]
@@ -70,21 +73,39 @@ public static class ChartDrawing
         float offsetY = 0f)
     {
         var baselineY = offsetY + ChartRenderer.ToY(0.0, plotHeight);
-        var segments = ChartRenderer.GetZoneSegments(points);
+        var colorLookup = ChartColors.BuildColorLookup(isDark);
+        var spans = ChartRenderer.GetContiguousSpans(points);
 
-        foreach (var (startIndex, endIndex, brushKey) in segments)
+        foreach (var (startIndex, endIndex) in spans)
         {
-            var zoneColor = ChartColors.GetColor(brushKey, isDark);
-            var fillColor = Color.FromArgb(102, zoneColor.R, zoneColor.G, zoneColor.B);
-            var rightEdgeX = offsetX + ChartRenderer.GetRightEdgeAbsoluteX(points, endIndex, windowStart, plotWidth);
+            var rawStops = ChartRenderer.BuildGradientStops(
+                points, startIndex, endIndex, windowStart, plotWidth, colorLookup);
+
+            var fillStops = ConvertToFillStops(rawStops);
+
+            var spanStartAbsoluteX = offsetX + ChartRenderer.LeftMargin
+                + ChartRenderer.ToX(points[startIndex].Timestamp, windowStart, plotWidth);
+            var spanEndAbsoluteX = offsetX
+                + ChartRenderer.GetRightEdgeAbsoluteX(points, endIndex, windowStart, plotWidth);
+
+            using var fillBrush = new CanvasLinearGradientBrush(
+                resourceCreator, fillStops,
+                CanvasEdgeBehavior.Clamp, CanvasAlphaMode.Premultiplied);
+            fillBrush.StartPoint = new Vector2(spanStartAbsoluteX, 0f);
+            fillBrush.EndPoint = new Vector2(spanEndAbsoluteX, 0f);
+
+            var rightEdgeX = offsetX
+                + ChartRenderer.GetRightEdgeAbsoluteX(points, endIndex, windowStart, plotWidth);
 
             using var pathBuilder = new CanvasPathBuilder(resourceCreator);
-            var firstX = offsetX + ChartRenderer.LeftMargin + ChartRenderer.ToX(points[startIndex].Timestamp, windowStart, plotWidth);
+            var firstX = offsetX + ChartRenderer.LeftMargin
+                + ChartRenderer.ToX(points[startIndex].Timestamp, windowStart, plotWidth);
             pathBuilder.BeginFigure(firstX, baselineY);
 
             for (var i = startIndex; i <= endIndex; i++)
             {
-                var x = offsetX + ChartRenderer.LeftMargin + ChartRenderer.ToX(points[i].Timestamp, windowStart, plotWidth);
+                var x = offsetX + ChartRenderer.LeftMargin
+                    + ChartRenderer.ToX(points[i].Timestamp, windowStart, plotWidth);
                 var y = offsetY + ChartRenderer.ToY(points[i].Utilization, plotHeight);
 
                 if (i == startIndex)
@@ -105,7 +126,7 @@ public static class ChartDrawing
             pathBuilder.EndFigure(CanvasFigureLoop.Closed);
 
             using var geometry = CanvasGeometry.CreatePath(pathBuilder);
-            session.FillGeometry(geometry, fillColor);
+            session.FillGeometry(geometry, fillBrush);
         }
     }
 
@@ -118,23 +139,43 @@ public static class ChartDrawing
         float plotHeight,
         bool isDark,
         float offsetX = 0f,
-        float offsetY = 0f)
+        float offsetY = 0f,
+        float lineWidth = 2.0f)
     {
-        var segments = ChartRenderer.GetZoneSegments(points);
+        var colorLookup = ChartColors.BuildColorLookup(isDark);
+        var spans = ChartRenderer.GetContiguousSpans(points);
 
-        foreach (var (startIndex, endIndex, brushKey) in segments)
+        foreach (var (startIndex, endIndex) in spans)
         {
-            var zoneColor = ChartColors.GetColor(brushKey, isDark);
-            var rightEdgeX = offsetX + ChartRenderer.GetRightEdgeAbsoluteX(points, endIndex, windowStart, plotWidth);
+            var rawStops = ChartRenderer.BuildGradientStops(
+                points, startIndex, endIndex, windowStart, plotWidth, colorLookup);
+
+            var lineStops = ConvertToLineStops(rawStops);
+
+            var spanStartAbsoluteX = offsetX + ChartRenderer.LeftMargin
+                + ChartRenderer.ToX(points[startIndex].Timestamp, windowStart, plotWidth);
+            var spanEndAbsoluteX = offsetX
+                + ChartRenderer.GetRightEdgeAbsoluteX(points, endIndex, windowStart, plotWidth);
+
+            using var lineBrush = new CanvasLinearGradientBrush(
+                resourceCreator, lineStops,
+                CanvasEdgeBehavior.Clamp, CanvasAlphaMode.Premultiplied);
+            lineBrush.StartPoint = new Vector2(spanStartAbsoluteX, 0f);
+            lineBrush.EndPoint = new Vector2(spanEndAbsoluteX, 0f);
+
+            var rightEdgeX = offsetX
+                + ChartRenderer.GetRightEdgeAbsoluteX(points, endIndex, windowStart, plotWidth);
 
             using var pathBuilder = new CanvasPathBuilder(resourceCreator);
-            var firstX = offsetX + ChartRenderer.LeftMargin + ChartRenderer.ToX(points[startIndex].Timestamp, windowStart, plotWidth);
+            var firstX = offsetX + ChartRenderer.LeftMargin
+                + ChartRenderer.ToX(points[startIndex].Timestamp, windowStart, plotWidth);
             var firstY = offsetY + ChartRenderer.ToY(points[startIndex].Utilization, plotHeight);
             pathBuilder.BeginFigure(firstX, firstY);
 
             for (var i = startIndex + 1; i <= endIndex; i++)
             {
-                var x = offsetX + ChartRenderer.LeftMargin + ChartRenderer.ToX(points[i].Timestamp, windowStart, plotWidth);
+                var x = offsetX + ChartRenderer.LeftMargin
+                    + ChartRenderer.ToX(points[i].Timestamp, windowStart, plotWidth);
                 var y = offsetY + ChartRenderer.ToY(points[i].Utilization, plotHeight);
                 var prevY = offsetY + ChartRenderer.ToY(points[i - 1].Utilization, plotHeight);
                 pathBuilder.AddLine(x, prevY);
@@ -146,7 +187,7 @@ public static class ChartDrawing
             pathBuilder.EndFigure(CanvasFigureLoop.Open);
 
             using var geometry = CanvasGeometry.CreatePath(pathBuilder);
-            session.DrawGeometry(geometry, zoneColor, 2f);
+            session.DrawGeometry(geometry, lineBrush, lineWidth);
         }
     }
 
@@ -181,5 +222,36 @@ public static class ChartDrawing
         session.DrawImage(blurEffect);
 
         session.FillCircle(x, y, 4f, zoneColor);
+    }
+
+    private static CanvasGradientStop[] ConvertToFillStops(
+        (float Position, Color Color)[] rawStops)
+    {
+        var result = new CanvasGradientStop[rawStops.Length];
+        for (var i = 0; i < rawStops.Length; i++)
+        {
+            var c = rawStops[i].Color;
+            result[i] = new CanvasGradientStop
+            {
+                Position = rawStops[i].Position,
+                Color = Color.FromArgb(FillAlpha, c.R, c.G, c.B)
+            };
+        }
+        return result;
+    }
+
+    private static CanvasGradientStop[] ConvertToLineStops(
+        (float Position, Color Color)[] rawStops)
+    {
+        var result = new CanvasGradientStop[rawStops.Length];
+        for (var i = 0; i < rawStops.Length; i++)
+        {
+            result[i] = new CanvasGradientStop
+            {
+                Position = rawStops[i].Position,
+                Color = rawStops[i].Color
+            };
+        }
+        return result;
     }
 }
