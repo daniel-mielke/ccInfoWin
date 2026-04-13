@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: macOS v1.10.0 Feature Parity
 status: executing
-stopped_at: Completed 18-01-PLAN.md
-last_updated: "2026-04-13T21:39:05.999Z"
+stopped_at: "Checkpoint 18-02 Task 2: visual verification awaited"
+last_updated: "2026-04-13T21:42:40.945Z"
 last_activity: 2026-04-13
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -52,6 +52,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 17-chart-horizontal-gradient P01 | 4 | 2 tasks | 4 files |
 | Phase 17-chart-horizontal-gradient P02 | 2 | 1 tasks | 2 files |
 | Phase 18-settings-redesign P01 | 8 | 2 tasks | 5 files |
+| Phase 18-settings-redesign P02 | 6 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,8 @@ Recent decisions affecting current work:
 - [Phase 17-chart-horizontal-gradient]: FillAlpha=64 constant and ConvertToFillStops/ConvertToLineStops helpers separate alpha concerns from path building
 - [Phase 18-settings-redesign]: RefreshOptions labels use universal short notation (30s/1min/etc) — not localized; Manuell is established label per spec FEAT-03d
 - [Phase 18-settings-redesign]: IsXxxTabVisible computed bools read _selectedTabIndex field directly; OnSelectedTabIndexChanged raises explicit notifications for all 4 bools
+- [Phase 18-settings-redesign]: SegmentedItem.Content used for colored badge — SegmentedItem.Icon only accepts IconElement, not Border
+- [Phase 18-settings-redesign]: InvertedBoolToVisibilityConverter already existed in Converters/ and App.xaml — no extra ViewModel property needed for token invalid state
 
 ### Critical Pitfalls for v1.3
 
@@ -97,6 +100,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-13T21:39:05.996Z
-Stopped at: Completed 18-01-PLAN.md
+Last session: 2026-04-13T21:42:40.942Z
+Stopped at: Checkpoint 18-02 Task 2: visual verification awaited
 Resume file: None
