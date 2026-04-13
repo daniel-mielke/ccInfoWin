@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
+milestone: v1.3
+milestone_name: macOS v1.10.0 Feature Parity
 status: executing
-stopped_at: Completed 15-01-PLAN.md
-last_updated: "2026-04-13T08:25:36.489Z"
+stopped_at: Completed 16-01-PLAN.md
+last_updated: "2026-04-13T17:33:56.872Z"
 last_activity: 2026-04-13
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 12
-  completed_plans: 12
-  percent: 100
+  total_phases: 4
+  completed_phases: 0
+  total_plans: 2
+  completed_plans: 1
+  percent: 0
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-13)
 
 **Core value:** Developers can see their Claude usage limits (5-hour window, weekly quota, context window) at a glance in real-time, preventing unexpected throttling.
-**Current focus:** v1.2 milestone complete — planning next milestone
+**Current focus:** Phase 16 — burn-rate-warning
 
 ## Current Position
 
-Phase: 15 (last phase of v1.2)
-Plan: All complete
-Status: v1.2 milestone shipped
+Phase: 16 (burn-rate-warning) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-04-13
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -47,11 +47,7 @@ Progress: [██████████] 100%
 | - | - | - | - |
 
 *Updated after each plan completion*
-| Phase 12 P01 | 15m | 2 tasks | 5 files |
-| Phase 13 P01 | 10m | 3 tasks | 6 files |
-| Phase 13-sonnet-context-window-setting P02 | 12m | 3 tasks | 3 files |
-| Phase 14-session-management-polish P01 | 5min | 2 tasks | 2 files |
-| Phase 15-footer-tooltip-accessibility P01 | 5min | 2 tasks | 0 files |
+| Phase 16-burn-rate-warning P01 | 12 | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -59,34 +55,37 @@ Progress: [██████████] 100%
 
 Decisions are logged in PROJECT.md Key Decisions table.
 
-- [Phase 12]: ModelFamily enum with substring matching (contains opus/sonnet/haiku) — same pattern as GetBadgeColorHex, no dictionary maintenance
-- [Phase 12]: GetEffectiveMaxTokens single-param: removed currentTokens; flat 33K buffer; ShouldWarnAutocompact uses flat 20K remaining threshold instead of 90%/95% percentages
-- [Phase 13]: SonnetContextSize int in AppSettings, long in SonnetContextChangedMessage to match ModelContextLimits.GetMaxContextTokens return type
-- [Phase 13]: BuildSubagentContext is static — sonnetContextSize passed as parameter from non-static call sites rather than accessing instance field
-- [Phase 13]: JsonlService settingsService parameter optional (null default) to preserve test isolation with 13+ existing tests
-- [Phase 14-session-management-polish]: IsValidProjectDirectory short-circuits UNC paths before Directory.Exists to prevent network hang on unreachable servers
-- [Phase 14-session-management-polish]: SES-02 requires no ViewModel changes: MainViewModel.RefreshSessionList fallback auto-resets to next valid session when active session is filtered out
-- [Phase 15-footer-tooltip-accessibility]: Zero code changes required — all footer tooltip/accessibility implementation was pre-existing in XAML and resw files; build verification confirmed correctness
+Recent decisions affecting current work:
+
+- (v1.2) Optional settingsService in JsonlService — default null preserves test constructors
+- (v1.2) Explicit ToolTipService.ToolTip in XAML — Uid-only injection doesn't create tooltip UI
+- [Phase 16-burn-rate-warning]: InternalsVisibleTo in csproj for BurnRateFormatter.ParseTime testability without public exposure
+- [Phase 16-burn-rate-warning]: Explicit guard for currentUtilization >= 100 in BurnRateCalculator.Predict to prevent zero-seconds prediction edge case
+
+### Critical Pitfalls for v1.3
+
+- **Phase 16**: UsageHistoryPoint.Utilization is stored 0-1; burn rate algorithm needs 0-100 — must multiply by 100 before regression
+- **Phase 16**: AppNotificationManager: subscribe NotificationInvoked BEFORE Register(), and only once (not on every refresh)
+- **Phase 17**: CanvasLinearGradientBrush must be wrapped in using per draw cycle — not cached across frames
+- **Phase 19**: FileSystemWatcher already correctly configured — this phase is verification only, no code expected
 
 ### Pending Todos from v1.0
 
-1. **Add filled area gradient to 5h chart** — `.planning/todos/pending/2026-03-11-add-filled-area-gradient-to-5h-chart.md`
+1. **Add filled area gradient to 5h chart** — `.planning/todos/pending/2026-03-11-add-filled-area-gradient-to-5h-chart.md` (addressed in Phase 17)
 2. **Fix 13 failing JsonlServiceTests parameter mismatch** — `.planning/todos/pending/2026-03-17-fix-13-failing-jsonlservicetests-parameter-mismatch.md`
 
 ### Known Tech Debt
 
 - STYLE-04 badge CornerRadius: documented as 999, live value is 11 (visually equivalent)
 - ExportHelper.cs hardcoded isDark:true for chart export axis color (pre-existing)
-- 11-01-SUMMARY glyph value E8FB documented, F3B1 shipped (SUMMARY artifact is stale)
+- 13 pre-existing unit test failures in JsonlServiceTests (parameter naming mismatch, production unaffected)
 
 ### Blockers/Concerns
 
-- Phase 12: Verify whether to update or delete the stale ContextLimits dictionary (200K Opus entries)
-- Phase 13: Verify ISettingsService injection into JsonlService before planning (may require DI registration update in App.xaml.cs)
-- Phase 14: UNC path guard mandatory for Directory.Exists — Path.IsPathRooted AND not-UNC before calling
+(None — roadmap defined, ready to plan Phase 16)
 
 ## Session Continuity
 
-Last session: 2026-04-12T17:49:06Z
-Stopped at: Completed 15-01-PLAN.md
+Last session: 2026-04-13T17:33:56.869Z
+Stopped at: Completed 16-01-PLAN.md
 Resume file: None
