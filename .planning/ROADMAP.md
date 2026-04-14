@@ -61,7 +61,7 @@ Audit: `.planning/milestones/v1.2-MILESTONE-AUDIT.md`
 - [x] **Phase 16: Burn Rate Warning** — Prediction engine, inline banner, and toast notification when token exhaustion is projected (completed 2026-04-13)
 - [x] **Phase 17: Chart Horizontal Gradient** — Smooth green→yellow→orange→red gradient replacing flat zone fills on the 5-hour chart (completed 2026-04-13)
 - [x] **Phase 18: Settings Redesign** — Segmented Control with General/Updates/Account/About tabs at 360px width (completed 2026-04-13)
-- [ ] **Phase 19: Session Watcher Verification** — Confirm FileSystemWatcher catches file-level session metadata changes
+- [x] **Phase 19: Session Watcher Verification** — Confirm FileSystemWatcher catches file-level session metadata changes (completed 2026-04-14)
 
 ## Phase Details
 
@@ -119,7 +119,9 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Code review confirms NotifyFilter includes file-level change flags and IncludeSubdirectories is set correctly — or a targeted fix is applied if the configuration is wrong
   2. No regression is introduced to session refresh behavior
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [x] 19-01-PLAN.md — Integration tests verifying FileSystemWatcher catches file-level .jsonl changes in subdirectories
 
 ## Progress
 
@@ -142,5 +144,5 @@ Plans:
 | 15. Footer Tooltip & Accessibility | v1.2 | 2/2 | Complete | 2026-04-13 |
 | 16. Burn Rate Warning | v1.3 | 2/2 | Complete    | 2026-04-13 |
 | 17. Chart Horizontal Gradient | v1.3 | 2/2 | Complete    | 2026-04-13 |
-| 18. Settings Redesign | v1.3 | 2/2 | Complete   | 2026-04-13 |
-| 19. Session Watcher Verification | v1.3 | 0/? | Not started | - |
+| 18. Settings Redesign | v1.3 | 2/2 | Complete    | 2026-04-14 |
+| 19. Session Watcher Verification | v1.3 | 1/1 | Complete   | 2026-04-14 |
