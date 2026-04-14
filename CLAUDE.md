@@ -1,6 +1,6 @@
 # CCInfoWindows
 
-Modified Windows port of [stefanlange/ccInfo](https://github.com/stefanlange/ccInfo) (macOS v1.7.1).
+Modified Windows port of [stefanlange/ccInfo](https://github.com/stefanlange/ccInfo) (macOS v1.10.0).
 Real-time Claude Code usage monitoring: 5-hour window, weekly quota, context window, token counts, cost analytics.
 
 ## Stack
