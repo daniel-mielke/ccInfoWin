@@ -238,16 +238,16 @@
   </data>
 
   <!-- Settings Tabs (Phase 18) -->
-  <data name="SettingsTabGeneral.Text" xml:space="preserve">
+  <data name="SettingsTabGeneral" xml:space="preserve">
     <value>General</value>
   </data>
-  <data name="SettingsTabUpdates.Text" xml:space="preserve">
+  <data name="SettingsTabUpdates" xml:space="preserve">
     <value>Updates</value>
   </data>
-  <data name="SettingsTabAccount.Text" xml:space="preserve">
+  <data name="SettingsTabAccount" xml:space="preserve">
     <value>Account</value>
   </data>
-  <data name="SettingsTabAbout.Text" xml:space="preserve">
+  <data name="SettingsTabAbout" xml:space="preserve">
     <value>About</value>
   </data>
   <data name="SettingsGeneralHeader.Text" xml:space="preserve">

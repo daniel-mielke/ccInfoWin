@@ -37,54 +37,42 @@
             SelectedIndex="{x:Bind ViewModel.SelectedTabIndex, Mode=TwoWay}">
 
             <!-- General tab (green badge) -->
-            <controls:SegmentedItem>
+            <controls:SegmentedItem x:Name="TabGeneral">
                 <controls:SegmentedItem.Content>
-                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                        <Border Width="18" Height="18" CornerRadius="4"
-                                Background="{ThemeResource SettingsBadgeGreenBrush}">
-                            <FontIcon Glyph="&#xE713;" FontSize="10" Foreground="White" />
-                        </Border>
-                        <TextBlock l:Uids.Uid="SettingsTabGeneral" FontSize="12" VerticalAlignment="Center" />
-                    </StackPanel>
+                    <Border Width="30" Height="30" CornerRadius="6"
+                            Background="{ThemeResource SettingsBadgeGreenBrush}">
+                        <FontIcon Glyph="&#xE713;" FontSize="16" Foreground="White" />
+                    </Border>
                 </controls:SegmentedItem.Content>
             </controls:SegmentedItem>
 
             <!-- Updates tab (blue badge) -->
-            <controls:SegmentedItem>
+            <controls:SegmentedItem x:Name="TabUpdates">
                 <controls:SegmentedItem.Content>
-                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                        <Border Width="18" Height="18" CornerRadius="4"
-                                Background="{ThemeResource SettingsBadgeBlueBrush}">
-                            <FontIcon Glyph="&#xE895;" FontSize="10" Foreground="White" />
-                        </Border>
-                        <TextBlock l:Uids.Uid="SettingsTabUpdates" FontSize="12" VerticalAlignment="Center" />
-                    </StackPanel>
+                    <Border Width="30" Height="30" CornerRadius="6"
+                            Background="{ThemeResource SettingsBadgeBlueBrush}">
+                        <FontIcon Glyph="&#xE895;" FontSize="16" Foreground="White" />
+                    </Border>
                 </controls:SegmentedItem.Content>
             </controls:SegmentedItem>
 
             <!-- Account tab (red badge) -->
-            <controls:SegmentedItem>
+            <controls:SegmentedItem x:Name="TabAccount">
                 <controls:SegmentedItem.Content>
-                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                        <Border Width="18" Height="18" CornerRadius="4"
-                                Background="{ThemeResource SettingsBadgeRedBrush}">
-                            <FontIcon Glyph="&#xE77B;" FontSize="10" Foreground="White" />
-                        </Border>
-                        <TextBlock l:Uids.Uid="SettingsTabAccount" FontSize="12" VerticalAlignment="Center" />
-                    </StackPanel>
+                    <Border Width="30" Height="30" CornerRadius="6"
+                            Background="{ThemeResource SettingsBadgeRedBrush}">
+                        <FontIcon Glyph="&#xE77B;" FontSize="16" Foreground="White" />
+                    </Border>
                 </controls:SegmentedItem.Content>
             </controls:SegmentedItem>
 
             <!-- About tab (orange badge) -->
-            <controls:SegmentedItem>
+            <controls:SegmentedItem x:Name="TabAbout">
                 <controls:SegmentedItem.Content>
-                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                        <Border Width="18" Height="18" CornerRadius="4"
-                                Background="{ThemeResource SettingsBadgeOrangeBrush}">
-                            <FontIcon Glyph="&#xE946;" FontSize="10" Foreground="White" />
-                        </Border>
-                        <TextBlock l:Uids.Uid="SettingsTabAbout" FontSize="12" VerticalAlignment="Center" />
-                    </StackPanel>
+                    <Border Width="30" Height="30" CornerRadius="6"
+                            Background="{ThemeResource SettingsBadgeOrangeBrush}">
+                        <FontIcon Glyph="&#xE946;" FontSize="16" Foreground="White" />
+                    </Border>
                 </controls:SegmentedItem.Content>
             </controls:SegmentedItem>
 
@@ -123,7 +111,7 @@
                                              VerticalAlignment="Center" />
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
 
                             <!-- Row 2: Refresh Interval -->
                             <Grid Height="40" Padding="12,0">
@@ -142,7 +130,7 @@
                                           VerticalAlignment="Center" />
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
 
                             <!-- Row 3: Session Timeout -->
                             <Grid Height="40" Padding="12,0">
@@ -164,7 +152,7 @@
                                 </ComboBox>
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
 
                             <!-- Row 4: Dark Mode -->
                             <Grid Height="40" Padding="12,0">
@@ -182,7 +170,7 @@
                                              VerticalAlignment="Center" />
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
 
                             <!-- Row 5: Language -->
                             <Grid Height="40" Padding="12,0">
@@ -203,7 +191,7 @@
                                 </ComboBox>
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
 
                             <!-- Row 6: Sonnet Context -->
                             <Grid Height="40" Padding="12,0">
@@ -224,7 +212,7 @@
                                 </ComboBox>
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
 
                             <!-- Row 7: Reset Window Size -->
                             <Grid Height="40" Padding="12,0">
@@ -274,7 +262,7 @@
                                            VerticalAlignment="Center" />
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
 
                             <!-- Row 2: Pricing Source -->
                             <Grid Height="40" Padding="12,0">
@@ -292,7 +280,7 @@
                                            VerticalAlignment="Center" />
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
 
                             <!-- Row 3: Last Pricing Fetch -->
                             <Grid Height="40" Padding="12,0">
@@ -346,7 +334,7 @@
                                 </StackPanel>
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
 
                             <!-- Row 2: Logout Button -->
                             <Button Command="{x:Bind ViewModel.LogoutCommand}"
@@ -385,7 +373,7 @@
                                            VerticalAlignment="Center" />
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
 
                             <!-- Row 2: Version -->
                             <Grid Height="40" Padding="12,0">
@@ -403,7 +391,7 @@
                                            VerticalAlignment="Center" />
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
 
                             <!-- Row 3: GitHub Link -->
                             <Grid Height="40" Padding="12,0">
@@ -415,7 +403,7 @@
                                 </HyperlinkButton>
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,0" />
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
 
                             <!-- Row 4: Credits -->
                             <Grid MinHeight="40" Padding="12,8">

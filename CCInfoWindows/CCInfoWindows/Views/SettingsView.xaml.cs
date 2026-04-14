@@ -1,6 +1,7 @@
 using CCInfoWindows.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Controls;
+using WinUI3Localizer;
 
 namespace CCInfoWindows.Views;
 
@@ -15,6 +16,21 @@ public sealed partial class SettingsView : Page
     {
         ViewModel = App.Services.GetRequiredService<SettingsViewModel>();
         InitializeComponent();
-        Loaded += (s, e) => ViewModel.Initialize();
+        Loaded += OnLoaded;
+    }
+
+    private void OnLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        ViewModel.Initialize();
+        ApplyTabTooltips();
+    }
+
+    private void ApplyTabTooltips()
+    {
+        var localizer = Localizer.Get();
+        ToolTipService.SetToolTip(TabGeneral, localizer.GetLocalizedString("SettingsTabGeneral"));
+        ToolTipService.SetToolTip(TabUpdates, localizer.GetLocalizedString("SettingsTabUpdates"));
+        ToolTipService.SetToolTip(TabAccount, localizer.GetLocalizedString("SettingsTabAccount"));
+        ToolTipService.SetToolTip(TabAbout, localizer.GetLocalizedString("SettingsTabAbout"));
     }
 }
