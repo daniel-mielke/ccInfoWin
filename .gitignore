@@ -1,5 +1,6 @@
 # Planning docs (local only)
 .planning/
+.claude/
 
 #Specs
 spec/
