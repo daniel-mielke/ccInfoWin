@@ -51,10 +51,22 @@ CCInfoWindows/CCInfoWindows/
 ## Build Commands
 
 ```bash
-dotnet build CCInfoWindows/CCInfoWindows.csproj
-dotnet run --project CCInfoWindows/CCInfoWindows
-dotnet publish CCInfoWindows/CCInfoWindows.csproj -c Release -r win-x64 --self-contained
+# Debug build (default)
+dotnet build CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj
+
+# Run in debug mode
+dotnet run --project CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj
+
+# Release build (for desktop shortcut / taskbar pin)
+dotnet build CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj -c Release -o CCInfoWindows/CCInfoWindows/bin/x64/Release/net9.0-windows10.0.19041.0/
 ```
+
+### Release Build Rules (STRICT)
+
+- **NEVER use `dotnet publish` with trimming** -- `PublishTrimmed=true` breaks the app at runtime because System.Text.Json uses Reflection (IL2026). The trimmer removes types needed for JSON deserialization of API responses, settings, and cache files.
+- **Always use `dotnet build -c Release`** instead of `dotnet publish` -- produces a working exe without trimming issues.
+- **Always pass `-o`** to target the correct output directory -- without `-o`, the build outputs to a `win-x64/` subdirectory that differs from the expected launch path.
+- **Release exe location:** `CCInfoWindows/CCInfoWindows/bin/x64/Release/net9.0-windows10.0.19041.0/CCInfoWindows.exe`
 
 ## Bash Permission Rules (STRICT -- zero exceptions)
 

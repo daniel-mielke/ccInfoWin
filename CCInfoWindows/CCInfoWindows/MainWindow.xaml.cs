@@ -68,6 +68,9 @@ public sealed partial class MainWindow : Window, IRecipient<ThemeChangedMessage>
 
     private void ConfigureWindow()
     {
+        Title = "ccInfoWin";
+        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico"));
+
         var defaultSize = WindowHelper.GetDefaultWindowSize(GetDpiScale());
         AppWindow.Resize(defaultSize);
 

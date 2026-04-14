@@ -340,9 +340,10 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         {
             await _jsonlService.InitializeAsync();
         }
-        catch
+        catch (Exception ex)
         {
             // Background scan failure should not block the dashboard
+            Debug.WriteLine($"[MainViewModel] JSONL init failed: {ex.Message}");
         }
 
         // Load pricing in background — non-blocking, fallback activates on failure
