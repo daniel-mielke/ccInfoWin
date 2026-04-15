@@ -17,7 +17,8 @@ Real-time Claude Code usage monitoring for Windows. A Windows port of [ccInfo](h
 
 ## Screenshots
 
-<!-- TODO: Add screenshots after first release -->
+<img width="427" height="1228" alt="image" src="https://github.com/user-attachments/assets/2c49465e-ba32-4d69-856f-4ec2a88d7470" />
+
 
 ## Installation
 
