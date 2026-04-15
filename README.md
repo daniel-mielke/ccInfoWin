@@ -40,14 +40,16 @@ The installer:
 ```bash
 git clone https://github.com/daniel-mielke/ccInfoWin.git
 cd ccInfoWin
-dotnet build CCInfoWindows/CCInfoWindows.csproj
+dotnet build CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj
 dotnet run --project CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj
 ```
 
-**Publish self-contained:**
+**Release build:**
 ```bash
-dotnet publish CCInfoWindows/CCInfoWindows.csproj -c Release -r win-x64 --self-contained
+dotnet build CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj -c Release -o CCInfoWindows/CCInfoWindows/bin/x64/Release/net9.0-windows10.0.19041.0/
 ```
+
+> **Note:** Do not use `dotnet publish` with trimming — `PublishTrimmed` breaks JSON deserialization at runtime. Always use `dotnet build -c Release` instead.
 
 ## Tech Stack
 
