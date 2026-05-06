@@ -244,6 +244,12 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     private bool _isRefreshingSessionList;
 
     /// <summary>
+    /// One-shot flag for D-01 auto-reauth routing. Reset at constructor default,
+    /// PollUsageAsync HTTP 200 success path, Logout command, and Receive(AuthStateChangedMessage(true)).
+    /// </summary>
+    private bool _autoReauthAttempted;
+
+    /// <summary>
     /// Sends a ChartInvalidateMessage to trigger Win2D canvas redraw in MainView.
     /// </summary>
     private void InvalidateChart() => WeakReferenceMessenger.Default.Send(new ChartInvalidateMessage());
@@ -408,6 +414,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             if (result != null)
             {
                 UpdateUsageProperties(result);
+                _autoReauthAttempted = false;  // D-02: HTTP 200 resets the auto-reauth budget
             }
             else
             {
@@ -873,6 +880,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         _bridge.Reset();
         WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
         IsSessionExpired = false;
+        _autoReauthAttempted = false;  // D-02: explicit reset on user-driven logout
         _navigationService.NavigateTo<LoginView>();
     }
 
@@ -928,11 +936,33 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
 
     public void Receive(AuthStateChangedMessage message)
     {
-        if (!message.Value)
+        // D-03: post-login refresh — clear error flags, reset auto-reauth budget, refresh immediately.
+        if (message.Value)
         {
-            IsSessionExpired = true;
-            StatusMessage = "Session expired. Please re-login to continue.";
+            IsSessionExpired = false;
+            HasApiError = false;
+            _autoReauthAttempted = false;
+            // RefreshCommand (NOT RefreshUsageCommand) is the [RelayCommand]-generated symbol from
+            // the Refresh() RelayCommand. Fire-and-forget is intentional — Receive is void
+            // and IsRefreshing guards reentrancy in PollUsageAsync (Pitfall 6 accepted: option (a)).
+            RefreshCommand.ExecuteAsync(null);
+            return;
         }
+
+        // D-01: first 401 in a session → auto-navigate to LoginView, do NOT open InfoBar.
+        // NOTE: ClaudeApiService has two send sites for AuthStateChangedMessage(false)
+        // (FetchUsageAsync:88 and TryMigrateOrgIdAsync:184). Stacked-401 edge case is accepted —
+        // Receive(true) post-login clears IsSessionExpired so a stale flag resolves at next login.
+        if (!_autoReauthAttempted)
+        {
+            _autoReauthAttempted = true;
+            _navigationService.NavigateTo<LoginView>();
+            return;
+        }
+
+        // Second 401 (and beyond): existing InfoBar fallback path (AUTH-02).
+        IsSessionExpired = true;
+        StatusMessage = "Session expired. Please re-login to continue.";
     }
 }
 
