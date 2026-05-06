@@ -5,6 +5,7 @@ using CCInfoWindows.Views;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using Microsoft.UI.Xaml;
 using WinUI3Localizer;
 
 namespace CCInfoWindows.ViewModels;
@@ -18,6 +19,9 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ICredentialService _credentialService;
     private readonly INavigationService _navigationService;
     private readonly IPricingService _pricingService;
+
+    // D-09: 1-minute UI-thread-bound timer. Owned by SettingsViewModel; lifecycle driven by SettingsView code-behind (D-10).
+    private DispatcherTimer? _aboutTimestampTimer;
 
     /// <summary>
     /// Represents a selectable refresh interval option for the ComboBox.
@@ -89,6 +93,26 @@ public partial class SettingsViewModel : ObservableObject
     public string LastPricingFetchText => _pricingService.LastFetch.HasValue
         ? _pricingService.LastFetch.Value.LocalDateTime.ToString("dd.MM.yyyy HH:mm")
         : "Nie";
+
+    /// <summary>
+    /// Localized "X minutes ago" string for the About tab. Re-evaluated on each
+    /// _aboutTimestampTimer Tick (D-09, D-11). v1.4 fallback: English inline literals
+    /// — proper resw keys (LastFetchMinutesAgo, LastFetchNever) are deferred to a
+    /// future phase per RESEARCH [A2].
+    /// </summary>
+    public string LastFetchRelativeTime
+    {
+        get
+        {
+            var lastFetch = _pricingService.LastFetch;
+            if (!lastFetch.HasValue)
+                return "Never";
+
+            var elapsed = DateTimeOffset.Now - lastFetch.Value;
+            var minutes = (int)Math.Max(0, elapsed.TotalMinutes);
+            return minutes == 1 ? "1 minute ago" : $"{minutes} minutes ago";
+        }
+    }
 
     public SettingsViewModel(
         ISettingsService settingsService,
@@ -221,5 +245,47 @@ public partial class SettingsViewModel : ObservableObject
     private void GoBack()
     {
         _navigationService.GoBack();
+    }
+
+    /// <summary>
+    /// D-09: Starts the 1-minute About-tab timestamp timer. Idempotent —
+    /// multiple Start calls do not create extra timers (Pitfall 7 guard).
+    /// Called by SettingsView code-behind on Loaded (if About is initial tab)
+    /// and on Segmented.SelectionChanged when index == AboutTabIndex.
+    /// </summary>
+    public void StartAboutTimestampTimer()
+    {
+        if (_aboutTimestampTimer != null) return;
+
+        _aboutTimestampTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMinutes(1)
+        };
+        _aboutTimestampTimer.Tick += OnAboutTimestampTimerTick;
+        _aboutTimestampTimer.Start();
+
+        // Initial refresh — show current "X minutes ago" without waiting 60s.
+        OnPropertyChanged(nameof(LastFetchRelativeTime));
+    }
+
+    /// <summary>
+    /// D-09: Stops and disposes the About-tab timestamp timer.
+    /// Called on Segmented.SelectionChanged when leaving About, and on Page.Unloaded
+    /// (belt-and-suspenders — POLISH-08).
+    /// </summary>
+    public void StopAboutTimestampTimer()
+    {
+        if (_aboutTimestampTimer == null) return;
+
+        _aboutTimestampTimer.Tick -= OnAboutTimestampTimerTick;
+        _aboutTimestampTimer.Stop();
+        _aboutTimestampTimer = null;
+    }
+
+    private void OnAboutTimestampTimerTick(object? sender, object e)
+    {
+        // D-09 + D-11: timer drives rebinding by raising PropertyChanged;
+        //              LastFetchRelativeTime is pure-computed — recomputes on read.
+        OnPropertyChanged(nameof(LastFetchRelativeTime));
     }
 }
