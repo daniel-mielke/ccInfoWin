@@ -196,7 +196,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     private string _contextModelBadge = string.Empty;
 
     [ObservableProperty]
-    private SolidColorBrush _contextModelBadgeColor = new(Microsoft.UI.Colors.Gray);
+    private SolidColorBrush _contextModelBadgeColor = null!;
 
     [ObservableProperty]
     private bool _showAutocompactWarning;
