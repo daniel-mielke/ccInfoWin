@@ -141,6 +141,11 @@ public partial class SettingsViewModel : ObservableObject
         var settings = _settingsService.LoadSettings();
         settings.SessionActivityThresholdMinutes = MapThresholdIndexToMinutes(value);
         _settingsService.SaveSettings(settings);
+
+        // D-08: notify MainViewModel so SortedSessions tooltips update immediately
+        //       (without waiting for the next 30s auto-poll).
+        WeakReferenceMessenger.Default.Send(
+            new SessionTimeoutChangedMessage(settings.SessionActivityThresholdMinutes));
     }
 
     partial void OnIsAutostartChanged(bool value)

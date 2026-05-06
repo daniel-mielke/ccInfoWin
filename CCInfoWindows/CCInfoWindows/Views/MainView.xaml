@@ -103,6 +103,7 @@
                     <ComboBox.ItemTemplate>
                         <DataTemplate x:DataType="viewmodels:SessionDisplayItem">
                             <TextBlock Text="{x:Bind DisplayName}"
+                                       ToolTipService.ToolTip="{x:Bind TooltipText}"
                                        VerticalAlignment="Center" />
                         </DataTemplate>
                     </ComboBox.ItemTemplate>
