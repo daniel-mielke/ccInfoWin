@@ -117,6 +117,14 @@
     <value>Beenden</value>
   </data>
 
+  <!-- LoginView reload button (Phase 20) -->
+  <data name="LoginReloadButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Seite neu laden</value>
+  </data>
+  <data name="LoginReloadButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Login-Seite neu laden</value>
+  </data>
+
   <!-- MainView Session Expired InfoBar -->
   <data name="SessionExpiredInfoBar.Title" xml:space="preserve">
     <value>Sitzung abgelaufen</value>
