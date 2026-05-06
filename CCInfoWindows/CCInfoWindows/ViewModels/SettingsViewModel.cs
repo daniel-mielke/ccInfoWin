@@ -1,11 +1,11 @@
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Messages;
+using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
 using CCInfoWindows.Views;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
-using Microsoft.UI.Xaml;
 using WinUI3Localizer;
 
 namespace CCInfoWindows.ViewModels;
@@ -21,7 +21,10 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IPricingService _pricingService;
 
     // D-09: 1-minute UI-thread-bound timer. Owned by SettingsViewModel; lifecycle driven by SettingsView code-behind (D-10).
-    private DispatcherTimer? _aboutTimestampTimer;
+    private IDispatcherTimer? _aboutTimestampTimer;
+
+    // Testability seam — overridden in unit tests to supply a fake IDispatcherTimer (avoids WinRT COM init).
+    internal Func<IDispatcherTimer> TimerFactory { get; set; } = () => new WinuiDispatcherTimerAdapter();
 
     /// <summary>
     /// Represents a selectable refresh interval option for the ComboBox.
@@ -257,10 +260,8 @@ public partial class SettingsViewModel : ObservableObject
     {
         if (_aboutTimestampTimer != null) return;
 
-        _aboutTimestampTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMinutes(1)
-        };
+        _aboutTimestampTimer = TimerFactory();
+        _aboutTimestampTimer.Interval = TimeSpan.FromMinutes(1);
         _aboutTimestampTimer.Tick += OnAboutTimestampTimerTick;
         _aboutTimestampTimer.Start();
 
