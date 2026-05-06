@@ -148,9 +148,15 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     [ObservableProperty]
     private bool _hasSonnetData;
 
+    // --- Spinner / refresh constants ---
+
+    private const int MinimumSpinnerDisplayMs = 250;
+
     // --- UI state ---
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RefreshCommand))]
+    // D-04: drives RefreshCommand.CanExecute via NotifyCanExecuteChangedFor — canonical CommunityToolkit.Mvvm 8.4 pattern, FIRST use in this codebase
     private bool _isRefreshing;
 
     [ObservableProperty]
@@ -401,10 +407,17 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         return Task.FromResult(!string.IsNullOrEmpty(token));
     }
 
+    // D-03: auto-poll wrapper — no 250ms floor (D-02). The 250ms anti-flicker only applies to manual Refresh.
     private async Task PollUsageAsync()
     {
         if (IsRefreshing) return;
         IsRefreshing = true;
+        try { await PollUsageCoreAsync(); }
+        finally { IsRefreshing = false; }
+    }
+
+    private async Task PollUsageCoreAsync()
+    {
         HasApiError = false;
         ApiErrorMessage = string.Empty;
 
@@ -433,10 +446,6 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             HasApiError = true;
             ApiErrorMessage = "API request failed. Please try again.";
             Debug.WriteLine($"[MainViewModel] PollUsage: {ex.Message}");
-        }
-        finally
-        {
-            IsRefreshing = false;
         }
     }
 
@@ -854,11 +863,23 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         _settingsService.SaveSettings(settings);
     }
 
-    [RelayCommand]
+    // D-02: 250ms anti-flicker floor — manual click only. D-04 Option A: CanExecute auto-disables button while refreshing.
+    [RelayCommand(CanExecute = nameof(CanRefresh))]
     private async Task Refresh()
     {
-        await PollUsageAsync();
+        if (IsRefreshing) return;
+        IsRefreshing = true;
+        try
+        {
+            await Task.WhenAll(
+                PollUsageCoreAsync(),
+                Task.Delay(TimeSpan.FromMilliseconds(MinimumSpinnerDisplayMs))
+            );
+        }
+        finally { IsRefreshing = false; }
     }
+
+    private bool CanRefresh => !IsRefreshing;
 
     [RelayCommand]
     private void OpenSettings()
