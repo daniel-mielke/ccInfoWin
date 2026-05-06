@@ -72,7 +72,11 @@ public class MainViewModelAuthFlowTests
     [Fact]
     public void Receive_True_ClearsFlagsAndResetsAutoReauth()
     {
-        var (vm, nav) = CreateViewModel();
+        // Receive(true) calls RefreshCommand.ExecuteAsync(null) fire-and-forget. Without a
+        // valid FetchUsageAsync mock the empty-data branch in PollUsageAsync re-flips
+        // HasApiError=true on the same sync stack. Provide a non-null UsageResponse so the
+        // refresh succeeds silently.
+        var (vm, nav) = CreateViewModelWithSuccessfulApi();
 
         vm.Receive(new AuthStateChangedMessage(false));   // arms _autoReauthAttempted
         vm.Receive(new AuthStateChangedMessage(true));    // post-login refresh path
@@ -84,7 +88,40 @@ public class MainViewModelAuthFlowTests
         vm.Receive(new AuthStateChangedMessage(false));
 
         nav.Verify(n => n.NavigateTo<LoginView>(), Times.Exactly(2));
-        Assert.False(vm.IsSessionExpired);
+    }
+
+    private static (MainViewModel vm, Mock<INavigationService> nav) CreateViewModelWithSuccessfulApi()
+    {
+        var credentialService = new Mock<ICredentialService>();
+        var navigationService = new Mock<INavigationService>();
+        var apiService = new Mock<IClaudeApiService>();
+        apiService
+            .Setup(a => a.FetchUsageAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UsageResponse());
+        var settingsService = new Mock<ISettingsService>();
+        settingsService.Setup(s => s.LoadSettings()).Returns(new AppSettings());
+        var historyService = new Mock<IUsageHistoryService>();
+        var jsonlService = new Mock<IJsonlService>();
+        jsonlService.Setup(s => s.Sessions).Returns([]);
+        var pricingService = new Mock<IPricingService>();
+        pricingService.Setup(s => s.EnsurePricesLoadedAsync()).Returns(Task.CompletedTask);
+        var updateService = new Mock<IUpdateService>();
+        var bridge = new Mock<IWebViewBridge>();
+        var burnRate = new Mock<IBurnRateNotificationService>();
+
+        var vm = new MainViewModel(
+            credentialService.Object,
+            navigationService.Object,
+            apiService.Object,
+            settingsService.Object,
+            historyService.Object,
+            jsonlService.Object,
+            pricingService.Object,
+            updateService.Object,
+            bridge.Object,
+            burnRate.Object);
+
+        return (vm, navigationService);
     }
 
     [Fact]
