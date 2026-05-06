@@ -59,6 +59,15 @@
   <data name="NoActiveSession.Text" xml:space="preserve">
     <value>Keine aktive Session</value>
   </data>
+  <data name="NotSignedIn.Text" xml:space="preserve">
+    <value>Nicht angemeldet</value>
+  </data>
+  <data name="NoData.Text" xml:space="preserve">
+    <value>Keine Daten</value>
+  </data>
+  <data name="Loading.Text" xml:space="preserve">
+    <value>Wird geladen</value>
+  </data>
 
   <!-- MainView statistics tab labels -->
   <data name="TabSession.Content" xml:space="preserve">
@@ -123,6 +132,11 @@
   </data>
   <data name="LoginReloadButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Login-Seite neu laden</value>
+  </data>
+
+  <!-- MainView inactive-session tooltip (Phase 22 / 23) -->
+  <data name="InactiveSessionTooltip" xml:space="preserve">
+    <value>Inaktiv seit &gt; {0}min</value>
   </data>
 
   <!-- MainView Session Expired InfoBar -->
