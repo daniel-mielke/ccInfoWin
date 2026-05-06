@@ -33,6 +33,10 @@ public partial class SettingsViewModel : ObservableObject
 
     private const int DefaultRefreshSeconds = 60;
 
+    // D-10: tab order is 0=General, 1=Updates, 2=Account, 3=About
+    // Used by SettingsView code-behind to start/stop the About-tab timer on navigation.
+    public const int AboutTabIndex = 3;
+
     public List<RefreshOption> RefreshOptions { get; } =
     [
         new("30s", 30),

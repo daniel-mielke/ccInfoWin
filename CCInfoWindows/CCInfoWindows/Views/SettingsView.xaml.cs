@@ -11,8 +11,8 @@ namespace CCInfoWindows.Views;
 /// </summary>
 public sealed partial class SettingsView : Page
 {
-    // D-10: tab order is 0=General, 1=Updates, 2=Account, 3=About
-    private const int AboutTabIndex = 3;
+    // D-10: tab order defined in SettingsViewModel.AboutTabIndex (shared constant)
+    private const int AboutTabIndex = SettingsViewModel.AboutTabIndex;
 
     public SettingsViewModel ViewModel { get; }
 
