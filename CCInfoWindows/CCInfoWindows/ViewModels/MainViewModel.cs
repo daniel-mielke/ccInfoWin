@@ -39,12 +39,15 @@ public class SessionDisplayItem
     public required SessionInfo Session { get; init; }
     public required string DisplayName { get; init; }
     public required bool IsActive { get; init; }
+    public required string TooltipText { get; init; }   // D-05
 }
 
 /// <summary>
 /// Dashboard ViewModel with API polling, usage history accumulation, chart invalidation, and footer commands.
 /// </summary>
-public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChangedMessage>
+public partial class MainViewModel : ObservableObject,
+    IRecipient<AuthStateChangedMessage>,
+    IRecipient<SessionTimeoutChangedMessage>   // D-08
 {
     private readonly ICredentialService _credentialService;
     private readonly INavigationService _navigationService;
@@ -291,6 +294,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
 
         _updateService.UpdateAvailable += OnUpdateAvailable;
         WeakReferenceMessenger.Default.Register<AuthStateChangedMessage>(this);
+        WeakReferenceMessenger.Default.Register<SessionTimeoutChangedMessage>(this);   // D-08
     }
 
     /// <summary>
@@ -614,6 +618,29 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         WeakReferenceMessenger.Default.UnregisterAll(this);
     }
 
+    // D-07: Active = single-line Cwd. Inactive = two-line "Cwd\n<template formatted with threshold>".
+    //       Try/catch protects against Phase 23 ordering (key may not exist yet).
+    private static string ComputeTooltipText(SessionInfo session, bool isActive, int sessionTimeoutMinutes)
+    {
+        if (isActive)
+        {
+            return session.Cwd;
+        }
+
+        string template;
+        try
+        {
+            template = Localizer.Get().GetLocalizedString("InactiveSessionTooltip");
+        }
+        catch
+        {
+            // Defensive fallback if Localizer throws (Phase 23 authors the resw key).
+            template = "Inactive for > {0}min";
+        }
+
+        return $"{session.Cwd}\n{string.Format(template, sessionTimeoutMinutes)}";
+    }
+
     /// <summary>
     /// Rebuilds the Sessions collection from the JSONL service and restores/retains the selected session.
     /// Called on the UI thread.
@@ -641,15 +668,22 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         // Guard: suppress OnSelectedSessionChanged while rebuilding
         _isRefreshingSessionList = true;
 
-        // Only show sessions with recent activity; sort by last activity descending
+        // D-06: removed .Where(s => s.IsActive(threshold)) filter — inactive sessions now visible
+        //       in ComboBox to support POLISH-04 (two-line tooltip). Per-item IsActive replaces
+        //       the previous hardcoded `IsActive = true` (was correct only because of the filter).
+        var thresholdMinutes = settings.SessionActivityThresholdMinutes;
         var displayItems = latestSessions
-            .Where(s => s.IsActive(threshold))
             .OrderByDescending(s => s.LastActivity)
-            .Select(s => new SessionDisplayItem
+            .Select(s =>
             {
-                Session = s,
-                DisplayName = s.DisplayName,
-                IsActive = true
+                var isActive = s.IsActive(threshold);
+                return new SessionDisplayItem
+                {
+                    Session = s,
+                    DisplayName = s.DisplayName,
+                    IsActive = isActive,
+                    TooltipText = ComputeTooltipText(s, isActive, thresholdMinutes)
+                };
             })
             .ToList();
 
@@ -984,6 +1018,13 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         // Second 401 (and beyond): existing InfoBar fallback path (AUTH-02).
         IsSessionExpired = true;
         StatusMessage = "Session expired. Please re-login to continue.";
+    }
+
+    public void Receive(SessionTimeoutChangedMessage message)
+    {
+        // D-08: rebuild SortedSessions on threshold change so TooltipText reflects new minutes.
+        // Dispatched to UI thread — RefreshSessionList requires it.
+        _dispatcherQueue?.TryEnqueue(RefreshSessionList);
     }
 }
 
