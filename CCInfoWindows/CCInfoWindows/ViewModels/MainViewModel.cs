@@ -561,7 +561,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
 
     private static readonly TimeSpan WindowResetTolerance = TimeSpan.FromMinutes(2);
 
-    private static bool IsWindowReset(DateTimeOffset? storedResetsAt, DateTimeOffset? apiResetsAt)
+    internal static bool IsWindowReset(DateTimeOffset? storedResetsAt, DateTimeOffset? apiResetsAt)
     {
         if (!storedResetsAt.HasValue || !apiResetsAt.HasValue) return false;
 
