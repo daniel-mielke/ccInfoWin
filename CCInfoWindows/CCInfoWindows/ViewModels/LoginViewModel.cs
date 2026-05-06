@@ -99,7 +99,10 @@ public partial class LoginViewModel : ObservableObject
         webView.CoreWebView2.HistoryChanged += HandleHistoryChanged;
         webView.NavigationCompleted += HandleNavigationCompleted;
         webView.CoreWebView2.Navigate("https://claude.ai/login");
-        IsLoading = false;
+        // D-08: IsLoading stays true here. HandleNavigationCompleted flips it to false
+        // ONLY when args.IsSuccess && Source starts with https://claude.ai/login. This
+        // keeps LoginWebView (bound to inverse of IsLoading) Collapsed and the loading
+        // overlay (bound to IsLoading) Visible — preventing AUTH-07 flash of cached chat URL.
     }
 
     private async void HandleSourceChanged(CoreWebView2 sender, CoreWebView2SourceChangedEventArgs args)
@@ -134,13 +137,28 @@ public partial class LoginViewModel : ObservableObject
 
     /// <summary>
     /// Handles full page navigation completion.
+    /// D-08: extend IsLoading semantics — keep IsLoading=true (loading overlay visible,
+    /// LoginWebView Collapsed via inverse binding in LoginView.xaml) until the login URL
+    /// itself has loaded successfully. Single source of truth, no second visibility flag.
+    /// args.IsSuccess guards against offline/error completions (Pitfall 4).
     /// </summary>
     public async void HandleNavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
     {
         try
         {
             if (_loginHandled || sender.CoreWebView2 is null) return;
-            await TryExtractSessionCookieAsync(sender.CoreWebView2, sender.CoreWebView2.Source ?? "");
+
+            var source = sender.CoreWebView2.Source ?? string.Empty;
+
+            // D-08: reveal the WebView2 (and hide the loading overlay) only when the login URL
+            // has finished loading successfully — prevents AUTH-07 flash of any cached chat URL.
+            if (args.IsSuccess &&
+                source.StartsWith("https://claude.ai/login", StringComparison.OrdinalIgnoreCase))
+            {
+                IsLoading = false;
+            }
+
+            await TryExtractSessionCookieAsync(sender.CoreWebView2, source);
         }
         catch (Exception ex)
         {
