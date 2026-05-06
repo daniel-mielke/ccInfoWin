@@ -22,6 +22,11 @@ public class NavigationService : INavigationService
     public void NavigateTo<TPage>() where TPage : Page
     {
         Debug.Assert(_frame is not null, "NavigationService.Initialize must be called before NavigateTo");
+        // D-09: bring the window to foreground before navigating. When the window is already
+        // focused, Activate() is a zero-cost no-op (no flicker, no focus theft). When the window
+        // is minimized during a background poll → 401 → auto-reauth, the user sees the new page
+        // immediately rather than discovering it later. Satisfies AUTH-05.
+        App.MainWindow?.Activate();
         _frame?.Navigate(
             typeof(TPage),
             null,
