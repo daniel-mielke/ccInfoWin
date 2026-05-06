@@ -35,4 +35,14 @@ public sealed partial class LoginView : Page
             Debug.WriteLine($"[LoginView] OnLoaded failed: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// D-06: Manual reload of the login page. Double null guard handles
+    /// the early-click case where CoreWebView2 has not yet been initialized
+    /// by EnsureCoreWebView2Async (Pitfall 1). One-shot — no retry, no busy state.
+    /// </summary>
+    private void OnReloadLoginClicked(object sender, RoutedEventArgs e)
+    {
+        LoginWebView?.CoreWebView2?.Reload();
+    }
 }
