@@ -25,4 +25,13 @@
     <ProjectReference Include="..\CCInfoWindows\CCInfoWindows\CCInfoWindows.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\CCInfoWindows\CCInfoWindows\Strings\en-US\Resources.resw" Link="Strings\en-US\Resources.resw">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\CCInfoWindows\CCInfoWindows\Strings\de-DE\Resources.resw" Link="Strings\de-DE\Resources.resw">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
