@@ -1,5 +1,6 @@
 using CCInfoWindows.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using WinUI3Localizer;
 
@@ -10,6 +11,9 @@ namespace CCInfoWindows.Views;
 /// </summary>
 public sealed partial class SettingsView : Page
 {
+    // D-10: tab order is 0=General, 1=Updates, 2=Account, 3=About
+    private const int AboutTabIndex = 3;
+
     public SettingsViewModel ViewModel { get; }
 
     public SettingsView()
@@ -17,12 +21,35 @@ public sealed partial class SettingsView : Page
         ViewModel = App.Services.GetRequiredService<SettingsViewModel>();
         InitializeComponent();
         Loaded += OnLoaded;
+        // Unloaded is wired via XAML attribute (Page.Unloaded="OnUnloaded")
     }
 
-    private void OnLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
         ViewModel.Initialize();
         ApplyTabTooltips();
+        // D-10: if Settings opens with About already selected (rare — persistence),
+        // start the timer immediately so "X minutes ago" is live from t=0.
+        if (TabsSegmented.SelectedIndex == AboutTabIndex)
+            ViewModel.StartAboutTimestampTimer();
+    }
+
+    private void OnSegmentedSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // D-10: route Segmented.SelectionChanged to ViewModel timer lifecycle.
+        // ViewModel may be null during early initialization; guard.
+        if (ViewModel == null) return;
+
+        if (TabsSegmented.SelectedIndex == AboutTabIndex)
+            ViewModel.StartAboutTimestampTimer();
+        else
+            ViewModel.StopAboutTimestampTimer();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        // D-10: belt-and-suspenders — always stop on Page.Unloaded (POLISH-08).
+        ViewModel?.StopAboutTimestampTimer();
     }
 
     private void ApplyTabTooltips()

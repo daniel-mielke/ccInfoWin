@@ -7,7 +7,8 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:l="using:WinUI3Localizer"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
-    mc:Ignorable="d">
+    mc:Ignorable="d"
+    Unloaded="OnUnloaded">
 
     <Grid Background="{ThemeResource AppBackgroundBrush}" Padding="16,12">
         <Grid.RowDefinitions>
@@ -32,8 +33,10 @@
 
         <!-- Row 1: Segmented Control — 4 tabs with colored icon badges -->
         <controls:Segmented Grid.Row="1"
+            x:Name="TabsSegmented"
             HorizontalAlignment="Stretch"
             Margin="0,0,0,12"
+            SelectionChanged="OnSegmentedSelectionChanged"
             SelectedIndex="{x:Bind ViewModel.SelectedTabIndex, Mode=TwoWay}">
 
             <!-- General tab (green badge) -->
@@ -292,7 +295,7 @@
                                            FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
                                            VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="1"
-                                           Text="{x:Bind ViewModel.LastPricingFetchText}"
+                                           Text="{x:Bind ViewModel.LastFetchRelativeTime, Mode=OneWay}"
                                            FontSize="13" HorizontalAlignment="Right"
                                            Foreground="{ThemeResource PrimaryTextBrush}"
                                            VerticalAlignment="Center" />
