@@ -27,6 +27,7 @@ public sealed partial class MainWindow : Window, IRecipient<ThemeChangedMessage>
 
     private readonly ISettingsService _settingsService;
     private readonly INavigationService _navigationService;
+    private readonly IUsageHistoryService _historyService;
 
     public MainWindow()
     {
@@ -34,6 +35,7 @@ public sealed partial class MainWindow : Window, IRecipient<ThemeChangedMessage>
 
         _settingsService = App.Services.GetRequiredService<ISettingsService>();
         _navigationService = App.Services.GetRequiredService<INavigationService>();
+        _historyService = App.Services.GetRequiredService<IUsageHistoryService>();
 
         ConfigureWindow();
         RestoreWindowState();
@@ -113,5 +115,13 @@ public sealed partial class MainWindow : Window, IRecipient<ThemeChangedMessage>
             AppWindow.Size.Height);
 
         _settingsService.SaveWindowState(state);
+
+        // HIST-01: synchronous flush of in-memory history snapshot before window teardown (D-01, D-02, D-09, D-14).
+        // Snapshot is null when the user has logged out (D-13) or no successful poll has occurred yet -- skip in those cases.
+        var snapshot = _historyService.PeekLastSnapshot();
+        if (snapshot != null)
+        {
+            _historyService.SaveHistory(snapshot);
+        }
     }
 }
