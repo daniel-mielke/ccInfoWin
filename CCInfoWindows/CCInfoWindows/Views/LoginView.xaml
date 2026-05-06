@@ -5,16 +5,23 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:l="using:WinUI3Localizer"
     mc:Ignorable="d">
 
     <Grid>
-        <!-- Full-window WebView2 for claude.ai login -->
+        <!-- Full-window WebView2 for claude.ai login.
+             D-07/D-08: Visibility is bound to the INVERSE of IsLoading. The flag stays true
+             (so this WebView2 stays Collapsed) until LoginViewModel.HandleNavigationCompleted
+             fires for the login URL with args.IsSuccess == true (Task 3). The existing loading
+             overlay is bound to IsLoading directly (BoolToVisibilityConverter) — they are
+             two views of the SAME flag, so no second visibility property exists. -->
         <WebView2
             x:Name="LoginWebView"
             HorizontalAlignment="Stretch"
-            VerticalAlignment="Stretch" />
+            VerticalAlignment="Stretch"
+            Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource InvertedBoolToVisibilityConverter}}" />
 
-        <!-- Loading overlay -->
+        <!-- Loading overlay — visible while IsLoading == true (single source of truth). -->
         <Grid
             Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
             Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -34,5 +41,22 @@
             Severity="Error"
             VerticalAlignment="Top"
             Margin="8" />
+
+        <!-- D-04 / D-05: Reload button overlay (top-right). Visual mirrors MainView footer FooterRefreshButton.
+             Glyph &#xE72C; (Reload) is distinct from MainView's &#xE895; (ArrowSync) — semantically correct.
+             l:Uids.Uid resolves LoginReloadButton.* resw keys (Plan 01 Task 2 added them in en-US + de-DE). -->
+        <Button l:Uids.Uid="LoginReloadButton"
+                Click="OnReloadLoginClicked"
+                Background="Transparent"
+                BorderThickness="0"
+                Padding="8"
+                CornerRadius="6"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Margin="8">
+            <FontIcon Glyph="&#xE72C;"
+                      FontSize="16"
+                      Foreground="{ThemeResource SecondaryTextBrush}" />
+        </Button>
     </Grid>
 </Page>
