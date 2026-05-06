@@ -367,7 +367,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         if (cached != null)
         {
             IsUpdatingFromCache = true;
-            UpdateUsageProperties(cached);
+            await UpdateUsagePropertiesAsync(cached);
         }
 
         // Start poll timer
@@ -413,7 +413,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             var result = await _apiService.FetchUsageAsync();
             if (result != null)
             {
-                UpdateUsageProperties(result);
+                await UpdateUsagePropertiesAsync(result);
                 _autoReauthAttempted = false;  // D-02: HTTP 200 resets the auto-reauth budget
             }
             else
@@ -440,7 +440,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
         }
     }
 
-    private void UpdateUsageProperties(UsageResponse data)
+    private async Task UpdateUsagePropertiesAsync(UsageResponse data)
     {
         // 5-STUNDEN-FENSTER = FiveHour
         if (data.FiveHour != null)
@@ -451,7 +451,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             FiveHourPercentageText = $"{Math.Min(util * 100, 100):0}%";
             FiveHourCountdown = CountdownFormatter.FormatCountdown(data.FiveHour.ResetsAt);
 
-            AppendHistoryPoint(data.FiveHour.ResetsAt, util);
+            await AppendHistoryPointAsync(data.FiveHour.ResetsAt, util);
 
             // Burn rate prediction — uses Utilization (0-100) NOT NormalizedUtilization (0-1)
             var prediction = BurnRateCalculator.Predict(
@@ -527,7 +527,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
     /// <summary>
     /// Appends a new data point to persisted history, clearing history first when the 5-hour window resets.
     /// </summary>
-    private void AppendHistoryPoint(DateTimeOffset? apiResetsAt, double utilization)
+    private async Task AppendHistoryPointAsync(DateTimeOffset? apiResetsAt, double utilization)
     {
         var history = _historyService.LoadHistory();
 
@@ -551,7 +551,7 @@ public partial class MainViewModel : ObservableObject, IRecipient<AuthStateChang
             Utilization = utilization
         });
 
-        _historyService.SaveHistory(history);
+        await _historyService.SaveHistoryAsync(history);
 
         // Set window timestamp BEFORE invalidating chart so FiveHourWindowStart is non-null when draw handler runs
         _fiveHourResetsAt = apiResetsAt;
