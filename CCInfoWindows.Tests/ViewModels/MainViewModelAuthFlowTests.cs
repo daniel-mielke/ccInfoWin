@@ -13,6 +13,7 @@ namespace CCInfoWindows.Tests.ViewModels;
 /// Tests are RED in Plan 01 (no production routing yet); turn GREEN when Plan 02 ships
 /// the _autoReauthAttempted flag + extended Receive(AuthStateChangedMessage).
 /// </summary>
+[Collection("WeakReferenceMessenger")]
 public class MainViewModelAuthFlowTests
 {
     private static (MainViewModel vm, Mock<INavigationService> nav) CreateViewModel()
