@@ -19,6 +19,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ICredentialService _credentialService;
     private readonly INavigationService _navigationService;
     private readonly IPricingService _pricingService;
+    private readonly IUsageHistoryService _historyService;
 
     // D-09: 1-minute UI-thread-bound timer. Owned by SettingsViewModel; lifecycle driven by SettingsView code-behind (D-10).
     private IDispatcherTimer? _aboutTimestampTimer;
@@ -125,12 +126,14 @@ public partial class SettingsViewModel : ObservableObject
         ISettingsService settingsService,
         ICredentialService credentialService,
         INavigationService navigationService,
-        IPricingService pricingService)
+        IPricingService pricingService,
+        IUsageHistoryService historyService)
     {
         _settingsService = settingsService;
         _credentialService = credentialService;
         _navigationService = navigationService;
         _pricingService = pricingService;
+        _historyService = historyService;
     }
 
     private static readonly int[] ThresholdMinuteOptions = [15, 30, 60, 120];
@@ -240,15 +243,21 @@ public partial class SettingsViewModel : ObservableObject
         WeakReferenceMessenger.Default.Send(new ResetWindowSizeMessage());
     }
 
-    // Single source of truth for logout lives in MainViewModel.Logout via
-    // IRecipient<LogoutRequestedMessage>. SettingsViewModel only publishes —
-    // no direct credential/auth/navigation manipulation here, ever. This
-    // prevents the D-13 violation reported in 21-UAT.md Test 2 where the
-    // Settings → Abmelden button skipped IUsageHistoryService.ClearHistory().
+    // Direct logout sequence — D-13 honored by calling ClearHistory() FIRST.
+    // The MainViewModel Logout()/IRecipient<LogoutRequestedMessage> routing
+    // (Plan 21-03) was reverted because MainViewModel is registered AddTransient
+    // (App.xaml.cs:164); WeakReferenceMessenger silently drops the registration
+    // when the MainViewModel instance is GC-collected after navigating away
+    // from MainView. The unit tests passed only because of GC.KeepAlive.
+    // Production behavior: the message had no live recipient and the user could
+    // not log out at all. Reverting to the duplicated-but-working pattern.
     [RelayCommand]
     private void Logout()
     {
-        WeakReferenceMessenger.Default.Send(new LogoutRequestedMessage());
+        _historyService.ClearHistory();                                              // D-13 ordering trap mitigation — must come FIRST
+        _credentialService.ClearCredentials();
+        WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
+        _navigationService.NavigateTo<LoginView>();
     }
 
     [RelayCommand]

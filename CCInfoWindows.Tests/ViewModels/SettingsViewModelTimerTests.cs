@@ -60,11 +60,14 @@ public class SettingsViewModelTimerTests
             pricing.Setup(s => s.LastFetch).Returns((DateTimeOffset?)null);
         }
 
+        var historyService = new Mock<IUsageHistoryService>();
+
         var sut = new SettingsViewModel(
             settingsService.Object,
             credentialService.Object,
             navigationService.Object,
-            pricing.Object);
+            pricing.Object,
+            historyService.Object);
 
         // Inject fake timer factory to avoid WinRT COM context requirement in tests.
         sut.TimerFactory = () => new FakeDispatcherTimer();

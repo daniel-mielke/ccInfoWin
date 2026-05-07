@@ -24,11 +24,14 @@ public class SettingsViewModelTests
         pricingService.Setup(s => s.Source).Returns(PricingSource.Unknown);
         pricingService.Setup(s => s.LastFetch).Returns((DateTimeOffset?)null);
 
+        var historyService = new Mock<IUsageHistoryService>();
+
         return new SettingsViewModel(
             settingsService.Object,
             credentialService.Object,
             navigationService.Object,
-            pricingService.Object);
+            pricingService.Object,
+            historyService.Object);
     }
 
     [Fact]

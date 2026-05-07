@@ -47,9 +47,11 @@ public class SessionDisplayItem
 /// </summary>
 public partial class MainViewModel : ObservableObject,
     IRecipient<AuthStateChangedMessage>,
-    IRecipient<SessionTimeoutChangedMessage>,   // D-08
-    IRecipient<LogoutRequestedMessage>          // 21-03 gap closure: single source of truth for logout
+    IRecipient<SessionTimeoutChangedMessage>   // D-08
 {
+    // 21-03 gap closure REVERTED: IRecipient<LogoutRequestedMessage> registration was unreliable
+    // because MainViewModel is AddTransient and WeakReferenceMessenger silently dropped the
+    // recipient on GC. SettingsViewModel.Logout now calls _historyService.ClearHistory() directly.
     private readonly ICredentialService _credentialService;
     private readonly INavigationService _navigationService;
     private readonly IClaudeApiService _apiService;
@@ -298,7 +300,6 @@ public partial class MainViewModel : ObservableObject,
         _updateService.UpdateAvailable += OnUpdateAvailable;
         WeakReferenceMessenger.Default.Register<AuthStateChangedMessage>(this);
         WeakReferenceMessenger.Default.Register<SessionTimeoutChangedMessage>(this);   // D-08
-        WeakReferenceMessenger.Default.Register<LogoutRequestedMessage>(this);         // 21-03 gap closure
     }
 
     /// <summary>
@@ -1029,17 +1030,6 @@ public partial class MainViewModel : ObservableObject,
         // D-08: rebuild SortedSessions on threshold change so TooltipText reflects new minutes.
         // Dispatched to UI thread — RefreshSessionList requires it.
         _dispatcherQueue?.TryEnqueue(RefreshSessionList);
-    }
-
-    /// <summary>
-    /// 21-03 gap closure (UAT Test 2): UI-layer logout requests are routed here so
-    /// the full logout sequence — including D-13's IUsageHistoryService.ClearHistory()
-    /// — runs exactly once, regardless of which UI surface initiated the logout.
-    /// SettingsViewModel publishes; MainViewModel owns the sequence.
-    /// </summary>
-    public void Receive(LogoutRequestedMessage message)
-    {
-        Logout();
     }
 }
 

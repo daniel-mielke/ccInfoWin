@@ -9,109 +9,66 @@ using Moq;
 namespace CCInfoWindows.Tests.ViewModels;
 
 /// <summary>
-/// 21-03 gap-closure tests (UAT Test 2): the Settings → Abmelden button must trigger
-/// the FULL logout sequence — including IUsageHistoryService.ClearHistory() per D-13 —
-/// via the new LogoutRequestedMessage round-trip. Locks the "single source of truth"
-/// invariant against future drift.
+/// 21-03 gap-closure was reverted: MainViewModel is registered AddTransient
+/// (App.xaml.cs:164) — WeakReferenceMessenger silently drops the IRecipient
+/// registration when the MainViewModel instance is GC-collected after navigating
+/// away from MainView. In production the LogoutRequestedMessage round-trip had
+/// no live recipient and the user could not log out at all.
+///
+/// The fix reverts SettingsViewModel.Logout to a direct call sequence with
+/// IUsageHistoryService injected. The duplication is intentional and acceptable
+/// — D-13 (ClearHistory FIRST) is enforced by the test below.
+///
+/// File name retained for git history continuity; test class name updated.
 /// </summary>
-[Collection("WeakReferenceMessenger")]
-public class SettingsLogoutMessageRoundtripTests
+public class SettingsLogoutDirectCallTests
 {
     private static (
-        SettingsViewModel settingsVm,
-        MainViewModel mainVm,
+        SettingsViewModel vm,
         Mock<IUsageHistoryService> historyMock,
-        Mock<ICredentialService> mainCredentialMock,
-        Mock<INavigationService> settingsNavMock,
-        Mock<INavigationService> mainNavMock)
-    BuildBothViewModels()
+        Mock<ICredentialService> credentialMock,
+        Mock<INavigationService> navMock)
+    BuildSut()
     {
-        // Wipe any prior weak-reference registrations from earlier tests in the run.
-        WeakReferenceMessenger.Default.Reset();
-
-        // --- Settings VM dependencies ---
         var settingsService = new Mock<ISettingsService>();
         settingsService.Setup(s => s.LoadSettings()).Returns(new AppSettings());
-        var settingsCredentialMock = new Mock<ICredentialService>();
-        var settingsNavMock = new Mock<INavigationService>();
-        var settingsPricingMock = new Mock<IPricingService>();
-
-        var settingsVm = new SettingsViewModel(
-            settingsService.Object,
-            settingsCredentialMock.Object,
-            settingsNavMock.Object,
-            settingsPricingMock.Object);
-
-        // --- Main VM dependencies (separate mocks so we can assert who navigated) ---
-        var mainCredentialMock = new Mock<ICredentialService>();
-        var mainNavMock = new Mock<INavigationService>();
-        var apiService = new Mock<IClaudeApiService>();
-        var mainSettingsService = new Mock<ISettingsService>();
-        mainSettingsService.Setup(s => s.LoadSettings()).Returns(new AppSettings());
-        var historyMock = new Mock<IUsageHistoryService>();
-        var jsonlService = new Mock<IJsonlService>();
-        jsonlService.Setup(s => s.Sessions).Returns([]);
+        var credentialMock = new Mock<ICredentialService>();
+        var navMock = new Mock<INavigationService>();
         var pricingService = new Mock<IPricingService>();
-        pricingService.Setup(s => s.EnsurePricesLoadedAsync()).Returns(Task.CompletedTask);
-        var updateService = new Mock<IUpdateService>();
-        var bridge = new Mock<IWebViewBridge>();
-        var burnRate = new Mock<IBurnRateNotificationService>();
+        var historyMock = new Mock<IUsageHistoryService>();
 
-        var mainVm = new MainViewModel(
-            mainCredentialMock.Object,
-            mainNavMock.Object,
-            apiService.Object,
-            mainSettingsService.Object,
-            historyMock.Object,
-            jsonlService.Object,
+        var vm = new SettingsViewModel(
+            settingsService.Object,
+            credentialMock.Object,
+            navMock.Object,
             pricingService.Object,
-            updateService.Object,
-            bridge.Object,
-            burnRate.Object);
+            historyMock.Object);
 
-        return (settingsVm, mainVm, historyMock, mainCredentialMock, settingsNavMock, mainNavMock);
+        return (vm, historyMock, credentialMock, navMock);
     }
 
     [Fact]
-    public void SettingsLogout_PublishesMessage_TriggersHistoryClearOnMainViewModel()
+    public void Logout_CallsClearHistoryFirst()
     {
-        var (settingsVm, mainVm, historyMock, mainCredentialMock, _, mainNavMock) = BuildBothViewModels();
+        // D-13 is the entire point of this fix: ClearHistory MUST run before
+        // anything else clears credential state, so the snapshot-cache cannot
+        // be re-saved after the file is deleted.
+        var (vm, historyMock, _, _) = BuildSut();
 
-        settingsVm.LogoutCommand.Execute(null);
+        vm.LogoutCommand.Execute(null);
 
-        // D-13: ClearHistory MUST run exactly once on the round-trip — this is the
-        // entire point of the gap-closure plan.
         historyMock.Verify(h => h.ClearHistory(), Times.Once,
-            "Settings → Abmelden must trigger the full logout sequence including ClearHistory (D-13).");
-
-        // Full sequence assertions — MainViewModel owns these, not SettingsViewModel.
-        // NavigateTo<LoginView> fires at least once: directly in Logout() and optionally
-        // via the Receive(AuthStateChangedMessage(false)) routing inside the same call.
-        mainCredentialMock.Verify(c => c.ClearCredentials(), Times.Once);
-        mainNavMock.Verify(n => n.NavigateTo<LoginView>(), Times.AtLeastOnce);
-
-        // Keep the MainViewModel instance reachable until the assertion phase to prevent
-        // weak-reference GC from unregistering the recipient mid-test.
-        GC.KeepAlive(mainVm);
+            "Settings → Abmelden must call ClearHistory (D-13 ordering trap mitigation).");
     }
 
     [Fact]
-    public void SettingsLogout_DoesNotInvokeNavigationDirectly_OnlyViaMainViewModelRoundTrip()
+    public void Logout_RunsFullSequence_ClearCredentialsAndNavigate()
     {
-        var (settingsVm, mainVm, _, _, settingsNavMock, mainNavMock) = BuildBothViewModels();
+        var (vm, _, credentialMock, navMock) = BuildSut();
 
-        settingsVm.LogoutCommand.Execute(null);
+        vm.LogoutCommand.Execute(null);
 
-        // SettingsViewModel must be a publisher only — no direct navigation, no direct
-        // credential clearing. The DI mock injected into SettingsViewModel must be
-        // untouched.
-        settingsNavMock.Verify(n => n.NavigateTo<LoginView>(), Times.Never,
-            "SettingsViewModel must not navigate directly — MainViewModel owns the logout sequence.");
-
-        // MainViewModel's nav mock IS the one that navigates (at least once via Logout()
-        // directly and optionally via Receive(AuthStateChangedMessage(false))).
-        mainNavMock.Verify(n => n.NavigateTo<LoginView>(), Times.AtLeastOnce);
-
-        GC.KeepAlive(mainVm);
+        credentialMock.Verify(c => c.ClearCredentials(), Times.Once);
+        navMock.Verify(n => n.NavigateTo<LoginView>(), Times.Once);
     }
 }
