@@ -4,6 +4,7 @@
 
 #Specs
 spec/
+temp/
 
 # Visual Studio
 .vs/
