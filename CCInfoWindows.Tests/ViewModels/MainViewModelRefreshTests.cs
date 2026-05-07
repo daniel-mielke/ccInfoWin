@@ -134,4 +134,29 @@ public class MainViewModelRefreshTests
         Assert.False(sut.IsRefreshing,
             "IsRefreshing should remain false after PollUsageCoreAsync — D-03: core method does not own IsRefreshing.");
     }
+
+    [Fact]
+    public void CanRefresh_RaisesPropertyChanged_WhenIsRefreshingFlips()
+    {
+        var sut = CreateSut();
+        var canRefreshChanges = 0;
+
+        sut.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.CanRefresh))
+                canRefreshChanges++;
+        };
+
+        // Act: flip IsRefreshing twice via the public setter
+        sut.IsRefreshing = true;
+        sut.IsRefreshing = false;
+
+        // Assert: PropertyChanged("CanRefresh") fired on both flips —
+        // proves [NotifyPropertyChangedFor(nameof(CanRefresh))] is wired on _isRefreshing.
+        // This is the gap-closure invariant: the explicit IsEnabled x:Bind binding
+        // in MainView.xaml relies on this notification to re-evaluate.
+        Assert.True(canRefreshChanges >= 2,
+            $"PropertyChanged(\"CanRefresh\") fired {canRefreshChanges} times — expected >= 2 (one per IsRefreshing flip). " +
+            "Verify [NotifyPropertyChangedFor(nameof(CanRefresh))] is on the _isRefreshing field.");
+    }
 }
