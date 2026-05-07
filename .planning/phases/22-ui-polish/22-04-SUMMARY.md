@@ -126,6 +126,13 @@ Task 2 was tagged `tdd="true"`. The RED gate was not committed as a separate com
 - GREEN gate commit: `0ca5014` (`test(22-04): add CanRefresh_RaisesPropertyChanged_WhenIsRefreshingFlips`)
 - REFACTOR: not needed
 
-## Self-Check
+## Self-Check: PASSED
 
-See below.
+| Check | Result |
+|-------|--------|
+| `MainViewModel.cs` exists | FOUND |
+| `MainView.xaml` exists | FOUND |
+| `MainViewModelRefreshTests.cs` exists | FOUND |
+| Commit `5e191f7` exists | FOUND |
+| Commit `0ca5014` exists | FOUND |
+| Commit `822af33` (SUMMARY) exists | FOUND |
