@@ -46,26 +46,34 @@ Developers can see their Claude usage limits (5-hour window, weekly quota, conte
 
 ### Active
 
-<!-- v1.4 shipped 2026-05-07. Run /gsd-new-milestone to plan v1.5. -->
+## Current Milestone: v1.5 macOS v1.12.0 Feature Parity + Hardening
 
-(None — v1.4 milestone complete. Next milestone scope to be defined via `/gsd-new-milestone`.)
+**Goal:** Bring CCInfoWindows to upstream v1.12.0 feature parity (next-window label + session renaming) while remediating v1.4 code-review findings and three reproducible cold-start / silent-failure bugs.
 
-## Next Milestone Goals
+**Target features (3 clusters, ~11 items):**
 
-Candidate themes for v1.5 (carried forward from v1.4 retrospective, tech-debt backlog, and v1.4 code-review findings):
+**Cluster A — macOS v1.12.0 Feature Parity:**
+- A1: Next 5h-window start time label below countdown (weekday + clock, e.g. "Mo 1.5. 16:30")
+- A2: Session renaming via pencil button next to switcher + new "Sessions" Settings tab; custom names persist across restarts
 
-**v1.4 code-review remediation** (see `.planning/todos/pending/2026-05-07-*`):
-- **C-1**: Fire-and-forget exception swallow in `MainViewModel.Receive(AuthStateChangedMessage)` — directly contradicts v1.4's "auth flow stability" goal
-- **C-2**: Missing `DispatcherQueue` marshaling in `Receive(AuthStateChangedMessage)` — same architectural family as WeakReferenceMessenger pitfall; consider `IDispatcherQueue` adapter mirror of `IDispatcherTimer`
-- **M-1, M-2, M-3, Nits**: Orphan code, hardcoded L10N strings, null-forgiving default, 3 minor cleanups
+**Cluster B — Bug Hardening:**
+- B1: Session-dropdown empty on cold start — fragile `Cwd` hydration in `JsonlService` + add configurable session-visibility window (default 30 days; options 7 / 30 / 90 / unlimited)
+- B2: Org-ID picker for multi-account users — detect zero-utilization heuristic + Settings UI override + force re-resolve
+- B3: Pricing-service silent-failure — exception in `EnsurePricesLoadedAsync` surfaced via UI banner / `HasApiError` instead of swallowed `Debug.WriteLine`
 
-**Functional themes:**
-- **Cold-start session-scanning fix** — `IJsonlService` doesn't surface sessions <120 min after fresh app launch; blocks visual smoke for inactive-session tooltip
-- **Multi-account org-id picker** — `TryMigrateOrgIdAsync` blindly takes `orgs[0]`, breaking dual-account users; needs detection + manual override UI
-- **Pricing service silent failure** — exception swallowed by catch-all; About-tab shows "Never"; degrades cost analytics; couples with code-review M-2
-- **Next 5-hour window start label** — feature request: second time label below countdown ("Neues Fenster: Mi., 14:30")
-- **WeakReferenceMessenger + thread-marshaling architectural review** — caught as v1.4 production hotfix AND surfaced again by C-2; revisit cross-VM messaging pattern + standardize a thread-marshaling rule for all `IRecipient<>` declarations
-- **2 pre-existing `ClaudeApiServiceTests` failures** — unchanged from v1.3 baseline, future cleanup item
+**Cluster C — v1.4 Code-Review Remediation** (see `.planning/todos/pending/2026-05-07-*`):
+- C-1 (critical): Fire-and-forget exception swallow in `MainViewModel.Receive(AuthStateChangedMessage)`
+- C-2 (critical): Missing `DispatcherQueue` marshaling in `Receive(AuthStateChangedMessage)` — candidate for `IDispatcherQueue` adapter mirror of `IDispatcherTimer`
+- M-1: Delete orphan `LogoutRequestedMessage.cs` (dead code from reverted Plan 21-03)
+- M-2: Localize hardcoded EN strings in `LastFetchRelativeTime` — couples with B3
+- M-3: Restore real default for `_contextModelBadgeColor = null!`
+- Nits: 3 minor opportunistic cleanups (bundled)
+
+**Key context:**
+- Continuation of v1.4 = v1.11.1 parity narrative
+- C-2 same architectural family as the v1.4 `WeakReferenceMessenger` pitfall — opportunity to standardize a thread-marshaling rule across all `IRecipient<>` declarations
+- M-2 + B3 share the pricing-service surface (`SettingsViewModel.LastFetchRelativeTime`)
+- Stack unchanged (C# 13 / .NET 9 / WinUI 3 / WinAppSDK 1.8)
 
 ### Future
 
@@ -202,4 +210,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-07 after v1.4 milestone completion*
+*Last updated: 2026-05-07 — v1.5 milestone started (macOS v1.12.0 Feature Parity + Hardening)*

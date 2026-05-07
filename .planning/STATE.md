@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.4
-milestone_name: macOS v1.11.1 Feature Parity
-status: complete
-shipped: 2026-05-07
-last_updated: "2026-05-07T15:30:00.000Z"
-last_activity: 2026-05-07 -- v1.4 milestone archived
+milestone: v1.5
+milestone_name: macOS v1.12.0 Feature Parity + Hardening
+status: planning
+last_updated: "2026-05-07T18:16:06.845Z"
+last_activity: 2026-05-07
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 13
-  completed_plans: 13
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,11 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-07)
 
 ## Current Position
 
-Milestone: v1.4 — SHIPPED 2026-05-07
-Status: Complete, archived
-Last activity: 2026-05-07 -- v1.4 milestone archived
-
-Progress: [██████████] 100%
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-07 — Milestone v1.5 started
 
 ## Performance Metrics
 
@@ -66,6 +64,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 ### Open Tech Debt (carried into v1.5+)
 
 **v1.4 code-review findings (2026-05-07, see `.planning/todos/pending/`):**
+
 - 🔴 **C-1**: Fire-and-forget Task in `MainViewModel.Receive(AuthStateChangedMessage)` — swallowed exceptions in post-login refresh path (`2026-05-07-c1-fix-fire-and-forget-task-in-mainviewmodel-receive-authstatechanged.md`)
 - 🔴 **C-2**: `Receive(AuthStateChangedMessage)` mutates UI state without DispatcherQueue marshaling — same architectural family as the WeakReferenceMessenger pitfall (`2026-05-07-c2-add-dispatcher-marshaling-to-receive-authstatechanged.md`)
 - 🟡 **M-1**: Orphan `LogoutRequestedMessage.cs` from reverted Plan 21-03 (`2026-05-07-m1-delete-orphan-logoutrequestedmessage.md`)
@@ -74,6 +73,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 - ⚪ **Nits**: 3 minor cleanups (`2026-05-07-nits-v14-code-review-cleanups.md`)
 
 **Carried from earlier milestones / phase backlog (memory-tracked):**
+
 - WeakReferenceMessenger + AddTransient ViewModels = recipient GC pitfall (`architecture_weakreferencemessenger_with_transient_vms.md`)
 - Cold-start session scanning (`backlog_session_dropdown_recent_sessions.md`) — blocks POLISH-04 visual smoke
 - Multi-account org-id picker (`backlog_org_id_picker.md`) — `TryMigrateOrgIdAsync` blindly takes `orgs[0]`
