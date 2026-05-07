@@ -240,12 +240,15 @@ public partial class SettingsViewModel : ObservableObject
         WeakReferenceMessenger.Default.Send(new ResetWindowSizeMessage());
     }
 
+    // Single source of truth for logout lives in MainViewModel.Logout via
+    // IRecipient<LogoutRequestedMessage>. SettingsViewModel only publishes —
+    // no direct credential/auth/navigation manipulation here, ever. This
+    // prevents the D-13 violation reported in 21-UAT.md Test 2 where the
+    // Settings → Abmelden button skipped IUsageHistoryService.ClearHistory().
     [RelayCommand]
     private void Logout()
     {
-        _credentialService.ClearCredentials();
-        WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
-        _navigationService.NavigateTo<LoginView>();
+        WeakReferenceMessenger.Default.Send(new LogoutRequestedMessage());
     }
 
     [RelayCommand]
