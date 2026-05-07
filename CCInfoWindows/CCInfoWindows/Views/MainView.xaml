@@ -607,6 +607,7 @@
                         <Button l:Uids.Uid="FooterRefreshButton"
                                 ToolTipService.ToolTip="Refresh"
                                 Command="{x:Bind ViewModel.RefreshCommand}"
+                                IsEnabled="{x:Bind ViewModel.CanRefresh, Mode=OneWay}"
                                 Background="Transparent" BorderThickness="0"
                                 Padding="8" CornerRadius="6">
                             <FontIcon x:Name="RefreshIcon" Glyph="&#xE895;" FontSize="16"

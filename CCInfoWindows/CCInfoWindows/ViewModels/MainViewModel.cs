@@ -160,7 +160,9 @@ public partial class MainViewModel : ObservableObject,
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RefreshCommand))]
-    // D-04: drives RefreshCommand.CanExecute via NotifyCanExecuteChangedFor — canonical CommunityToolkit.Mvvm 8.4 pattern, FIRST use in this codebase
+    [NotifyPropertyChangedFor(nameof(CanRefresh))]
+    // D-04: drives RefreshCommand.CanExecute via NotifyCanExecuteChangedFor — canonical CommunityToolkit.Mvvm 8.4 pattern, FIRST use in this codebase.
+    // Gap-closure (Plan 22-04): NotifyPropertyChangedFor wires PropertyChanged("CanRefresh") so x:Bind IsEnabled re-evaluates on every flip.
     private bool _isRefreshing;
 
     [ObservableProperty]
@@ -915,7 +917,7 @@ public partial class MainViewModel : ObservableObject,
         finally { IsRefreshing = false; }
     }
 
-    private bool CanRefresh => !IsRefreshing;
+    public bool CanRefresh => !IsRefreshing;
 
     [RelayCommand]
     private void OpenSettings()
