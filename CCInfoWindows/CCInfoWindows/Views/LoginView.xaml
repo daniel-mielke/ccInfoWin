@@ -42,21 +42,30 @@
             VerticalAlignment="Top"
             Margin="8" />
 
-        <!-- D-04 / D-05: Reload button overlay (top-right). Visual mirrors MainView footer FooterRefreshButton.
-             Glyph &#xE72C; (Reload) is distinct from MainView's &#xE895; (ArrowSync) — semantically correct.
-             l:Uids.Uid resolves LoginReloadButton.* resw keys (Plan 01 Task 2 added them in en-US + de-DE). -->
-        <Button l:Uids.Uid="LoginReloadButton"
-                Click="OnReloadLoginClicked"
-                Background="Transparent"
-                BorderThickness="0"
-                Padding="8"
+        <!-- D-04 / D-05 (gap closure 20-05): 30x30 Slate-900 pill wrapper provides cross-surface contrast
+             against the claude.ai cream-white WebView2 login page. Inner Button keeps Background=Transparent
+             per D-05; the Border supplies the dark backdrop so SecondaryTextBrush glyph is legible.
+             Hex literal #0F172A (Slate-900) — NOT a ThemeResource — because the WebView2 surface is theme-
+             independent and the contrast must be guaranteed regardless of the OS light/dark theme. -->
+        <Border Width="30"
+                Height="30"
+                Background="#0F172A"
                 CornerRadius="6"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Top"
                 Margin="8">
-            <FontIcon Glyph="&#xE72C;"
-                      FontSize="16"
-                      Foreground="{ThemeResource SecondaryTextBrush}" />
-        </Button>
+            <Button l:Uids.Uid="LoginReloadButton"
+                    Click="OnReloadLoginClicked"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Padding="0"
+                    CornerRadius="6"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch">
+                <FontIcon Glyph="&#xE72C;"
+                          FontSize="16"
+                          Foreground="White" />
+            </Button>
+        </Border>
     </Grid>
 </Page>
