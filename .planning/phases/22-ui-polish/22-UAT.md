@@ -19,9 +19,25 @@ expected: |
   the data is cached (sub-100ms refresh). Button is disabled during refresh
   (clicking it again has no effect). Returns to refresh icon after
   (POLISH-01..03).
-result: issue
-reported: "einen fehler gibt es: Button bleibt klickbar während Refresh"
-severity: minor
+result: fixed
+fixed_by: Plan 22-04 (gap closure)
+fix_summary: |
+  Three minimal anchor-based edits applied:
+  1. MainViewModel.cs: added [NotifyPropertyChangedFor(nameof(CanRefresh))]
+     to _isRefreshing field's existing attribute stack.
+  2. MainViewModel.cs: changed `private bool CanRefresh =>` to
+     `public bool CanRefresh =>` so x:Bind can resolve it.
+  3. MainView.xaml: added IsEnabled="{x:Bind ViewModel.CanRefresh,
+     Mode=OneWay}" to FooterRefreshButton — belt-and-suspenders override
+     of the original [NotifyCanExecuteChangedFor] mechanism.
+
+  D-04 reinforced (not replaced). Spinner animation + 250ms floor
+  unchanged. 5/5 MainViewModelRefreshTests GREEN (4 existing + 1 new
+  CanRefresh_RaisesPropertyChanged_WhenIsRefreshingFlips).
+
+  Manual smoke verification still PENDING — re-run Test 1 after the next
+  cold-start to visually confirm the button greys out during refresh.
+original_severity: minor
 notes: |
   Spinner animation and 250ms floor work correctly (user only reported the
   one issue). The CanExecute auto-disable does NOT visibly disable the
@@ -150,7 +166,7 @@ notes: User confirmed no lag, no freeze on tab switch or settings exit. Timer li
 
 total: 5
 passed: 1
-issues: 1
+fixed: 1
 pending: 0
 skipped: 1
 blocked: 2
