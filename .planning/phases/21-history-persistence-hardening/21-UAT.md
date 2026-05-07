@@ -67,9 +67,19 @@ expected: |
   After signing in and accumulating data, sign out via the menu / button.
   `%LOCALAPPDATA%\CCInfoWindows\usage-history.json` is deleted (or emptied).
   X-close + restart — history file remains gone (D-13 ordering trap mitigation).
-result: issue
-reported: "die datei usage-history.json ist nach dem logout nicht gelöscht wurden"
-severity: major
+result: fixed
+fixed_by: Plan 21-03 (gap closure)
+fix_summary: |
+  Refactored to single-source-of-truth logout: SettingsViewModel.Logout
+  publishes LogoutRequestedMessage; MainViewModel implements
+  IRecipient<LogoutRequestedMessage> and re-invokes its existing Logout()
+  body which calls _historyService.ClearHistory() first (D-13 honored).
+  2 new xUnit tests verify the message round-trip and the publisher-only
+  invariant. 6/6 tests GREEN (4 AuthFlow + 2 SettingsLogoutMessageRoundtrip).
+
+  Manual smoke verification still PENDING — re-run Test 2 after the next
+  cold-start to confirm visually.
+original_severity: major
 notes: |
   Diagnosed via code reading: the app has TWO separate Logout commands.
   - MainViewModel.Logout() (MainViewModel.cs:931) correctly calls
@@ -118,7 +128,7 @@ reason: |
 
 total: 3
 passed: 1
-issues: 1
+fixed: 1
 pending: 0
 skipped: 1
 blocked: 0
