@@ -39,9 +39,17 @@ reason: Depends on Test 1 trigger; skipped together.
 
 ### 4. LoginView reload button — click reloads
 expected: On LoginView, click the new reload icon button at the top-right. WebView2 reloads (visible page refresh). No crash, no error UI (AUTH-06).
-result: issue
-reported: "ja, funktional passt es, aber der button ist schlecht zu erkennen. der button benötigt einen wrapper 30x30px mit dunklem hintergrund, damit das icon sichtbar ist."
-severity: cosmetic
+result: fixed
+fixed_by: Plan 20-05 (gap closure)
+fix_summary: |
+  Wrapped the existing Button in a 30x30 Border with Background=#0F172A
+  (Slate-900 hex literal). Glyph Foreground=White for crisp legibility.
+  Inner Button keeps Background=Transparent per D-05 — the Border supplies
+  the dark backdrop that the cream-white claude.ai login surface lacks.
+  Outer positioning unchanged (top-right, Margin=8).
+
+  Manual smoke verification PENDING — re-run Test 4 to confirm visual.
+original_severity: cosmetic
 notes: |
   Functional behavior PASSES — click reloads WebView2 cleanly, no crash.
   Visual contrast issue: the reload icon (SecondaryTextBrush, transparent
@@ -72,7 +80,7 @@ reason: Depends on Test 1 trigger (real 401); skipped together. Will be naturall
 
 total: 7
 passed: 2
-issues: 1
+fixed: 1
 pending: 0
 skipped: 4
 blocked: 0
