@@ -52,13 +52,19 @@ Developers can see their Claude usage limits (5-hour window, weekly quota, conte
 
 ## Next Milestone Goals
 
-Candidate themes for v1.5 (carried forward from v1.4 retrospective and tech-debt backlog):
+Candidate themes for v1.5 (carried forward from v1.4 retrospective, tech-debt backlog, and v1.4 code-review findings):
 
-- **Cold-start session-scanning fix** — `IJsonlService` doesn't surface sessions <120 min after fresh app launch until a tool-call event lands; blocks visual smoke for inactive-session tooltip
+**v1.4 code-review remediation** (see `.planning/todos/pending/2026-05-07-*`):
+- **C-1**: Fire-and-forget exception swallow in `MainViewModel.Receive(AuthStateChangedMessage)` — directly contradicts v1.4's "auth flow stability" goal
+- **C-2**: Missing `DispatcherQueue` marshaling in `Receive(AuthStateChangedMessage)` — same architectural family as WeakReferenceMessenger pitfall; consider `IDispatcherQueue` adapter mirror of `IDispatcherTimer`
+- **M-1, M-2, M-3, Nits**: Orphan code, hardcoded L10N strings, null-forgiving default, 3 minor cleanups
+
+**Functional themes:**
+- **Cold-start session-scanning fix** — `IJsonlService` doesn't surface sessions <120 min after fresh app launch; blocks visual smoke for inactive-session tooltip
 - **Multi-account org-id picker** — `TryMigrateOrgIdAsync` blindly takes `orgs[0]`, breaking dual-account users; needs detection + manual override UI
-- **Pricing service silent failure** — `_pricingService.EnsurePricesLoadedAsync()` exception swallowed by catch-all; About-tab shows "Never"; degrades cost analytics
+- **Pricing service silent failure** — exception swallowed by catch-all; About-tab shows "Never"; degrades cost analytics; couples with code-review M-2
 - **Next 5-hour window start label** — feature request: second time label below countdown ("Neues Fenster: Mi., 14:30")
-- **WeakReferenceMessenger architectural review** — caught as v1.4 production hotfix; revisit cross-VM messaging pattern
+- **WeakReferenceMessenger + thread-marshaling architectural review** — caught as v1.4 production hotfix AND surfaced again by C-2; revisit cross-VM messaging pattern + standardize a thread-marshaling rule for all `IRecipient<>` declarations
 - **2 pre-existing `ClaudeApiServiceTests` failures** — unchanged from v1.3 baseline, future cleanup item
 
 ### Future

@@ -65,10 +65,19 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 
 ### Open Tech Debt (carried into v1.5+)
 
+**v1.4 code-review findings (2026-05-07, see `.planning/todos/pending/`):**
+- 🔴 **C-1**: Fire-and-forget Task in `MainViewModel.Receive(AuthStateChangedMessage)` — swallowed exceptions in post-login refresh path (`2026-05-07-c1-fix-fire-and-forget-task-in-mainviewmodel-receive-authstatechanged.md`)
+- 🔴 **C-2**: `Receive(AuthStateChangedMessage)` mutates UI state without DispatcherQueue marshaling — same architectural family as the WeakReferenceMessenger pitfall (`2026-05-07-c2-add-dispatcher-marshaling-to-receive-authstatechanged.md`)
+- 🟡 **M-1**: Orphan `LogoutRequestedMessage.cs` from reverted Plan 21-03 (`2026-05-07-m1-delete-orphan-logoutrequestedmessage.md`)
+- 🟡 **M-2**: `LastFetchRelativeTime` hardcoded EN strings — bundle with pricing-service fix (`2026-05-07-m2-localize-lastfetchrelativetime-strings.md`)
+- 🟡 **M-3**: `_contextModelBadgeColor = null!` — restore real default (`2026-05-07-m3-revert-contextmodelbadgecolor-default-to-gray.md`)
+- ⚪ **Nits**: 3 minor cleanups (`2026-05-07-nits-v14-code-review-cleanups.md`)
+
+**Carried from earlier milestones / phase backlog (memory-tracked):**
 - WeakReferenceMessenger + AddTransient ViewModels = recipient GC pitfall (`architecture_weakreferencemessenger_with_transient_vms.md`)
 - Cold-start session scanning (`backlog_session_dropdown_recent_sessions.md`) — blocks POLISH-04 visual smoke
 - Multi-account org-id picker (`backlog_org_id_picker.md`) — `TryMigrateOrgIdAsync` blindly takes `orgs[0]`
-- Pricing service silent failure (`backlog_pricing_never_loaded.md`) — blocks POLISH-07 visual smoke
+- Pricing service silent failure (`backlog_pricing_never_loaded.md`) — blocks POLISH-07 visual smoke; couples with M-2 above
 - Next 5h-window start label feature request (`backlog_next_window_start_label.md`)
 - 2 pre-existing `ClaudeApiServiceTests` failures (parameter naming mismatch, production unaffected, unchanged from v1.3)
 - 13 pre-existing `JsonlServiceTests` failures (parameter naming mismatch, production unaffected, unchanged from v1.0)
