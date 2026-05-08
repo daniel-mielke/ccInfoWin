@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using CCInfoWindows.Models;
 using CCInfoWindows.Services.Interfaces;
+using CCInfoWindows.Tests.Helpers;
 using CCInfoWindows.ViewModels;
 using Moq;
 
@@ -53,7 +54,8 @@ public class MainViewModelRefreshTests
             pricingService.Object,
             updateService.Object,
             bridge.Object,
-            burnRateService.Object);
+            burnRateService.Object,
+            new FakeDispatcherQueue());
     }
 
     [Fact]

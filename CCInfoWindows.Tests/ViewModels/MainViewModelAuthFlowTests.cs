@@ -1,6 +1,7 @@
 using CCInfoWindows.Messages;
 using CCInfoWindows.Models;
 using CCInfoWindows.Services.Interfaces;
+using CCInfoWindows.Tests.Helpers;
 using CCInfoWindows.ViewModels;
 using CCInfoWindows.Views;
 using Moq;
@@ -42,7 +43,8 @@ public class MainViewModelAuthFlowTests
             pricingService.Object,
             updateService.Object,
             bridge.Object,
-            burnRate.Object);
+            burnRate.Object,
+            new FakeDispatcherQueue());
 
         return (vm, navigationService);
     }
@@ -120,7 +122,8 @@ public class MainViewModelAuthFlowTests
             pricingService.Object,
             updateService.Object,
             bridge.Object,
-            burnRate.Object);
+            burnRate.Object,
+            new FakeDispatcherQueue());
 
         return (vm, navigationService);
     }
