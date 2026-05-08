@@ -271,7 +271,7 @@ Plans:
 Plans:
 - [x] 24-01-dispatcher-adapter-PLAN.md — IDispatcherQueue interface + ThreadSafeReceiveAttribute + WinuiDispatcherQueueAdapter + FakeDispatcherQueue + DI singleton (Wave 1)
 - [x] 24-02-mainviewmodel-refactor-PLAN.md — MainViewModel constructor injection + Receive(AuthStateChangedMessage) C-1/C-2 fix + UnregisterAll + line-318 lambda audit + line-1032 cleanup + line-1008 explicit discard + MainWindow [ThreadSafeReceive] (Wave 2)
-- [ ] 24-03-convention-test-and-docs-PLAN.md — MessengerThreadingConventionTests xUnit class + CLAUDE.md G-1 paragraph + NuGet patch bumps (Wave 3)
+- [x] 24-03-convention-test-and-docs-PLAN.md — MessengerThreadingConventionTests xUnit class + CLAUDE.md G-1 paragraph + NuGet patch bumps (Wave 3)
 
 ### Phase 25: Cold-Start Session Hydration & Visibility Window
 **Goal**: After cold start, the session ComboBox lists every relevant session whose JSONL files exist within the user-configurable visibility window — the silent dropping of recently-active sessions and the underlying file-watcher data-loss race are both eliminated
@@ -351,7 +351,7 @@ Plans:
 | 21. History Persistence Hardening | v1.4 | 3/3 | Complete | 2026-05-07 |
 | 22. UI Polish | v1.4 | 4/4 | Complete | 2026-05-07 |
 | 23. Localization Gaps | v1.4 | 1/1 | Complete | 2026-05-07 |
-| 24. Dispatcher Foundation & Marshaling Convention | v1.5 | 2/3 | In Progress|  |
+| 24. Dispatcher Foundation & Marshaling Convention | v1.5 | 3/3 | Complete   | 2026-05-08 |
 | 25. Cold-Start Session Hydration & Visibility Window | v1.5 | 0/0 | Not started | - |
 | 26. Persistent Session Renaming | v1.5 | 0/0 | Not started | - |
 | 27. Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N | v1.5 | 0/0 | Not started | - |
