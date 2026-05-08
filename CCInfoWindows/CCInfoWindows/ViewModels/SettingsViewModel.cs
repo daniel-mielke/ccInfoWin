@@ -126,9 +126,8 @@ public partial class SettingsViewModel : ObservableObject
 
     /// <summary>
     /// Localized "X minutes ago" string for the About tab. Re-evaluated on each
-    /// _aboutTimestampTimer Tick (D-09, D-11). v1.4 fallback: English inline literals
-    /// — proper resw keys (LastFetchMinutesAgo, LastFetchNever) are deferred to a
-    /// future phase per RESEARCH [A2].
+    /// _aboutTimestampTimer Tick (D-09, D-11). L10N-01: 5 categories backed by
+    /// LastFetchRelative.* resw keys; switches DE/EN via CurrentUICulture.
     /// </summary>
     public string LastFetchRelativeTime
     {
@@ -136,11 +135,32 @@ public partial class SettingsViewModel : ObservableObject
         {
             var lastFetch = _pricingService.LastFetch;
             if (!lastFetch.HasValue)
-                return "Never";
+                return Localizer.Get().GetLocalizedString("LastFetchRelative.Never");
 
             var elapsed = DateTimeOffset.Now - lastFetch.Value;
-            var minutes = (int)Math.Max(0, elapsed.TotalMinutes);
-            return minutes == 1 ? "1 minute ago" : $"{minutes} minutes ago";
+            if (elapsed.TotalSeconds < 30)
+                return Localizer.Get().GetLocalizedString("LastFetchRelative.JustNow");
+
+            if (elapsed.TotalMinutes < 60)
+            {
+                var minutes = (int)Math.Max(0, elapsed.TotalMinutes);
+                return string.Format(
+                    Localizer.Get().GetLocalizedString("LastFetchRelative.MinutesAgo"),
+                    minutes);
+            }
+
+            if (elapsed.TotalHours < 24)
+            {
+                var hours = (int)Math.Max(0, elapsed.TotalHours);
+                return string.Format(
+                    Localizer.Get().GetLocalizedString("LastFetchRelative.HoursAgo"),
+                    hours);
+            }
+
+            var days = (int)Math.Max(0, elapsed.TotalDays);
+            return string.Format(
+                Localizer.Get().GetLocalizedString("LastFetchRelative.DaysAgo"),
+                days);
         }
     }
 
