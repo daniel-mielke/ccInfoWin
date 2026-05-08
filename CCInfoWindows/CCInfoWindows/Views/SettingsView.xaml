@@ -157,6 +157,30 @@
 
                             <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
 
+                            <!-- Row 3.5: Session Visibility Window (DROPDOWN-04 / D-03) -->
+                            <Grid Height="40" Padding="12,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock l:Uids.Uid="SettingsSessionVisibilityWindow"
+                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1"
+                                          x:Name="VisibilityWindowComboBox"
+                                          l:Uids.Uid="VisibilityWindowComboBox"
+                                          SelectedIndex="{x:Bind ViewModel.SelectedVisibilityWindowIndex, Mode=TwoWay}"
+                                          VerticalAlignment="Center"
+                                          MinWidth="120">
+                                    <ComboBoxItem l:Uids.Uid="SessionVisibilityWindow7d" />
+                                    <ComboBoxItem l:Uids.Uid="SessionVisibilityWindow30d" />
+                                    <ComboBoxItem l:Uids.Uid="SessionVisibilityWindow90d" />
+                                    <ComboBoxItem l:Uids.Uid="SessionVisibilityWindowUnlimited" />
+                                </ComboBox>
+                            </Grid>
+
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
+
                             <!-- Row 4: Dark Mode -->
                             <Grid Height="40" Padding="12,0">
                                 <Grid.ColumnDefinitions>

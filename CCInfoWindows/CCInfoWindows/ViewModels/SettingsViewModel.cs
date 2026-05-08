@@ -88,8 +88,15 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private int _selectedSonnetContextIndex;
 
+    [ObservableProperty]
+    private int _selectedVisibilityWindowIndex;
+
     private static readonly string[] LanguageCodes = ["de-DE", "en-US"];
     private static readonly int[] SonnetContextSizes = [200_000, 1_000_000];
+
+    // DROPDOWN-04 / D-03: visibility window options. 0 == unlimited.
+    private static readonly int[] VisibilityWindowDayOptions = [7, 30, 90, 0];
+    private const int DefaultVisibilityWindowIndex = 1; // 30 days
 
     public string PricingSourceText => _pricingService.Source switch
     {
@@ -152,6 +159,7 @@ public partial class SettingsViewModel : ObservableObject
         _isAutostart = RegistryHelper.GetAutostart();
         _selectedLanguageIndex = settings.Language == "en-US" ? 1 : 0;
         _selectedSonnetContextIndex = settings.SonnetContextSize == 1_000_000 ? 1 : 0;
+        _selectedVisibilityWindowIndex = MapVisibilityDaysToIndex(settings.SessionVisibilityWindowDays);
 
         OnPropertyChanged(nameof(SelectedRefreshOption));
         OnPropertyChanged(nameof(IsDarkMode));
@@ -159,6 +167,7 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsAutostart));
         OnPropertyChanged(nameof(SelectedLanguageIndex));
         OnPropertyChanged(nameof(SelectedSonnetContextIndex));
+        OnPropertyChanged(nameof(SelectedVisibilityWindowIndex));
     }
 
     partial void OnSelectedRefreshOptionChanged(RefreshOption value)
@@ -226,6 +235,28 @@ public partial class SettingsViewModel : ObservableObject
     {
         var index = Array.IndexOf(ThresholdMinuteOptions, minutes);
         return index >= 0 ? index : 1; // default to index 1 (30 minutes)
+    }
+
+    partial void OnSelectedVisibilityWindowIndexChanged(int value)
+    {
+        var settings = _settingsService.LoadSettings();
+        settings.SessionVisibilityWindowDays = MapIndexToVisibilityDays(value);
+        _settingsService.SaveSettings(settings);
+
+        // DROPDOWN-04 / D-03: notify MainViewModel so SortedSessions filter re-applies immediately.
+        WeakReferenceMessenger.Default.Send(
+            new SessionVisibilityChangedMessage(settings.SessionVisibilityWindowDays));
+    }
+
+    private static int MapIndexToVisibilityDays(int index) =>
+        (index >= 0 && index < VisibilityWindowDayOptions.Length)
+            ? VisibilityWindowDayOptions[index]
+            : VisibilityWindowDayOptions[DefaultVisibilityWindowIndex];
+
+    private static int MapVisibilityDaysToIndex(int days)
+    {
+        var index = Array.IndexOf(VisibilityWindowDayOptions, days);
+        return index >= 0 ? index : DefaultVisibilityWindowIndex;
     }
 
     partial void OnIsDarkModeChanged(bool value)
