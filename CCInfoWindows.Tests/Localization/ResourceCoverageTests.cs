@@ -29,6 +29,12 @@ public class ResourceCoverageTests
         "Dialog.RenameSession.CancelButton",
         "Dialog.RenameSession.ResetButton",
         "MainViewRenameButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip",
+        // Phase 26 RENAME-02: Settings Sessions tab content (Plan 03)
+        "SettingsTabSessions",
+        "Settings.Sessions.Header.Text",
+        "Settings.Sessions.NoSessions.Text",
+        "Settings.Sessions.OrphanLabel.Text",
+        "Settings.Sessions.ClearButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip",
     ];
 
     private static readonly Dictionary<string, string> ExpectedEnUs = new()
@@ -44,6 +50,12 @@ public class ResourceCoverageTests
         ["Dialog.RenameSession.CancelButton"] = "Cancel",
         ["Dialog.RenameSession.ResetButton"] = "Reset",
         ["MainViewRenameButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Rename session",
+        // Phase 26 RENAME-02 Plan 03
+        ["SettingsTabSessions"] = "Sessions",
+        ["Settings.Sessions.Header.Text"] = "CUSTOM SESSION NAMES",
+        ["Settings.Sessions.NoSessions.Text"] = "No sessions available.",
+        ["Settings.Sessions.OrphanLabel.Text"] = "Session not found",
+        ["Settings.Sessions.ClearButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Remove custom name",
     };
 
     private static readonly Dictionary<string, string> ExpectedDeDe = new()
@@ -59,6 +71,12 @@ public class ResourceCoverageTests
         ["Dialog.RenameSession.CancelButton"] = "Abbrechen",
         ["Dialog.RenameSession.ResetButton"] = "Zurücksetzen",
         ["MainViewRenameButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Sitzung umbenennen",
+        // Phase 26 RENAME-02 Plan 03
+        ["SettingsTabSessions"] = "Sitzungen",
+        ["Settings.Sessions.Header.Text"] = "EIGENE SITZUNGSNAMEN",
+        ["Settings.Sessions.NoSessions.Text"] = "Keine Sitzungen verfügbar.",
+        ["Settings.Sessions.OrphanLabel.Text"] = "Sitzung nicht gefunden",
+        ["Settings.Sessions.ClearButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Eigenen Namen entfernen",
     };
 
     [Fact]

@@ -377,4 +377,21 @@
     <value>Sitzung umbenennen</value>
   </data>
 
+  <!-- Phase 26 RENAME-02: Settings Sessions tab content -->
+  <data name="SettingsTabSessions" xml:space="preserve">
+    <value>Sitzungen</value>
+  </data>
+  <data name="Settings.Sessions.Header.Text" xml:space="preserve">
+    <value>EIGENE SITZUNGSNAMEN</value>
+  </data>
+  <data name="Settings.Sessions.NoSessions.Text" xml:space="preserve">
+    <value>Keine Sitzungen verfügbar.</value>
+  </data>
+  <data name="Settings.Sessions.OrphanLabel.Text" xml:space="preserve">
+    <value>Sitzung nicht gefunden</value>
+  </data>
+  <data name="Settings.Sessions.ClearButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Eigenen Namen entfernen</value>
+  </data>
+
 </root>

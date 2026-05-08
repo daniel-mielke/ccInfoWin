@@ -13,6 +13,8 @@
             <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
             <converters:InvertedBoolToVisibilityConverter x:Key="InvertedBoolToVisibilityConverter" />
             <converters:PercentageToColorConverter x:Key="PercentageToColorConverter" />
+            <converters:OrphanOpacityConverter x:Key="OrphanOpacityConverter" />
+            <converters:ZeroToVisibilityConverter x:Key="ZeroToVisibilityConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

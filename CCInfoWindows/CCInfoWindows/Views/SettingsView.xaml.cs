@@ -1,17 +1,20 @@
+using CCInfoWindows.Models;
 using CCInfoWindows.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Windows.System;
 using WinUI3Localizer;
 
 namespace CCInfoWindows.Views;
 
 /// <summary>
-/// Settings page with refresh interval, theme toggle, and logout.
+/// Settings page with refresh interval, theme toggle, logout, and (Phase 26) session rename.
 /// </summary>
 public sealed partial class SettingsView : Page
 {
-    // D-10: tab order defined in SettingsViewModel.AboutTabIndex (shared constant)
+    // D-10: tab order defined in SettingsViewModel constants (shared)
     private const int AboutTabIndex = SettingsViewModel.AboutTabIndex;
 
     public SettingsViewModel ViewModel { get; }
@@ -32,6 +35,7 @@ public sealed partial class SettingsView : Page
         // start the timer immediately so "X minutes ago" is live from t=0.
         if (TabsSegmented.SelectedIndex == AboutTabIndex)
             ViewModel.StartAboutTimestampTimer();
+        ViewModel.Activate();   // Phase 26: subscribe to NameChanged + snapshot if Sessions tab visible
     }
 
     private void OnSegmentedSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -48,6 +52,7 @@ public sealed partial class SettingsView : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        ViewModel?.Deactivate();   // Phase 26: unsubscribe NameChanged
         // D-10: belt-and-suspenders — always stop on Page.Unloaded (POLISH-08).
         ViewModel?.StopAboutTimestampTimer();
     }
@@ -58,6 +63,30 @@ public sealed partial class SettingsView : Page
         ToolTipService.SetToolTip(TabGeneral, localizer.GetLocalizedString("SettingsTabGeneral"));
         ToolTipService.SetToolTip(TabUpdates, localizer.GetLocalizedString("SettingsTabUpdates"));
         ToolTipService.SetToolTip(TabAccount, localizer.GetLocalizedString("SettingsTabAccount"));
+        ToolTipService.SetToolTip(TabSessions, localizer.GetLocalizedString("SettingsTabSessions"));  // Phase 26
         ToolTipService.SetToolTip(TabAbout, localizer.GetLocalizedString("SettingsTabAbout"));
+    }
+
+    // Phase 26 / RENAME-02: TextBox commit on LostFocus — persists via ISessionNameStore
+    private async void OnSessionRenameTextBoxLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb && tb.Tag is SessionRenameItem item)
+        {
+            await ViewModel.SaveSessionCustomNameCommand.ExecuteAsync(item);
+        }
+    }
+
+    // Phase 26 / RENAME-02: TextBox commit on Enter key — persists via ISessionNameStore
+    private async void OnSessionRenameTextBoxKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.Enter) return;
+        if (sender is TextBox tb && tb.Tag is SessionRenameItem item)
+        {
+            e.Handled = true;
+            await ViewModel.SaveSessionCustomNameCommand.ExecuteAsync(item);
+            // Move focus off the TextBox so the user sees the commit visually
+            tb.IsEnabled = false;
+            tb.IsEnabled = true;
+        }
     }
 }

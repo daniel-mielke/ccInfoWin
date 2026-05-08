@@ -7,10 +7,11 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:l="using:WinUI3Localizer"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
+    xmlns:models="using:CCInfoWindows.Models"
     mc:Ignorable="d"
     Unloaded="OnUnloaded">
 
-    <Grid Background="{ThemeResource AppBackgroundBrush}" Padding="16,12">
+    <Grid x:Name="SettingsRootGrid" Background="{ThemeResource AppBackgroundBrush}" Padding="16,12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -31,7 +32,7 @@
                        VerticalAlignment="Center" CharacterSpacing="50" />
         </StackPanel>
 
-        <!-- Row 1: Segmented Control — 4 tabs with colored icon badges -->
+        <!-- Row 1: Segmented Control — 5 tabs with colored icon badges -->
         <controls:Segmented Grid.Row="1"
             x:Name="TabsSegmented"
             HorizontalAlignment="Stretch"
@@ -65,6 +66,16 @@
                     <Border Width="30" Height="30" CornerRadius="6"
                             Background="{ThemeResource SettingsBadgeRedBrush}">
                         <FontIcon Glyph="&#xE77B;" FontSize="16" Foreground="White" />
+                    </Border>
+                </controls:SegmentedItem.Content>
+            </controls:SegmentedItem>
+
+            <!-- Sessions tab (purple badge) — Phase 26 / RENAME-02 -->
+            <controls:SegmentedItem x:Name="TabSessions">
+                <controls:SegmentedItem.Content>
+                    <Border Width="30" Height="30" CornerRadius="6"
+                            Background="{ThemeResource SettingsBadgePurpleBrush}">
+                        <FontIcon Glyph="&#xE70F;" FontSize="16" Foreground="White" />
                     </Border>
                 </controls:SegmentedItem.Content>
             </controls:SegmentedItem>
@@ -379,7 +390,84 @@
                     </Border>
                 </StackPanel>
 
-                <!-- PANEL 4 — About Tab -->
+                <!-- PANEL 4 — Sessions Tab — Phase 26 / RENAME-02 -->
+                <StackPanel Spacing="8"
+                            Visibility="{x:Bind ViewModel.IsSessionsTabVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+
+                    <TextBlock l:Uids.Uid="Settings.Sessions.Header"
+                               FontSize="11" FontWeight="SemiBold"
+                               Foreground="{ThemeResource SectionHeaderBrush}"
+                               CharacterSpacing="50" Margin="0,0,0,8" />
+
+                    <!-- Empty-state placeholder -->
+                    <TextBlock l:Uids.Uid="Settings.Sessions.NoSessions"
+                               FontSize="13"
+                               Foreground="{ThemeResource SecondaryTextBrush}"
+                               HorizontalAlignment="Center"
+                               Margin="0,12,0,0"
+                               Visibility="{x:Bind ViewModel.SessionRenameItems.Count, Mode=OneWay, Converter={StaticResource ZeroToVisibilityConverter}}" />
+
+                    <Border CornerRadius="8"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.SessionRenameItems, Mode=OneWay}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:SessionRenameItem">
+                                    <Grid Padding="12,6"
+                                          ColumnSpacing="8"
+                                          Opacity="{x:Bind IsOrphan, Converter={StaticResource OrphanOpacityConverter}}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Session default name -->
+                                        <TextBlock Grid.Column="0" Grid.Row="0"
+                                                   Text="{x:Bind DefaultName}"
+                                                   FontSize="13"
+                                                   Foreground="{ThemeResource PrimaryTextBrush}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+
+                                        <!-- Orphan subtitle (visible only when IsOrphan == true) -->
+                                        <TextBlock Grid.Column="0" Grid.Row="1"
+                                                   l:Uids.Uid="Settings.Sessions.OrphanLabel"
+                                                   FontSize="11"
+                                                   Foreground="{ThemeResource TertiaryTextBrush}"
+                                                   Visibility="{x:Bind IsOrphan, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                                        <!-- Custom name TextBox — commits on LostFocus or Enter -->
+                                        <TextBox Grid.Column="1" Grid.RowSpan="2"
+                                                 Text="{x:Bind CustomName, Mode=TwoWay}"
+                                                 MaxLength="100"
+                                                 LostFocus="OnSessionRenameTextBoxLostFocus"
+                                                 KeyDown="OnSessionRenameTextBoxKeyDown"
+                                                 Tag="{x:Bind}"
+                                                 VerticalAlignment="Center" />
+
+                                        <!-- Clear button -->
+                                        <Button Grid.Column="2" Grid.RowSpan="2"
+                                                Command="{Binding DataContext.ClearSessionCustomNameCommand,
+                                                          ElementName=SettingsRootGrid}"
+                                                CommandParameter="{x:Bind}"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                VerticalAlignment="Center"
+                                                ToolTipService.ToolTip="&#xE894;">
+                                            <FontIcon Glyph="&#xE894;" FontSize="14" />
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+                </StackPanel>
+
+                <!-- PANEL 5 — About Tab -->
                 <StackPanel Spacing="8"
                             Visibility="{x:Bind ViewModel.IsAboutTabVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
 

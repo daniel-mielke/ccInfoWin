@@ -29,6 +29,7 @@
             <SolidColorBrush x:Key="SettingsBadgeBlueBrush"   Color="#0A84FF" />
             <SolidColorBrush x:Key="SettingsBadgeRedBrush"    Color="#FF453A" />
             <SolidColorBrush x:Key="SettingsBadgeOrangeBrush" Color="#FF9F0A" />
+            <SolidColorBrush x:Key="SettingsBadgePurpleBrush" Color="#8B5CF6" />
         </ResourceDictionary>
 
         <!-- Light theme -->
@@ -56,6 +57,7 @@
             <SolidColorBrush x:Key="SettingsBadgeBlueBrush"   Color="#007AFF" />
             <SolidColorBrush x:Key="SettingsBadgeRedBrush"    Color="#FF3B30" />
             <SolidColorBrush x:Key="SettingsBadgeOrangeBrush" Color="#FF9500" />
+            <SolidColorBrush x:Key="SettingsBadgePurpleBrush" Color="#7C3AED" />
         </ResourceDictionary>
 
     </ResourceDictionary.ThemeDictionaries>
