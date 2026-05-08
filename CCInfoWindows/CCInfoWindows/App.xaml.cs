@@ -140,6 +140,7 @@ public partial class App : Application
 
         // Infrastructure
         services.AddSingleton<HttpClient>();
+        services.AddSingleton<IDispatcherQueue, WinuiDispatcherQueueAdapter>();   // DISPATCH-02 (Phase 24, L-02)
 
         // Singleton services
         services.AddSingleton<ISettingsService, SettingsService>();
