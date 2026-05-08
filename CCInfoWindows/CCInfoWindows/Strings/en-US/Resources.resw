@@ -377,6 +377,23 @@
     <value>Rename session</value>
   </data>
 
+  <!-- Phase 27 L10N-01: localized last-fetch relative time on About tab -->
+  <data name="LastFetchRelative.JustNow" xml:space="preserve">
+    <value>just now</value>
+  </data>
+  <data name="LastFetchRelative.MinutesAgo" xml:space="preserve">
+    <value>{0} minutes ago</value>
+  </data>
+  <data name="LastFetchRelative.HoursAgo" xml:space="preserve">
+    <value>{0} hours ago</value>
+  </data>
+  <data name="LastFetchRelative.DaysAgo" xml:space="preserve">
+    <value>{0} days ago</value>
+  </data>
+  <data name="LastFetchRelative.Never" xml:space="preserve">
+    <value>Never</value>
+  </data>
+
   <!-- Phase 26 RENAME-02: Settings Sessions tab content -->
   <data name="SettingsTabSessions" xml:space="preserve">
     <value>Sessions</value>

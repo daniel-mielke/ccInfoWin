@@ -377,6 +377,23 @@
     <value>Sitzung umbenennen</value>
   </data>
 
+  <!-- Phase 27 L10N-01: localized last-fetch relative time on About tab -->
+  <data name="LastFetchRelative.JustNow" xml:space="preserve">
+    <value>gerade eben</value>
+  </data>
+  <data name="LastFetchRelative.MinutesAgo" xml:space="preserve">
+    <value>vor {0} Minuten</value>
+  </data>
+  <data name="LastFetchRelative.HoursAgo" xml:space="preserve">
+    <value>vor {0} Stunden</value>
+  </data>
+  <data name="LastFetchRelative.DaysAgo" xml:space="preserve">
+    <value>vor {0} Tagen</value>
+  </data>
+  <data name="LastFetchRelative.Never" xml:space="preserve">
+    <value>Nie</value>
+  </data>
+
   <!-- Phase 26 RENAME-02: Settings Sessions tab content -->
   <data name="SettingsTabSessions" xml:space="preserve">
     <value>Sitzungen</value>
