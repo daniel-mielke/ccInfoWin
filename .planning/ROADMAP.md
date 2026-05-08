@@ -326,7 +326,7 @@ Plans:
 **Plans**: 4 plans
 Plans:
 **Wave 1**
-- [ ] 27-01-l10n-relative-time-PLAN.md — L10N-01..03: SettingsViewModel.LastFetchRelativeTime localization + 5 LastFetchRelative.* resw key pairs + ResourceCoverageTests extension (forward-coverage policy seeded for plans 27-02..27-04)
+- [x] 27-01-l10n-relative-time-PLAN.md — L10N-01..03: SettingsViewModel.LastFetchRelativeTime localization + 5 LastFetchRelative.* resw key pairs + ResourceCoverageTests extension (forward-coverage policy seeded for plans 27-02..27-04)
 
 **Wave 2** *(blocked on Wave 1 — shares Resources.resw + ResourceCoverageTests)*
 - [ ] 27-02-nextwin-label-PLAN.md — NEXTWIN-01..03: FiveHourNextWindowText + IsFiveHourNextWindowVisible ObservableProperty in MainViewModel + RecomputeNextWindowLabel helper at 4 call-sites + OnIsSessionExpiredChanged partial + MainView.xaml TextBlock below countdown + 2 NextWindow format-string resw keys
@@ -380,5 +380,5 @@ Plans:
 | 24. Dispatcher Foundation & Marshaling Convention | v1.5 | 3/3 | Complete   | 2026-05-08 |
 | 25. Cold-Start Session Hydration & Visibility Window | v1.5 | 3/3 | Complete   | 2026-05-08 |
 | 26. Persistent Session Renaming | v1.5 | 3/3 | Complete   | 2026-05-08 |
-| 27. Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N | v1.5 | 0/4 | Planning   | - |
+| 27. Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N | v1.5 | 1/4 | In Progress|  |
 | 28. v1.4 Cleanup & Final UAT | v1.5 | 0/0 | Not started | - |

@@ -74,9 +74,9 @@ Bring CCInfoWindows to upstream stefanlange/ccInfo v1.12.0 feature parity (next 
 
 #### L10N — Localization Correctness (M-2 — bundles with PRICING)
 
-- [ ] **L10N-01**: `SettingsViewModel.LastFetchRelativeTime` no longer returns hardcoded EN strings ("just now", "X minutes ago", "X hours ago", "X days ago", "Never"); instead reads from new resw keys `LastFetchRelative.JustNow`, `LastFetchRelative.MinutesAgo`, `LastFetchRelative.HoursAgo`, `LastFetchRelative.DaysAgo`, `LastFetchRelative.Never` in both DE and EN.
-- [ ] **L10N-02**: All ~30 new resw keys across NEXTWIN/RENAME/DROPDOWN/ORGID/PRICING/L10N exist in both `Strings/de-DE/Resources.resw` AND `Strings/en-US/Resources.resw`.
-- [ ] **L10N-03**: `ResourceCoverageTests` xUnit class (added in v1.4) is extended to validate the v1.5 keys structurally — same XDocument-based check pattern.
+- [x] **L10N-01**: `SettingsViewModel.LastFetchRelativeTime` no longer returns hardcoded EN strings ("just now", "X minutes ago", "X hours ago", "X days ago", "Never"); instead reads from new resw keys `LastFetchRelative.JustNow`, `LastFetchRelative.MinutesAgo`, `LastFetchRelative.HoursAgo`, `LastFetchRelative.DaysAgo`, `LastFetchRelative.Never` in both DE and EN.
+- [x] **L10N-02**: All ~30 new resw keys across NEXTWIN/RENAME/DROPDOWN/ORGID/PRICING/L10N exist in both `Strings/de-DE/Resources.resw` AND `Strings/en-US/Resources.resw`.
+- [x] **L10N-03**: `ResourceCoverageTests` xUnit class (added in v1.4) is extended to validate the v1.5 keys structurally — same XDocument-based check pattern.
 
 ## Out of Scope
 
@@ -139,9 +139,9 @@ All 34 v1.5 REQ-IDs map to exactly one phase. 100% coverage validated 2026-05-08
 | PRICING-01 | Phase 27 | Pending |
 | PRICING-02 | Phase 27 | Pending |
 | PRICING-03 | Phase 27 | Pending |
-| L10N-01 | Phase 27 | Pending |
-| L10N-02 | Phase 27 | Pending |
-| L10N-03 | Phase 27 | Pending |
+| L10N-01 | Phase 27 | Complete |
+| L10N-02 | Phase 27 | Complete |
+| L10N-03 | Phase 27 | Complete |
 | CLEANUP-01 | Phase 28 | Pending |
 | CLEANUP-02 | Phase 28 | Pending |
 | CLEANUP-03 | Phase 28 | Pending |

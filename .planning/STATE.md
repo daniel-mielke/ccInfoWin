@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: macOS v1.12.0 Feature Parity + Hardening
-status: verifying
-stopped_at: Completed 26-03-settings-sessions-tab-PLAN.md (Phase 26 complete)
-last_updated: "2026-05-08T17:17:44.679Z"
+status: executing
+stopped_at: Completed 27-nextwin-orgid-pricing-l10n-01-PLAN.md
+last_updated: "2026-05-08T17:52:53.312Z"
 last_activity: 2026-05-08
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
+  total_plans: 13
+  completed_plans: 10
+  percent: 77
 ---
 
 # Project State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-08)
 
 **Core value:** Developers can see their Claude usage limits (5-hour window, weekly quota, context window) at a glance in real-time, preventing unexpected throttling.
-**Current focus:** Phase 26 — Persistent Session Renaming
+**Current focus:** Phase 27 — Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N
 
 ## Current Position
 
-Phase: 26 (Persistent Session Renaming) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
+Phase: 27 (Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
 Last activity: 2026-05-08
 
 **v1.5 Phase Sequence (research-validated, do not reorder):**
@@ -66,6 +66,7 @@ Last activity: 2026-05-08
 | Phase 26-persistent-session-renaming P01 | 18m | 3 tasks | 7 files |
 | Phase 26 P02 | 45 | 2 tasks | 9 files |
 | Phase 26 P03 | 70 | 2 tasks | 15 files |
+| Phase 27-nextwin-orgid-pricing-l10n P01 | 15 | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 - [Phase ?]: DROPDOWN-05: InfoBar migration toast in MainViewModel.InitializeAsync with synchronous SaveSettings on dismiss (D-04 + CD-02 + CD-05 honored)
 - [Phase ?]: ISessionNameStore D-01 shape locked: GetCustomName/SetCustomName/ClearCustomName/Save/SaveAsync/NameChanged
 - [Phase ?]: session-names.json path D-02: %LOCALAPPDATA%\CCInfoWindows\, Dictionary<string,string> keyed by encoded projectDirName
+- [Phase ?]: D-L10-01: 5 LastFetchRelative resw keys with {0} placeholders on MinutesAgo/HoursAgo/DaysAgo
+- [Phase ?]: D-L10-02: LastFetchRelativeTime uses 5-branch if-chain calling Localizer.Get() per category; DateTimeOffset.Now retained
 
 ### Open Tech Debt (carried into v1.5)
 
@@ -126,6 +129,6 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 
 ## Session Continuity
 
-Last session: 2026-05-08T17:20:00Z
-Stopped at: Completed 26-03-settings-sessions-tab-PLAN.md (Phase 26 complete)
+Last session: 2026-05-08T17:52:53.302Z
+Stopped at: Completed 27-nextwin-orgid-pricing-l10n-01-PLAN.md
 Resume file: None
