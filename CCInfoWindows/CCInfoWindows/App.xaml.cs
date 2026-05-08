@@ -145,6 +145,7 @@ public partial class App : Application
         // Singleton services
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IUsageHistoryService, UsageHistoryService>();
+        services.AddSingleton<ISessionNameStore, SessionNameStore>();   // RENAME-07 (Phase 26 Plan 01)
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<ICredentialService, CredentialService>();
         services.AddSingleton<WebViewBridge>();
