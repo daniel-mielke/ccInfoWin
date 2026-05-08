@@ -61,7 +61,7 @@ Bring CCInfoWindows to upstream stefanlange/ccInfo v1.12.0 feature parity (next 
 - [x] **DISPATCH-01**: A new `IDispatcherQueue` interface (`Services/Interfaces/IDispatcherQueue.cs`) exposes `bool TryEnqueue(Action action)` and `bool HasThreadAccess { get; }`, mirroring the v1.4 `IDispatcherTimer` pattern.
 - [x] **DISPATCH-02**: A `WinuiDispatcherQueueAdapter` production implementation wraps `Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()` and is registered as singleton in `App.xaml.cs` DI.
 - [x] **DISPATCH-03**: A `FakeDispatcherQueue` test double (in test project) executes actions inline (or queues for explicit pump, configurable per test); replaces every `DispatcherQueue.TryEnqueue` test seam in headless xUnit tests.
-- [ ] **DISPATCH-04**: `MainViewModel.Receive(AuthStateChangedMessage)` is refactored: the entire body wraps in `_dispatcherQueue.TryEnqueue(() => HandleCore(...))` (always-TryEnqueue, no `if (!HasThreadAccess)` shortcut). The fire-and-forget Task that previously swallowed exceptions is replaced with an awaited / continuation-handled call that surfaces failures via existing `HasApiError` (C-1 fix).
+- [x] **DISPATCH-04**: `MainViewModel.Receive(AuthStateChangedMessage)` is refactored: the entire body wraps in `_dispatcherQueue.TryEnqueue(() => HandleCore(...))` (always-TryEnqueue, no `if (!HasThreadAccess)` shortcut). The fire-and-forget Task that previously swallowed exceptions is replaced with an awaited / continuation-handled call that surfaces failures via existing `HasApiError` (C-1 fix).
 - [ ] **DISPATCH-05**: A documented project-wide convention G-1 lands in `CLAUDE.md`: every `IRecipient<T>.Receive(T)` body that mutates `[ObservableProperty]`, calls `INavigationService`, or touches XAML controls MUST wrap the body in `IDispatcherQueue.TryEnqueue`. Exception only with `[ThreadSafeReceive]` attribute or inline justification comment.
 - [ ] **DISPATCH-06**: A `MessengerThreadingConventionTests` xUnit class enforces G-1 via reflection (or `[RequiresMarshal]` attribute pair if pure reflection proves insufficient — Phase 24 30-min spike decides). Test fails the build when a new `IRecipient<>` handler bypasses the rule.
 
@@ -111,7 +111,7 @@ All 34 v1.5 REQ-IDs map to exactly one phase. 100% coverage validated 2026-05-08
 | DISPATCH-01 | Phase 24 | Complete |
 | DISPATCH-02 | Phase 24 | Complete |
 | DISPATCH-03 | Phase 24 | Complete |
-| DISPATCH-04 | Phase 24 | Pending |
+| DISPATCH-04 | Phase 24 | Complete |
 | DISPATCH-05 | Phase 24 | Pending |
 | DISPATCH-06 | Phase 24 | Pending |
 | DROPDOWN-01 | Phase 25 | Pending |

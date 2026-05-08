@@ -4,14 +4,14 @@ milestone: v1.5
 milestone_name: macOS v1.12.0 Feature Parity + Hardening
 status: executing
 stopped_at: Completed 24-01-dispatcher-adapter-PLAN.md
-last_updated: "2026-05-08T14:23:46.891Z"
+last_updated: "2026-05-08T14:32:50.382Z"
 last_activity: 2026-05-08
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 33
+  completed_plans: 2
+  percent: 67
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-08)
 ## Current Position
 
 Phase: 24 (Dispatcher Foundation & Marshaling Convention) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-05-08
 
@@ -58,6 +58,7 @@ Last activity: 2026-05-08
 | 27 Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N | 0 | Not started | — |
 | 28 v1.4 Cleanup & Final UAT | 0 | Not started | — |
 | Phase 24 P01 | 25 | 3 tasks | 5 files |
+| Phase 24 P02 | 35min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -113,6 +114,6 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 
 ## Session Continuity
 
-Last session: 2026-05-08T14:23:46.880Z
+Last session: 2026-05-08T14:32:50.372Z
 Stopped at: Completed 24-01-dispatcher-adapter-PLAN.md
 Resume file: None
