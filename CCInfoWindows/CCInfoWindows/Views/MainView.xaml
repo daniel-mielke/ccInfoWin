@@ -326,14 +326,27 @@
                             FontWeight="Bold"
                             Foreground="{ThemeResource PrimaryTextBrush}" />
 
-                        <!-- Countdown with clock icon -->
-                        <StackPanel Grid.Column="1" Orientation="Horizontal"
-                                    HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="4">
-                            <FontIcon Glyph="&#xE823;" FontSize="13"
-                                      Foreground="{ThemeResource SecondaryTextBrush}" />
+                        <!-- Countdown stack with absolute-time label (NEXTWIN-01..03 / D-NW-01..04) -->
+                        <StackPanel Grid.Column="1" Orientation="Vertical"
+                                    HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="2">
+                            <!-- Existing horizontal countdown stack (preserved verbatim) -->
+                            <StackPanel Orientation="Horizontal"
+                                        HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="4">
+                                <FontIcon Glyph="&#xE823;" FontSize="13"
+                                          Foreground="{ThemeResource SecondaryTextBrush}" />
+                                <TextBlock
+                                    Text="{x:Bind ViewModel.FiveHourCountdown, Mode=OneWay}"
+                                    FontSize="13"
+                                    Foreground="{ThemeResource SecondaryTextBrush}" />
+                            </StackPanel>
+
+                            <!-- NEXTWIN-01..03 / D-NW-01: absolute reset-time below countdown -->
                             <TextBlock
-                                Text="{x:Bind ViewModel.FiveHourCountdown, Mode=OneWay}"
-                                FontSize="13"
+                                Text="{x:Bind ViewModel.FiveHourNextWindowText, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.IsFiveHourNextWindowVisible, Mode=OneWay,
+                                             Converter={StaticResource BoolToVisibilityConverter}}"
+                                FontSize="11"
+                                HorizontalAlignment="Right"
                                 Foreground="{ThemeResource SecondaryTextBrush}" />
                         </StackPanel>
                     </Grid>
