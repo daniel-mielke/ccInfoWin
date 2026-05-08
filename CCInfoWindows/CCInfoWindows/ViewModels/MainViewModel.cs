@@ -51,9 +51,6 @@ public partial class MainViewModel : ObservableObject,
     IRecipient<SessionTimeoutChangedMessage>,   // D-08
     IRecipient<SessionVisibilityChangedMessage>   // DROPDOWN-04 / D-03
 {
-    // 21-03 gap closure REVERTED: IRecipient<LogoutRequestedMessage> registration was unreliable
-    // because MainViewModel is AddTransient and WeakReferenceMessenger silently dropped the
-    // recipient on GC. SettingsViewModel.Logout now calls _historyService.ClearHistory() directly.
     private readonly ICredentialService _credentialService;
     private readonly INavigationService _navigationService;
     private readonly IClaudeApiService _apiService;
