@@ -5,6 +5,7 @@ severity: major
 area: ViewModels/SettingsViewModel.cs
 related_phase: 22-ui-polish
 related_backlog: backlog_pricing_never_loaded.md
+resolves_phase: 27
 ---
 
 # M-2: Localize `LastFetchRelativeTime` hardcoded strings

@@ -4,6 +4,7 @@ source: v1.4 code review
 severity: major
 area: Messages/LogoutRequestedMessage.cs
 related_phase: 21-history-persistence-hardening
+resolves_phase: 28
 ---
 
 # M-1: Delete orphan `LogoutRequestedMessage.cs`

@@ -4,6 +4,7 @@ source: v1.4 code review
 severity: major
 area: ViewModels/MainViewModel.cs
 related_phase: 22-ui-polish
+resolves_phase: 28
 ---
 
 # M-3: Revert `_contextModelBadgeColor = null!` to a real default

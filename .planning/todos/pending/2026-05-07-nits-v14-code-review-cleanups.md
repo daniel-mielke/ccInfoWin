@@ -4,6 +4,7 @@ source: v1.4 code review
 severity: minor
 area: multiple
 related_phase: v1.4
+resolves_phase: 28
 ---
 
 # Nits — v1.4 Code Review Cleanups

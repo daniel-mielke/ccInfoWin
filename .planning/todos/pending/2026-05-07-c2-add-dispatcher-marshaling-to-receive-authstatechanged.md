@@ -4,6 +4,7 @@ source: v1.4 code review
 severity: critical
 area: ViewModels/MainViewModel.cs
 related_phase: 20-auth-flow-stability
+resolves_phase: 24
 ---
 
 # C-2: `Receive(AuthStateChangedMessage)` mutates UI state without thread marshaling
