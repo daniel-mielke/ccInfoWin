@@ -50,6 +50,9 @@ public class ResourceCoverageTests
         // Phase 27 NEXTWIN-01..03: absolute next-window start label (D-NW-03 / CD-01)
         "MainView.NextWindow.LabelDe",
         "MainView.NextWindow.LabelEn",
+        // Phase 27 PRICING-01..03: pricing-service silent-failure surfacing
+        "MainView.PricingErrorInfoBar.Title",
+        "MainView.PricingErrorInfoBar.Message",
     ];
 
     private static readonly Dictionary<string, string> ExpectedEnUs = new()
@@ -80,6 +83,9 @@ public class ResourceCoverageTests
         // Phase 27 NEXTWIN-01..03: format patterns (same values in both locales — format strings, not human-readable)
         ["MainView.NextWindow.LabelDe"] = "ddd d.M. HH:mm",
         ["MainView.NextWindow.LabelEn"] = "ddd HH:mm",
+        // Phase 27 PRICING-01..03: pricing-service silent-failure surfacing
+        ["MainView.PricingErrorInfoBar.Title"] = "Pricing data unavailable",
+        ["MainView.PricingErrorInfoBar.Message"] = "Cost figures may be inaccurate.",
     };
 
     private static readonly Dictionary<string, string> ExpectedDeDe = new()
@@ -110,6 +116,9 @@ public class ResourceCoverageTests
         // Phase 27 NEXTWIN-01..03: format patterns (same values in both locales — format strings, not human-readable)
         ["MainView.NextWindow.LabelDe"] = "ddd d.M. HH:mm",
         ["MainView.NextWindow.LabelEn"] = "ddd HH:mm",
+        // Phase 27 PRICING-01..03: pricing-service silent-failure surfacing
+        ["MainView.PricingErrorInfoBar.Title"] = "Preisdaten nicht verfügbar",
+        ["MainView.PricingErrorInfoBar.Message"] = "Kostendaten können ungenau sein.",
     };
 
     [Fact]

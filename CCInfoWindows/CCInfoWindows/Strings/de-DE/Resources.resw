@@ -419,4 +419,12 @@
     <value>Eigenen Namen entfernen</value>
   </data>
 
+  <!-- Phase 27 PRICING-01..03: pricing-service silent-failure surfacing (D-PR-02) -->
+  <data name="MainView.PricingErrorInfoBar.Title" xml:space="preserve">
+    <value>Preisdaten nicht verfügbar</value>
+  </data>
+  <data name="MainView.PricingErrorInfoBar.Message" xml:space="preserve">
+    <value>Kostendaten können ungenau sein.</value>
+  </data>
+
 </root>
