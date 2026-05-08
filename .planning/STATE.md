@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: macOS v1.12.0 Feature Parity + Hardening
 status: executing
-stopped_at: Completed 27-nextwin-orgid-pricing-l10n-01-PLAN.md
-last_updated: "2026-05-08T17:59:46.874Z"
+stopped_at: Completed 27-03-pricing-error-PLAN.md
+last_updated: "2026-05-08T18:07:42.312Z"
 last_activity: 2026-05-08
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 13
-  completed_plans: 11
-  percent: 85
+  completed_plans: 12
+  percent: 92
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-08)
 ## Current Position
 
 Phase: 27 (Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-05-08
 
@@ -68,6 +68,7 @@ Last activity: 2026-05-08
 | Phase 26 P03 | 70 | 2 tasks | 15 files |
 | Phase 27-nextwin-orgid-pricing-l10n P01 | 15 | 3 tasks | 5 files |
 | Phase 27-nextwin-orgid-pricing-l10n P02 | 20 | 3 tasks | 5 files |
+| Phase 27-nextwin-orgid-pricing-l10n P03 | 4min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -101,6 +102,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 - [Phase ?]: session-names.json path D-02: %LOCALAPPDATA%\CCInfoWindows\, Dictionary<string,string> keyed by encoded projectDirName
 - [Phase ?]: D-L10-01: 5 LastFetchRelative resw keys with {0} placeholders on MinutesAgo/HoursAgo/DaysAgo
 - [Phase ?]: D-L10-02: LastFetchRelativeTime uses 5-branch if-chain calling Localizer.Get() per category; DateTimeOffset.Now retained
+- [Phase ?]: IsPricingErrorVisible = IsPricingError && !IsSessionExpired (D-PR-04 banner-stack policy: auth wins)
 
 ### Open Tech Debt (carried into v1.5)
 
@@ -130,6 +132,6 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 
 ## Session Continuity
 
-Last session: 2026-05-08T17:59:46.865Z
-Stopped at: Completed 27-nextwin-orgid-pricing-l10n-01-PLAN.md
+Last session: 2026-05-08T18:07:42.303Z
+Stopped at: Completed 27-03-pricing-error-PLAN.md
 Resume file: None

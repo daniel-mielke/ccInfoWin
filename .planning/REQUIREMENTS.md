@@ -50,9 +50,9 @@ Bring CCInfoWindows to upstream stefanlange/ccInfo v1.12.0 feature parity (next 
 
 #### PRICING — Pricing-Service Silent-Failure Surfacing (B3)
 
-- [ ] **PRICING-01**: When `_pricingService.EnsurePricesLoadedAsync()` throws, the exception is caught and a dedicated `IsPricingError` flag in `MainViewModel` is set to true; an `InfoBar` (warning level) appears in MainView with text "Pricing data unavailable — cost figures may be inaccurate".
-- [ ] **PRICING-02**: When pricing succeeds on a subsequent retry (manual refresh or auto-poll), `IsPricingError` clears and the `InfoBar` disappears.
-- [ ] **PRICING-03**: Banner stack policy: at most 2 banners visible simultaneously; `IsPricingError` is suppressed when `IsSessionExpired == true` (auth banner takes priority). Documented as Key Decision in PROJECT.md after Phase 27 ships.
+- [x] **PRICING-01**: When `_pricingService.EnsurePricesLoadedAsync()` throws, the exception is caught and a dedicated `IsPricingError` flag in `MainViewModel` is set to true; an `InfoBar` (warning level) appears in MainView with text "Pricing data unavailable — cost figures may be inaccurate".
+- [x] **PRICING-02**: When pricing succeeds on a subsequent retry (manual refresh or auto-poll), `IsPricingError` clears and the `InfoBar` disappears.
+- [x] **PRICING-03**: Banner stack policy: at most 2 banners visible simultaneously; `IsPricingError` is suppressed when `IsSessionExpired == true` (auth banner takes priority). Documented as Key Decision in PROJECT.md after Phase 27 ships.
 
 ### Cluster C — v1.4 Code-Review Remediation + Dispatcher Foundation
 
@@ -136,9 +136,9 @@ All 34 v1.5 REQ-IDs map to exactly one phase. 100% coverage validated 2026-05-08
 | ORGID-03 | Phase 27 | Pending |
 | ORGID-04 | Phase 27 | Pending |
 | ORGID-05 | Phase 27 | Pending |
-| PRICING-01 | Phase 27 | Pending |
-| PRICING-02 | Phase 27 | Pending |
-| PRICING-03 | Phase 27 | Pending |
+| PRICING-01 | Phase 27 | Complete |
+| PRICING-02 | Phase 27 | Complete |
+| PRICING-03 | Phase 27 | Complete |
 | L10N-01 | Phase 27 | Complete |
 | L10N-02 | Phase 27 | Complete |
 | L10N-03 | Phase 27 | Complete |
