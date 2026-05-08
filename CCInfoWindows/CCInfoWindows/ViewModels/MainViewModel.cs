@@ -986,6 +986,7 @@ public partial class MainViewModel : ObservableObject,
         _updateVersion = version;
         _dispatcherQueue.TryEnqueue(() =>
         {
+            // TODO Phase 27 (L10N-01): localize via WinUI3Localizer like FormatBurnRateText.
             UpdateMessage = $"Update v{version} verfügbar";
             IsUpdateAvailable = true;
         });

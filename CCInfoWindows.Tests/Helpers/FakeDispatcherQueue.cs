@@ -44,4 +44,11 @@ public sealed class FakeDispatcherQueue : IDispatcherQueue
         }
         return count;
     }
+
+    /// <summary>Resets InvocationCount and clears any queued actions. Use between Arrange/Act test phases.</summary>
+    public void Reset()
+    {
+        InvocationCount = 0;
+        _queued.Clear();
+    }
 }

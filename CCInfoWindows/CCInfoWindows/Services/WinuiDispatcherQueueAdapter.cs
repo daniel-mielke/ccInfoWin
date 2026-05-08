@@ -24,7 +24,7 @@ internal sealed class WinuiDispatcherQueueAdapter : IDispatcherQueue
     public bool TryEnqueue(Action action)
     {
         ArgumentNullException.ThrowIfNull(action);
-        return _inner.TryEnqueue(() => action());
+        return _inner.TryEnqueue(new DispatcherQueueHandler(action));
     }
 
     public bool HasThreadAccess => _inner.HasThreadAccess;
