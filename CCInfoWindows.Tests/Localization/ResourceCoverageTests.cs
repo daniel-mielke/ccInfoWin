@@ -47,6 +47,9 @@ public class ResourceCoverageTests
         "LastFetchRelative.HoursAgo",
         "LastFetchRelative.DaysAgo",
         "LastFetchRelative.Never",
+        // Phase 27 NEXTWIN-01..03: absolute next-window start label (D-NW-03 / CD-01)
+        "MainView.NextWindow.LabelDe",
+        "MainView.NextWindow.LabelEn",
     ];
 
     private static readonly Dictionary<string, string> ExpectedEnUs = new()
@@ -74,6 +77,9 @@ public class ResourceCoverageTests
         ["LastFetchRelative.HoursAgo"] = "{0} hours ago",
         ["LastFetchRelative.DaysAgo"] = "{0} days ago",
         ["LastFetchRelative.Never"] = "Never",
+        // Phase 27 NEXTWIN-01..03: format patterns (same values in both locales — format strings, not human-readable)
+        ["MainView.NextWindow.LabelDe"] = "ddd d.M. HH:mm",
+        ["MainView.NextWindow.LabelEn"] = "ddd HH:mm",
     };
 
     private static readonly Dictionary<string, string> ExpectedDeDe = new()
@@ -101,6 +107,9 @@ public class ResourceCoverageTests
         ["LastFetchRelative.HoursAgo"] = "vor {0} Stunden",
         ["LastFetchRelative.DaysAgo"] = "vor {0} Tagen",
         ["LastFetchRelative.Never"] = "Nie",
+        // Phase 27 NEXTWIN-01..03: format patterns (same values in both locales — format strings, not human-readable)
+        ["MainView.NextWindow.LabelDe"] = "ddd d.M. HH:mm",
+        ["MainView.NextWindow.LabelEn"] = "ddd HH:mm",
     };
 
     [Fact]

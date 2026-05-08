@@ -394,6 +394,14 @@
     <value>Never</value>
   </data>
 
+  <!-- Phase 27 NEXTWIN-01..03: absolute next-window start label format strings (D-NW-03 / CD-01) -->
+  <data name="MainView.NextWindow.LabelDe" xml:space="preserve">
+    <value>ddd d.M. HH:mm</value>
+  </data>
+  <data name="MainView.NextWindow.LabelEn" xml:space="preserve">
+    <value>ddd HH:mm</value>
+  </data>
+
   <!-- Phase 26 RENAME-02: Settings Sessions tab content -->
   <data name="SettingsTabSessions" xml:space="preserve">
     <value>Sessions</value>
