@@ -47,7 +47,8 @@ public class MainViewModelAuthFlowTests
             bridge.Object,
             burnRate.Object,
             new FakeDispatcherQueue(),
-            sessionNameStore.Object);
+            sessionNameStore.Object,
+            _ => null!);   // headless brushFactory seam — SolidColorBrush requires WinRT COM
 
         return (vm, navigationService);
     }
@@ -129,7 +130,8 @@ public class MainViewModelAuthFlowTests
             bridge.Object,
             burnRate.Object,
             new FakeDispatcherQueue(),
-            sessionNameStore.Object);
+            sessionNameStore.Object,
+            _ => null!);   // headless brushFactory seam — SolidColorBrush requires WinRT COM
 
         return (vm, navigationService);
     }

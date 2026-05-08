@@ -70,6 +70,9 @@ public partial class MainViewModel : ObservableObject,
     private EventHandler? _dataUpdatedHandler;
     private CancellationTokenSource? _statisticsCts;
 
+    // G-3 / CLEANUP-02: testability seam — overridden in unit tests to avoid WinRT COM activation.
+    private readonly Func<string, SolidColorBrush> _brushFactory;
+
     private string _updateDownloadUrl = string.Empty;
     private string _updateVersion = string.Empty;
 
@@ -325,8 +328,10 @@ public partial class MainViewModel : ObservableObject,
         IWebViewBridge bridge,
         IBurnRateNotificationService burnRateNotificationService,
         IDispatcherQueue dispatcherQueue,
-        ISessionNameStore sessionNameStore)   // Phase 26 / RENAME-07
+        ISessionNameStore sessionNameStore,   // Phase 26 / RENAME-07
+        Func<string, SolidColorBrush>? brushFactory = null)   // G-3 / CLEANUP-02: testability seam; null = use ParseHexBrush
     {
+        _brushFactory = brushFactory ?? ParseHexBrush;
         _credentialService = credentialService;
         _navigationService = navigationService;
         _apiService = apiService;
@@ -339,6 +344,10 @@ public partial class MainViewModel : ObservableObject,
         _burnRateNotificationService = burnRateNotificationService;
         _dispatcherQueue = dispatcherQueue;
         _sessionNameStore = sessionNameStore;
+
+        // G-3 / CLEANUP-02: initialize to gray-400 fallback before any poll runs, so bindings
+        // never read null. Uses _brushFactory seam so tests can inject a headless fake.
+        _contextModelBadgeColor = _brushFactory("#9CA3AF");
 
         // Messenger registration happens in InitializeAsync (paired with UnregisterAll for re-init safety — PITFALLS C2-P3).
         _updateService.UpdateAvailable += OnUpdateAvailable;

@@ -58,7 +58,8 @@ public class MainViewModelRefreshTests
             bridge.Object,
             burnRateService.Object,
             new FakeDispatcherQueue(),
-            sessionNameStore.Object);
+            sessionNameStore.Object,
+            _ => null!);   // headless brushFactory seam — SolidColorBrush requires WinRT COM
     }
 
     [Fact]
@@ -200,7 +201,8 @@ public class MainViewModelRefreshTests
             bridge.Object,
             burnRateService.Object,
             new FakeDispatcherQueue(),
-            sessionNameStore.Object);
+            sessionNameStore.Object,
+            _ => null!);   // headless brushFactory seam — SolidColorBrush requires WinRT COM
     }
 
     private static void InvokeRefreshSessionList(MainViewModel vm)
