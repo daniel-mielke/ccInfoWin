@@ -63,6 +63,7 @@ public partial class MainViewModel : ObservableObject,
     private readonly IUpdateService _updateService;
     private readonly IWebViewBridge _bridge;
     private readonly IBurnRateNotificationService _burnRateNotificationService;
+    private readonly ISessionNameStore _sessionNameStore;   // RENAME-07 / Phase 26
 
     private DispatcherQueueTimer? _pollTimer;
     private DispatcherQueueTimer? _countdownTimer;
@@ -291,7 +292,8 @@ public partial class MainViewModel : ObservableObject,
         IUpdateService updateService,
         IWebViewBridge bridge,
         IBurnRateNotificationService burnRateNotificationService,
-        IDispatcherQueue dispatcherQueue)
+        IDispatcherQueue dispatcherQueue,
+        ISessionNameStore sessionNameStore)   // Phase 26 / RENAME-07
     {
         _credentialService = credentialService;
         _navigationService = navigationService;
@@ -304,6 +306,7 @@ public partial class MainViewModel : ObservableObject,
         _bridge = bridge;
         _burnRateNotificationService = burnRateNotificationService;
         _dispatcherQueue = dispatcherQueue;
+        _sessionNameStore = sessionNameStore;
 
         // Messenger registration happens in InitializeAsync (paired with UnregisterAll for re-init safety — PITFALLS C2-P3).
         _updateService.UpdateAvailable += OnUpdateAvailable;
@@ -352,6 +355,10 @@ public partial class MainViewModel : ObservableObject,
                     vm.UpdateSessionData(vm.SelectedSession.Session);
             });
         });
+
+        // RENAME-04 / D-06 / L-02: subscribe via .NET event (NOT WeakReferenceMessenger — D-13 lesson).
+        // Symmetric -= cleanup happens in StopTimers (CD-05).
+        _sessionNameStore.NameChanged += OnSessionNameChanged;
 
         // Load persisted history for instant chart display before first poll
         var history = _historyService.LoadHistory();
@@ -646,6 +653,7 @@ public partial class MainViewModel : ObservableObject,
         }
         _jsonlService.Stop();
         _updateService.StopPeriodicCheck();
+        _sessionNameStore.NameChanged -= OnSessionNameChanged;
         WeakReferenceMessenger.Default.UnregisterAll(this);
     }
 
@@ -670,6 +678,13 @@ public partial class MainViewModel : ObservableObject,
         }
 
         return $"{session.Cwd}\n{string.Format(template, sessionTimeoutMinutes)}";
+    }
+
+    // G-1: NameChanged may arrive off-thread (singleton-published event from any caller).
+    //      Always-TryEnqueue per CLAUDE.md MVVM Conventions, no HasThreadAccess shortcut.
+    private void OnSessionNameChanged(object? sender, SessionNameChangedEventArgs args)
+    {
+        _dispatcherQueue.TryEnqueue(RefreshSessionList);
     }
 
     /// <summary>
@@ -720,7 +735,7 @@ public partial class MainViewModel : ObservableObject,
                 return new SessionDisplayItem
                 {
                     Session = s,
-                    DisplayName = s.DisplayName,
+                    DisplayName = _sessionNameStore.GetCustomName(s.Id) ?? s.DisplayName,   // RENAME-08
                     IsActive = isActive,
                     TooltipText = ComputeTooltipText(s, isActive, thresholdMinutes)
                 };

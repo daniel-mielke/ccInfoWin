@@ -174,7 +174,8 @@ public partial class App : Application
             sp.GetRequiredService<IUpdateService>(),
             sp.GetRequiredService<IWebViewBridge>(),
             sp.GetRequiredService<IBurnRateNotificationService>(),
-            sp.GetRequiredService<IDispatcherQueue>()));
+            sp.GetRequiredService<IDispatcherQueue>(),
+            sp.GetRequiredService<ISessionNameStore>()));   // Phase 26 / RENAME-07
         services.AddTransient<SettingsViewModel>();
 
         return services.BuildServiceProvider();

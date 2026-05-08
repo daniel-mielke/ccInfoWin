@@ -43,6 +43,8 @@ public class MainViewModelRefreshTests
 
         var bridge = new Mock<IWebViewBridge>();
         var burnRateService = new Mock<IBurnRateNotificationService>();
+        var sessionNameStore = new Mock<ISessionNameStore>();
+        sessionNameStore.Setup(s => s.GetCustomName(It.IsAny<string>())).Returns((string?)null);
 
         return new MainViewModel(
             credentialService.Object,
@@ -55,7 +57,8 @@ public class MainViewModelRefreshTests
             updateService.Object,
             bridge.Object,
             burnRateService.Object,
-            new FakeDispatcherQueue());
+            new FakeDispatcherQueue(),
+            sessionNameStore.Object);
     }
 
     [Fact]
@@ -160,5 +163,123 @@ public class MainViewModelRefreshTests
         Assert.True(canRefreshChanges >= 2,
             $"PropertyChanged(\"CanRefresh\") fired {canRefreshChanges} times — expected >= 2 (one per IsRefreshing flip). " +
             "Verify [NotifyPropertyChangedFor(nameof(CanRefresh))] is on the _isRefreshing field.");
+    }
+
+    private static MainViewModel CreateSutWithNameStore(Mock<ISessionNameStore> sessionNameStore, Mock<IJsonlService> jsonlService)
+    {
+        var apiMock = new Mock<IClaudeApiService>();
+        apiMock.Setup(x => x.FetchUsageAsync(It.IsAny<CancellationToken>()))
+               .ReturnsAsync(MinimalUsageResponse);
+
+        var credentialService = new Mock<ICredentialService>();
+        var navigationService = new Mock<INavigationService>();
+        var settingsService = new Mock<ISettingsService>();
+        settingsService.Setup(s => s.LoadSettings()).Returns(new AppSettings());
+
+        var historyService = new Mock<IUsageHistoryService>();
+        historyService.Setup(s => s.LoadHistory()).Returns(new UsageHistory());
+
+        var pricingService = new Mock<IPricingService>();
+        pricingService.Setup(s => s.EnsurePricesLoadedAsync()).Returns(Task.CompletedTask);
+
+        var updateService = new Mock<IUpdateService>();
+        updateService.Setup(s => s.CheckForUpdateAsync()).Returns(Task.CompletedTask);
+
+        var bridge = new Mock<IWebViewBridge>();
+        var burnRateService = new Mock<IBurnRateNotificationService>();
+
+        return new MainViewModel(
+            credentialService.Object,
+            navigationService.Object,
+            apiMock.Object,
+            settingsService.Object,
+            historyService.Object,
+            jsonlService.Object,
+            pricingService.Object,
+            updateService.Object,
+            bridge.Object,
+            burnRateService.Object,
+            new FakeDispatcherQueue(),
+            sessionNameStore.Object);
+    }
+
+    private static void InvokeRefreshSessionList(MainViewModel vm)
+    {
+        var method = typeof(MainViewModel).GetMethod(
+            "RefreshSessionList",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(method);
+        method.Invoke(vm, null);
+    }
+
+    [Fact]
+    public void RefreshSessionList_AppliesCustomNameOverlay_WhenStoreReturnsValue()
+    {
+        // Arrange
+        const string SessionId = "sessionA";
+        const string AutoDerived = "auto-derived";
+        const string CustomName = "My Custom Name";
+
+        var sessionNameStore = new Mock<ISessionNameStore>();
+        sessionNameStore.Setup(s => s.GetCustomName(SessionId)).Returns(CustomName);
+        sessionNameStore.Setup(s => s.GetCustomName(It.Is<string>(id => id != SessionId))).Returns((string?)null);
+
+        // Use LastActivity 2 hours ago: within 30-day visibility window but outside 30-minute
+        // activity threshold, so the session appears in SortedSessions but is not auto-selected
+        // (avoids UpdateSessionData → ParseHexBrush → WinUI COM exception in headless tests).
+        var session = new SessionInfo
+        {
+            Id = SessionId,
+            Cwd = "D:\\projects\\test",
+            DisplayName = AutoDerived,
+            LastActivity = DateTimeOffset.UtcNow.AddHours(-2)
+        };
+
+        var jsonlService = new Mock<IJsonlService>();
+        jsonlService.Setup(s => s.Sessions).Returns([session]);
+        jsonlService.Setup(s => s.IsScanning).Returns(false);
+        jsonlService.Setup(s => s.InitializeAsync()).Returns(Task.CompletedTask);
+
+        var sut = CreateSutWithNameStore(sessionNameStore, jsonlService);
+
+        // Act
+        InvokeRefreshSessionList(sut);
+
+        // Assert
+        Assert.Single(sut.SortedSessions);
+        Assert.Equal(CustomName, sut.SortedSessions.First().DisplayName);
+    }
+
+    [Fact]
+    public void RefreshSessionList_FallsBackToAutoDerived_WhenStoreReturnsNull()
+    {
+        // Arrange
+        const string SessionId = "sessionB";
+        const string AutoDerived = "auto-derived";
+
+        var sessionNameStore = new Mock<ISessionNameStore>();
+        sessionNameStore.Setup(s => s.GetCustomName(It.IsAny<string>())).Returns((string?)null);
+
+        var session = new SessionInfo
+        {
+            Id = SessionId,
+            Cwd = "D:\\projects\\test",
+            DisplayName = AutoDerived,
+            LastActivity = DateTimeOffset.UtcNow.AddHours(-2)
+        };
+
+        var jsonlService = new Mock<IJsonlService>();
+        jsonlService.Setup(s => s.Sessions).Returns([session]);
+        jsonlService.Setup(s => s.IsScanning).Returns(false);
+        jsonlService.Setup(s => s.InitializeAsync()).Returns(Task.CompletedTask);
+
+        var sut = CreateSutWithNameStore(sessionNameStore, jsonlService);
+
+        // Act
+        InvokeRefreshSessionList(sut);
+
+        // Assert
+        Assert.Single(sut.SortedSessions);
+        Assert.Equal(AutoDerived, sut.SortedSessions.First().DisplayName);
     }
 }

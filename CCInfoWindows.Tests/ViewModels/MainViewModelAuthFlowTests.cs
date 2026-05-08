@@ -32,6 +32,8 @@ public class MainViewModelAuthFlowTests
         var updateService = new Mock<IUpdateService>();
         var bridge = new Mock<IWebViewBridge>();
         var burnRate = new Mock<IBurnRateNotificationService>();
+        var sessionNameStore = new Mock<ISessionNameStore>();
+        sessionNameStore.Setup(s => s.GetCustomName(It.IsAny<string>())).Returns((string?)null);
 
         var vm = new MainViewModel(
             credentialService.Object,
@@ -44,7 +46,8 @@ public class MainViewModelAuthFlowTests
             updateService.Object,
             bridge.Object,
             burnRate.Object,
-            new FakeDispatcherQueue());
+            new FakeDispatcherQueue(),
+            sessionNameStore.Object);
 
         return (vm, navigationService);
     }
@@ -111,6 +114,8 @@ public class MainViewModelAuthFlowTests
         var updateService = new Mock<IUpdateService>();
         var bridge = new Mock<IWebViewBridge>();
         var burnRate = new Mock<IBurnRateNotificationService>();
+        var sessionNameStore = new Mock<ISessionNameStore>();
+        sessionNameStore.Setup(s => s.GetCustomName(It.IsAny<string>())).Returns((string?)null);
 
         var vm = new MainViewModel(
             credentialService.Object,
@@ -123,7 +128,8 @@ public class MainViewModelAuthFlowTests
             updateService.Object,
             bridge.Object,
             burnRate.Object,
-            new FakeDispatcherQueue());
+            new FakeDispatcherQueue(),
+            sessionNameStore.Object);
 
         return (vm, navigationService);
     }
