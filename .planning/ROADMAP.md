@@ -323,7 +323,19 @@ Plans:
   3. After 5 consecutive polls returning `utilization: 0` while an active session exists (`OrgMismatchPollThreshold = 5`), a dismissable InfoBar soft-prompt appears in MainView ("Detected possible organization mismatch — re-resolve?") with a button that opens the Account → Re-detect dialog; the "Don't show again this session" checkbox suppresses it in-memory only (resets on app restart, NOT persisted)
   4. Pricing failures surface via a dedicated `IsPricingError` warning InfoBar in MainView ("Pricing data unavailable — cost figures may be inaccurate"); the banner clears automatically when a subsequent retry succeeds; the banner stack policy caps visible banners at 2 and suppresses `IsPricingError` rendering when `IsSessionExpired == true` (auth banner takes priority — verified by a banner-stack policy test); decision is documented in PROJECT.md after Phase 27 ships
   5. `SettingsViewModel.LastFetchRelativeTime` reads from new resw keys `LastFetchRelative.JustNow`, `LastFetchRelative.MinutesAgo`, `LastFetchRelative.HoursAgo`, `LastFetchRelative.DaysAgo`, `LastFetchRelative.Never` in both `de-DE/Resources.resw` and `en-US/Resources.resw`; all ~30 new resw keys across NEXTWIN/ORGID/PRICING/L10N exist in both locales and are validated by the extended `ResourceCoverageTests`
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+**Wave 1**
+- [ ] 27-01-l10n-relative-time-PLAN.md — L10N-01..03: SettingsViewModel.LastFetchRelativeTime localization + 5 LastFetchRelative.* resw key pairs + ResourceCoverageTests extension (forward-coverage policy seeded for plans 27-02..27-04)
+
+**Wave 2** *(blocked on Wave 1 — shares Resources.resw + ResourceCoverageTests)*
+- [ ] 27-02-nextwin-label-PLAN.md — NEXTWIN-01..03: FiveHourNextWindowText + IsFiveHourNextWindowVisible ObservableProperty in MainViewModel + RecomputeNextWindowLabel helper at 4 call-sites + OnIsSessionExpiredChanged partial + MainView.xaml TextBlock below countdown + 2 NextWindow format-string resw keys
+
+**Wave 3** *(blocked on Wave 2 — shares MainViewModel.cs + MainView.xaml + Resources.resw)*
+- [ ] 27-03-pricing-error-PLAN.md — PRICING-01..03: IsPricingError + IsPricingErrorVisible computed property + Site 1 (InitializeAsync, G-1 marshaled) + Site 2 (Refresh path) + MainView pricing InfoBar + 2 resw key pairs + BannerStackPolicyTests (4 matrix cases)
+
+**Wave 4** *(blocked on Wave 3 — largest surface, autonomous=false visual smoke required)*
+- [ ] 27-04-org-id-picker-PLAN.md — ORGID-01..05: OrganizationInfo model + OpenOrgPickerRequestedMessage + ListAvailableOrganizationsAsync extraction (DRY refactor of TryMigrateOrgIdAsync) + MainViewModel poll-counter + 2 RelayCommands + SettingsViewModel.OpenOrgPickerCommand (event-bridged ContentDialog) + SettingsView Re-detect button + ContentDialog markup + MainView OrgMismatch InfoBar + 8 resw key pairs + OrgMismatchSoftPromptTests + visual smoke checkpoint
 **UI hint**: yes
 
 ### Phase 28: v1.4 Cleanup & Final UAT
@@ -368,5 +380,5 @@ Plans:
 | 24. Dispatcher Foundation & Marshaling Convention | v1.5 | 3/3 | Complete   | 2026-05-08 |
 | 25. Cold-Start Session Hydration & Visibility Window | v1.5 | 3/3 | Complete   | 2026-05-08 |
 | 26. Persistent Session Renaming | v1.5 | 3/3 | Complete   | 2026-05-08 |
-| 27. Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N | v1.5 | 0/0 | Not started | - |
+| 27. Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N | v1.5 | 0/4 | Planning   | - |
 | 28. v1.4 Cleanup & Final UAT | v1.5 | 0/0 | Not started | - |
