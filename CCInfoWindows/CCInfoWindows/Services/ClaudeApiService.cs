@@ -118,6 +118,60 @@ public class ClaudeApiService : IClaudeApiService
 
     public UsageResponse? GetCachedUsage() => _cachedUsage;
 
+    /// <summary>
+    /// ORGID-01 (D-OG-01): public org-list endpoint. Extracted from the private TryMigrateOrgIdAsync —
+    /// the same /api/organizations endpoint. Returns parsed entries; never throws to the caller
+    /// (returns empty list on any failure).
+    /// </summary>
+    public async Task<IReadOnlyList<OrganizationInfo>> ListAvailableOrganizationsAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var responseBody = await _bridge.FetchJsonAsync($"{BaseUrl}/api/organizations");
+            if (responseBody is null)
+            {
+                return Array.Empty<OrganizationInfo>();
+            }
+
+            using var doc = JsonDocument.Parse(responseBody);
+            var root = doc.RootElement;
+
+            if (root.ValueKind != JsonValueKind.Array)
+            {
+                return Array.Empty<OrganizationInfo>();
+            }
+
+            var list = new List<OrganizationInfo>(root.GetArrayLength());
+            foreach (var element in root.EnumerateArray())
+            {
+                if (!element.TryGetProperty("uuid", out var uuidProp)) continue;
+                var uuid = uuidProp.GetString();
+                if (string.IsNullOrEmpty(uuid)) continue;
+
+                // Name fallback chain: name → uuid (defensive — API typically returns name)
+                var name = element.TryGetProperty("name", out var nameProp)
+                    ? nameProp.GetString() ?? uuid
+                    : uuid;
+
+                list.Add(new OrganizationInfo(uuid, name));
+            }
+
+            return list;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
+            return Array.Empty<OrganizationInfo>();
+        }
+        catch (Exception)
+        {
+            // Defensive — caller renders "no orgs available" in the dialog
+            return Array.Empty<OrganizationInfo>();
+        }
+    }
+
     public async Task SaveCacheAsync(UsageResponse data)
     {
         var dir = Path.GetDirectoryName(_cacheFilePath)!;
@@ -153,41 +207,19 @@ public class ClaudeApiService : IClaudeApiService
 
     /// <summary>
     /// Fetches org ID from /api/organizations when lastActiveOrg cookie was not captured.
+    /// Delegates to ListAvailableOrganizationsAsync (DRY) — preserves first-org auto-pick behavior.
     /// </summary>
     private async Task<string?> TryMigrateOrgIdAsync(CancellationToken ct)
     {
-        try
+        var orgs = await ListAvailableOrganizationsAsync(ct);
+        if (orgs.Count == 0)
         {
-            ct.ThrowIfCancellationRequested();
-
-            var responseBody = await _bridge.FetchJsonAsync($"{BaseUrl}/api/organizations");
-            if (responseBody is null)
-            {
-                return null;
-            }
-
-            using var doc = JsonDocument.Parse(responseBody);
-            var orgs = doc.RootElement;
-
-            if (orgs.GetArrayLength() > 0)
-            {
-                var uuid = orgs[0].GetProperty("uuid").GetString();
-                if (!string.IsNullOrEmpty(uuid))
-                {
-                    _credentialService.SaveOrganizationId(uuid);
-                    return uuid;
-                }
-            }
-        }
-        catch (UnauthorizedAccessException)
-        {
-            WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
-        }
-        catch (Exception)
-        {
-            // Migration failed — user needs to re-login
+            return null;
         }
 
-        return null;
+        // Preserve original first-org auto-pick behavior (cookie-fallback case)
+        var first = orgs[0];
+        _credentialService.SaveOrganizationId(first.Uuid);
+        return first.Uuid;
     }
 }
