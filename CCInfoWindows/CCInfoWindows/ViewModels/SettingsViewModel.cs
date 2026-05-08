@@ -1,5 +1,7 @@
+using System.Collections.ObjectModel;
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Messages;
+using CCInfoWindows.Models;
 using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
 using CCInfoWindows.Views;
@@ -11,7 +13,8 @@ using WinUI3Localizer;
 namespace CCInfoWindows.ViewModels;
 
 /// <summary>
-/// Settings page ViewModel with refresh interval selection, dark/light mode toggle, and logout.
+/// Settings page ViewModel with refresh interval selection, dark/light mode toggle, logout,
+/// and (Phase 26) session rename management via a dedicated Sessions tab.
 /// </summary>
 public partial class SettingsViewModel : ObservableObject
 {
@@ -20,6 +23,9 @@ public partial class SettingsViewModel : ObservableObject
     private readonly INavigationService _navigationService;
     private readonly IPricingService _pricingService;
     private readonly IUsageHistoryService _historyService;
+    private readonly ISessionNameStore _sessionNameStore;       // Phase 26 / RENAME-07
+    private readonly IJsonlService _jsonlService;               // Phase 26 / SessionRenameItems source
+    private readonly IDispatcherQueue _dispatcherQueue;         // Phase 26 / G-1
 
     // D-09: 1-minute UI-thread-bound timer. Owned by SettingsViewModel; lifecycle driven by SettingsView code-behind (D-10).
     private IDispatcherTimer? _aboutTimestampTimer;
@@ -34,9 +40,10 @@ public partial class SettingsViewModel : ObservableObject
 
     private const int DefaultRefreshSeconds = 60;
 
-    // D-10: tab order is 0=General, 1=Updates, 2=Account, 3=About
+    // Tab order: 0=General, 1=Updates, 2=Account, 3=Sessions (Phase 26 / RENAME-02), 4=About
     // Used by SettingsView code-behind to start/stop the About-tab timer on navigation.
-    public const int AboutTabIndex = 3;
+    public const int SessionsTabIndex = 3;
+    public const int AboutTabIndex = 4;   // SHIFTED from 3 — Phase 26 inserts Sessions at index 3
 
     public List<RefreshOption> RefreshOptions { get; } =
     [
@@ -51,17 +58,25 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private int _selectedTabIndex = 0;
 
-    public bool IsGeneralTabVisible => _selectedTabIndex == 0;
-    public bool IsUpdatesTabVisible => _selectedTabIndex == 1;
-    public bool IsAccountTabVisible => _selectedTabIndex == 2;
-    public bool IsAboutTabVisible  => _selectedTabIndex == 3;
+    public bool IsGeneralTabVisible  => _selectedTabIndex == 0;
+    public bool IsUpdatesTabVisible  => _selectedTabIndex == 1;
+    public bool IsAccountTabVisible  => _selectedTabIndex == 2;
+    public bool IsSessionsTabVisible => _selectedTabIndex == 3;   // Phase 26 / RENAME-02
+    public bool IsAboutTabVisible    => _selectedTabIndex == 4;
 
     partial void OnSelectedTabIndexChanged(int value)
     {
         OnPropertyChanged(nameof(IsGeneralTabVisible));
         OnPropertyChanged(nameof(IsUpdatesTabVisible));
         OnPropertyChanged(nameof(IsAccountTabVisible));
+        OnPropertyChanged(nameof(IsSessionsTabVisible));   // Phase 26
         OnPropertyChanged(nameof(IsAboutTabVisible));
+
+        // CD-03: snapshot refresh on tab activation (NOT live ObservableCollection sync).
+        if (value == SessionsTabIndex)
+        {
+            RefreshSessionRenameItems();
+        }
     }
 
     public string AppVersionText =>
@@ -101,7 +116,7 @@ public partial class SettingsViewModel : ObservableObject
     public string PricingSourceText => _pricingService.Source switch
     {
         PricingSource.Live => "Live (LiteLLM API)",
-        PricingSource.Fallback => "Fallback (geb\u00fcndelt)",
+        PricingSource.Fallback => "Fallback (gebündelt)",
         _ => "Unbekannt"
     };
 
@@ -129,18 +144,155 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Phase 26 / RENAME-02: Sessions tab — snapshot collection + commands
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Snapshot collection (CD-03) refreshed on tab activation and on ISessionNameStore.NameChanged.
+    /// NOT live-synced with IJsonlService.Sessions to avoid stale-snapshot bug class (PITFALLS Cluster A).
+    /// </summary>
+    public ObservableCollection<SessionRenameItem> SessionRenameItems { get; } = new();
+
+    private void RefreshSessionRenameItems()
+    {
+        var liveSessions = _jsonlService.Sessions;
+        var liveIds = new HashSet<string>(liveSessions.Select(s => s.Id), StringComparer.Ordinal);
+
+        SessionRenameItems.Clear();
+
+        // Live sessions first, sorted by display name
+        foreach (var s in liveSessions.OrderBy(s => s.DisplayName, StringComparer.OrdinalIgnoreCase))
+        {
+            SessionRenameItems.Add(new SessionRenameItem
+            {
+                SessionId = s.Id,
+                DefaultName = s.DisplayName,
+                IsOrphan = false,
+                CustomName = _sessionNameStore.GetCustomName(s.Id) ?? string.Empty
+            });
+        }
+
+        // Orphan custom names (D-08): sessions whose JSONL files are gone but a custom name persists.
+        // Detected by enumerating store keys not present in live IJsonlService.Sessions.
+        // The store does not expose enumeration; we discover orphans by reading session-names.json
+        // through a best-effort helper. For Phase 26 v1.5 we keep a minimum-API approach:
+        // orphans surface after a tab-activation snapshot refresh.
+        // (A future v1.6+ enumeration API on ISessionNameStore is deferred per O-01.)
+        foreach (var orphanId in EnumerateOrphanIds(liveIds))
+        {
+            var custom = _sessionNameStore.GetCustomName(orphanId);
+            if (string.IsNullOrEmpty(custom)) continue;
+            SessionRenameItems.Add(new SessionRenameItem
+            {
+                SessionId = orphanId,
+                DefaultName = orphanId,   // raw projectDirName as fallback label
+                IsOrphan = true,
+                CustomName = custom
+            });
+        }
+    }
+
+    private static IEnumerable<string> EnumerateOrphanIds(HashSet<string> liveIds)
+    {
+        // Best-effort orphan discovery: read session-names.json directly. Failure returns empty
+        // (orphans hidden until next activation). No exception propagates to the UI. (T-26-12 mitigated)
+        // Note: yield-in-try/catch is not valid C#; use a separate helper that returns a snapshot list.
+        var keys = TryReadSessionNamesKeys();
+        foreach (var key in keys)
+        {
+            if (!liveIds.Contains(key)) yield return key;
+        }
+    }
+
+    private static List<string> TryReadSessionNamesKeys()
+    {
+        try
+        {
+            var path = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "CCInfoWindows", "session-names.json");
+            if (!File.Exists(path)) return new List<string>();
+            var json = File.ReadAllText(path);
+            var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+            return dict?.Keys.ToList() ?? new List<string>();
+        }
+        catch
+        {
+            // Intentional: best-effort read — never propagate to UI (T-26-12 mitigated)
+            return new List<string>();
+        }
+    }
+
+    [RelayCommand]
+    private async Task SaveSessionCustomName(SessionRenameItem item)
+    {
+        if (item == null) return;
+        var sanitized = SessionNameSanitizer.Strip(item.CustomName).Trim();
+        if (string.IsNullOrEmpty(sanitized))
+        {
+            _sessionNameStore.ClearCustomName(item.SessionId);
+            item.CustomName = string.Empty;
+        }
+        else
+        {
+            _sessionNameStore.SetCustomName(item.SessionId, sanitized);
+            // Reflect sanitized value back to the bound TextBox (e.g. control chars stripped):
+            item.CustomName = sanitized;
+        }
+        await _sessionNameStore.SaveAsync();
+    }
+
+    [RelayCommand]
+    private async Task ClearSessionCustomName(SessionRenameItem item)
+    {
+        if (item == null) return;
+        _sessionNameStore.ClearCustomName(item.SessionId);
+        item.CustomName = string.Empty;
+        await _sessionNameStore.SaveAsync();
+    }
+
+    /// <summary>Called from SettingsView.OnLoaded — subscribe to NameChanged + initial snapshot.</summary>
+    public void Activate()
+    {
+        _sessionNameStore.NameChanged += OnStoreNameChanged;
+        if (IsSessionsTabVisible) RefreshSessionRenameItems();
+    }
+
+    /// <summary>Called from SettingsView.OnUnloaded — unsubscribe to prevent zombie handlers.</summary>
+    public void Deactivate()
+    {
+        _sessionNameStore.NameChanged -= OnStoreNameChanged;
+    }
+
+    private void OnStoreNameChanged(object? sender, SessionNameChangedEventArgs args)
+    {
+        // G-1: NameChanged may arrive off-thread.
+        _dispatcherQueue.TryEnqueue(RefreshSessionRenameItems);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Constructor
+    // ─────────────────────────────────────────────────────────────────────────────
+
     public SettingsViewModel(
         ISettingsService settingsService,
         ICredentialService credentialService,
         INavigationService navigationService,
         IPricingService pricingService,
-        IUsageHistoryService historyService)
+        IUsageHistoryService historyService,
+        ISessionNameStore sessionNameStore,
+        IJsonlService jsonlService,
+        IDispatcherQueue dispatcherQueue)
     {
         _settingsService = settingsService;
         _credentialService = credentialService;
         _navigationService = navigationService;
         _pricingService = pricingService;
         _historyService = historyService;
+        _sessionNameStore = sessionNameStore;
+        _jsonlService = jsonlService;
+        _dispatcherQueue = dispatcherQueue;
     }
 
     private static readonly int[] ThresholdMinuteOptions = [15, 30, 60, 120];

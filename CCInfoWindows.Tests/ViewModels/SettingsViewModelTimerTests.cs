@@ -1,5 +1,6 @@
 using System.Reflection;
 using CCInfoWindows.Models;
+using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
 using CCInfoWindows.ViewModels;
 using Moq;
@@ -62,12 +63,20 @@ public class SettingsViewModelTimerTests
 
         var historyService = new Mock<IUsageHistoryService>();
 
+        var sessionNameStore = new Mock<ISessionNameStore>();
+        var jsonlService = new Mock<IJsonlService>();
+        jsonlService.Setup(s => s.Sessions).Returns(Array.Empty<SessionInfo>());
+        var dispatcherQueue = new Mock<IDispatcherQueue>();
+
         var sut = new SettingsViewModel(
             settingsService.Object,
             credentialService.Object,
             navigationService.Object,
             pricing.Object,
-            historyService.Object);
+            historyService.Object,
+            sessionNameStore.Object,
+            jsonlService.Object,
+            dispatcherQueue.Object);
 
         // Inject fake timer factory to avoid WinRT COM context requirement in tests.
         sut.TimerFactory = () => new FakeDispatcherTimer();

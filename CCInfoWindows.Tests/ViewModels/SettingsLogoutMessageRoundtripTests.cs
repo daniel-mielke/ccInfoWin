@@ -1,5 +1,6 @@
 using CCInfoWindows.Messages;
 using CCInfoWindows.Models;
+using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
 using CCInfoWindows.ViewModels;
 using CCInfoWindows.Views;
@@ -37,12 +38,20 @@ public class SettingsLogoutDirectCallTests
         var pricingService = new Mock<IPricingService>();
         var historyMock = new Mock<IUsageHistoryService>();
 
+        var sessionNameStore = new Mock<ISessionNameStore>();
+        var jsonlService = new Mock<IJsonlService>();
+        jsonlService.Setup(s => s.Sessions).Returns(Array.Empty<SessionInfo>());
+        var dispatcherQueue = new Mock<IDispatcherQueue>();
+
         var vm = new SettingsViewModel(
             settingsService.Object,
             credentialMock.Object,
             navMock.Object,
             pricingService.Object,
-            historyMock.Object);
+            historyMock.Object,
+            sessionNameStore.Object,
+            jsonlService.Object,
+            dispatcherQueue.Object);
 
         return (vm, historyMock, credentialMock, navMock);
     }

@@ -176,7 +176,15 @@ public partial class App : Application
             sp.GetRequiredService<IBurnRateNotificationService>(),
             sp.GetRequiredService<IDispatcherQueue>(),
             sp.GetRequiredService<ISessionNameStore>()));   // Phase 26 / RENAME-07
-        services.AddTransient<SettingsViewModel>();
+        services.AddTransient<SettingsViewModel>(sp => new SettingsViewModel(
+            sp.GetRequiredService<ISettingsService>(),
+            sp.GetRequiredService<ICredentialService>(),
+            sp.GetRequiredService<INavigationService>(),
+            sp.GetRequiredService<IPricingService>(),
+            sp.GetRequiredService<IUsageHistoryService>(),
+            sp.GetRequiredService<ISessionNameStore>(),
+            sp.GetRequiredService<IJsonlService>(),
+            sp.GetRequiredService<IDispatcherQueue>()));
 
         return services.BuildServiceProvider();
     }
