@@ -7,7 +7,7 @@
 - ✅ **v1.2 macOS v1.8.3 Feature Parity** — Phases 12-15 (shipped 2026-04-12)
 - ✅ **v1.3 macOS v1.10.0 Feature Parity** — Phases 16-19 (shipped 2026-04-14)
 - ✅ **v1.4 macOS v1.11.1 Feature Parity** — Phases 20-23 (shipped 2026-05-07)
-- 🚧 **v1.5 macOS v1.12.0 Feature Parity + Hardening** — Phases 24-28 (IN PROGRESS, started 2026-05-08)
+- 🏁 **v1.5 macOS v1.12.0 Feature Parity + Hardening** — Phases 24-28 (code complete 2026-05-08; visual UAT pending)
 
 ## Phases
 
@@ -87,15 +87,15 @@ Audit: `.planning/milestones/v1.4-MILESTONE-AUDIT.md`
 </details>
 
 <details open>
-<summary>🚧 v1.5 macOS v1.12.0 Feature Parity + Hardening (Phases 24-28) — IN PROGRESS</summary>
+<summary>✅ v1.5 macOS v1.12.0 Feature Parity + Hardening (Phases 24-28) — SHIPPED 2026-05-08 (visual UAT pending)</summary>
 
 **Milestone Goal:** Bring CCInfoWindows to upstream stefanlange/ccInfo v1.12.0 feature parity (next 5h-window start time label + persistent session renaming) while remediating six v1.4 code-review findings and fixing three reproducible cold-start / silent-failure bugs. Build order is research-validated (foundation → dependent UX → cleanup).
 
 - [x] **Phase 24: Dispatcher Foundation & Marshaling Convention** — `IDispatcherQueue` adapter (mirror of v1.4 `IDispatcherTimer`), C-1/C-2 fix in `MainViewModel.Receive(AuthStateChangedMessage)`, project-wide G-1 marshaling rule documented + enforced
 - [x] **Phase 25: Cold-Start Session Hydration & Visibility Window** — `JsonlService` Cwd hydration fix, data-loss race remediation, configurable `SessionVisibilityWindowDays` setting (7/30/90/unlimited, default 30)
 - [x] **Phase 26: Persistent Session Renaming** — Pencil button + ContentDialog in MainView, new "Sessions" Settings tab (5th segment), `ISessionNameStore` JSON persistence following G-2 pattern
-- [ ] **Phase 27: Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N** — A1 label below countdown, B2 multi-account org picker, B3 pricing-error InfoBar, M-2 `LastFetchRelativeTime` localization
-- [ ] **Phase 28: v1.4 Cleanup & Final UAT** — Delete orphan `LogoutRequestedMessage`, restore real default for `_contextModelBadgeColor`, opportunistic Nits cleanup, full milestone UAT
+- [x] **Phase 27: Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N** — A1 label below countdown, B2 multi-account org picker, B3 pricing-error InfoBar, M-2 `LastFetchRelativeTime` localization
+- [x] **Phase 28: v1.4 Cleanup & Final UAT** — Delete orphan `LogoutRequestedMessage`, restore real default for `_contextModelBadgeColor` (G-3 brushFactory seam), bundle 3 view nits, document G-3, generate v1.5 Final UAT checklist (17 visual items deferred from Ph25-27)
 
 </details>
 

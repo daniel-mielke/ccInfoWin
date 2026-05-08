@@ -67,10 +67,10 @@ Bring CCInfoWindows to upstream stefanlange/ccInfo v1.12.0 feature parity (next 
 
 #### CLEANUP — Trivial Cleanup Wave (M-1 + M-3 + Nits)
 
-- [ ] **CLEANUP-01**: `Messages/LogoutRequestedMessage.cs` is deleted — orphan dead code from reverted Plan 21-03 (M-1).
-- [ ] **CLEANUP-02**: `MainViewModel._contextModelBadgeColor = null!` is replaced with a real default initializer (e.g. `ParseHexBrush(...)` matching the gray fallback rendered when no model is yet detected). Aligns with new project-wide convention G-3 ("no `null!` defaults on `[ObservableProperty]`"). (M-3)
-- [ ] **CLEANUP-03**: Three opportunistic minor cleanups bundled from the v1.4 code review's Nits list, applied in a single commit (per `.planning/todos/pending/2026-05-07-nits-v14-code-review-cleanups.md`).
-- [ ] **CLEANUP-04**: Convention G-3 is documented in `CLAUDE.md`: prefer `= string.Empty;`, `= "--";`, or `= ParseHexBrush(...)` initializers over `null!` for `[ObservableProperty]` fields. M-3 is the precedent fix.
+- [x] **CLEANUP-01**: `Messages/LogoutRequestedMessage.cs` is deleted — orphan dead code from reverted Plan 21-03 (M-1).
+- [x] **CLEANUP-02**: `MainViewModel._contextModelBadgeColor = null!` is replaced with a real default initializer (e.g. `ParseHexBrush(...)` matching the gray fallback rendered when no model is yet detected). Aligns with new project-wide convention G-3 ("no `null!` defaults on `[ObservableProperty]`"). (M-3)
+- [x] **CLEANUP-03**: Three opportunistic minor cleanups bundled from the v1.4 code review's Nits list, applied in a single commit (per `.planning/todos/pending/2026-05-07-nits-v14-code-review-cleanups.md`).
+- [x] **CLEANUP-04**: Convention G-3 is documented in `CLAUDE.md`: prefer `= string.Empty;`, `= "--";`, or `= ParseHexBrush(...)` initializers over `null!` for `[ObservableProperty]` fields. M-3 is the precedent fix.
 
 #### L10N — Localization Correctness (M-2 — bundles with PRICING)
 
@@ -142,10 +142,10 @@ All 34 v1.5 REQ-IDs map to exactly one phase. 100% coverage validated 2026-05-08
 | L10N-01 | Phase 27 | Complete |
 | L10N-02 | Phase 27 | Complete |
 | L10N-03 | Phase 27 | Complete |
-| CLEANUP-01 | Phase 28 | Pending |
-| CLEANUP-02 | Phase 28 | Pending |
-| CLEANUP-03 | Phase 28 | Pending |
-| CLEANUP-04 | Phase 28 | Pending |
+| CLEANUP-01 | Phase 28 | Complete |
+| CLEANUP-02 | Phase 28 | Complete |
+| CLEANUP-03 | Phase 28 | Complete |
+| CLEANUP-04 | Phase 28 | Complete |
 
 ### Coverage Summary
 

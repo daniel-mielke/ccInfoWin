@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: macOS v1.12.0 Feature Parity + Hardening
-status: verifying
-stopped_at: Completed 27-04-org-id-picker-PLAN.md
-last_updated: "2026-05-08T20:40:00.000Z"
+status: milestone_complete
+stopped_at: Completed 28-cleanup-final-uat (Phase 28 final plan)
+last_updated: "2026-05-08T20:47:00.000Z"
 last_activity: 2026-05-08
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 13
-  completed_plans: 13
+  completed_plans: 14
   percent: 100
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-08)
 
 **Core value:** Developers can see their Claude usage limits (5-hour window, weekly quota, context window) at a glance in real-time, preventing unexpected throttling.
-**Current focus:** Phase 27 — Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N
+**Current focus:** v1.5 milestone COMPLETE — ready for Final UAT sign-off (28-FINAL-UAT-CHECKLIST.md)
 
 ## Current Position
 
-Phase: 27 (Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
+Phase: 28 (v1.4 Cleanup & Final UAT) — COMPLETE
+Plan: 1 of 1 (executed directly from CONTEXT.md — no PLAN.md generated)
+Status: All 5 tasks complete; 28-SUMMARY.md committed; awaiting visual UAT sign-off
 Last activity: 2026-05-08
 
 **v1.5 Phase Sequence (research-validated, do not reorder):**
@@ -138,6 +138,6 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 
 ## Session Continuity
 
-Last session: 2026-05-08T20:40:00.000Z
-Stopped at: Completed 27-04-org-id-picker-PLAN.md
-Resume file: None
+Last session: 2026-05-08T20:47:00Z
+Stopped at: Phase 28 CLEANUP-01..04 + Final UAT Checklist complete. Milestone v1.5 all phases done.
+Resume file: .planning/phases/28-v1-4-cleanup-final-uat/28-FINAL-UAT-CHECKLIST.md (visual UAT pending)
