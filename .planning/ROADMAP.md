@@ -309,7 +309,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 26-01-session-name-store-PLAN.md — ISessionNameStore + SessionNameStore (G-2 atomic-rename) + SessionNameSanitizer + DI singleton + tests (Wave 1, autonomous)
-- [ ] 26-02-mainview-rename-pencil-PLAN.md — MainViewModel 12-arg ctor + NameChanged subscription + display-layer overlay + OpenRenameDialogCommand + ContentDialog + pencil button + 5 resw key pairs (Wave 2)
+- [x] 26-02-mainview-rename-pencil-PLAN.md — MainViewModel 12-arg ctor + NameChanged subscription + display-layer overlay + OpenRenameDialogCommand + ContentDialog + pencil button + 5 resw key pairs (Wave 2)
 - [ ] 26-03-settings-sessions-tab-PLAN.md — SettingsView 5th SegmentedItem (purple badge) + Sessions panel + SessionRenameItem + SettingsViewModel SessionRenameItems + Save/Clear commands + 5 resw key pairs (Wave 3)
 **UI hint**: yes
 
@@ -367,6 +367,6 @@ Plans:
 | 23. Localization Gaps | v1.4 | 1/1 | Complete | 2026-05-07 |
 | 24. Dispatcher Foundation & Marshaling Convention | v1.5 | 3/3 | Complete   | 2026-05-08 |
 | 25. Cold-Start Session Hydration & Visibility Window | v1.5 | 3/3 | Complete   | 2026-05-08 |
-| 26. Persistent Session Renaming | v1.5 | 1/3 | In Progress|  |
+| 26. Persistent Session Renaming | v1.5 | 2/3 | In Progress|  |
 | 27. Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N | v1.5 | 0/0 | Not started | - |
 | 28. v1.4 Cleanup & Final UAT | v1.5 | 0/0 | Not started | - |
