@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: macOS v1.12.0 Feature Parity + Hardening
-status: executing
-stopped_at: Completed 25-02-visibility-window-settings-PLAN.md
-last_updated: "2026-05-08T16:09:31.871Z"
+status: verifying
+stopped_at: Completed 25-03-migration-toast-PLAN.md
+last_updated: "2026-05-08T16:17:42.772Z"
 last_activity: 2026-05-08
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
-  percent: 83
+  completed_plans: 6
+  percent: 100
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-08)
 
 Phase: 25 (Cold-Start Session Hydration & Visibility Window) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-08
 
 **v1.5 Phase Sequence (research-validated, do not reorder):**
@@ -62,6 +62,7 @@ Last activity: 2026-05-08
 | Phase 24 P03 | 4min | 3 tasks | 3 files |
 | Phase 25 P01 | 35min | 2 tasks | 4 files |
 | Phase 25 P02 | 5 | 3 tasks | 7 files |
+| Phase 25 P25-03 | 10 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 - [Phase ?]: IDispatcherQueue adapter ships as full interface + WinuiDispatcherQueueAdapter singleton + FakeDispatcherQueue test double, mirroring v1.4 IDispatcherTimer precedent (Phase 24 Plan 01)
 - [Phase ?]: CD-01: ComboBox for SessionVisibilityWindowDays (mirrors SessionTimeoutMinutes precedent)
 - [Phase ?]: CD-04: MainViewModel handles SessionVisibilityChangedMessage directly via IRecipient (not JsonlService re-emit)
+- [Phase ?]: DROPDOWN-05: InfoBar migration toast in MainViewModel.InitializeAsync with synchronous SaveSettings on dismiss (D-04 + CD-02 + CD-05 honored)
 
 ### Open Tech Debt (carried into v1.5)
 
@@ -119,6 +121,6 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 
 ## Session Continuity
 
-Last session: 2026-05-08T16:09:31.863Z
-Stopped at: Completed 25-02-visibility-window-settings-PLAN.md
+Last session: 2026-05-08T16:17:42.763Z
+Stopped at: Completed 25-03-migration-toast-PLAN.md
 Resume file: None

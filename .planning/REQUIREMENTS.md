@@ -37,7 +37,7 @@ Bring CCInfoWindows to upstream stefanlange/ccInfo v1.12.0 feature parity (next 
 - [x] **DROPDOWN-02**: `JsonlService.ParseFileIntoProject` resolves `data.Cwd` from the FIRST non-empty `cwd` field across ALL parsed entries (not just the first entry); when no entry carries `cwd`, fall back to `SessionNameHelper.DecodeProjectDirectory(projectDirName)` as Cwd surrogate.
 - [x] **DROPDOWN-03**: `RebuildSessionsList` no longer drops sessions solely because `IsValidProjectDirectory(s.Cwd)` returns false on empty Cwd; sessions are kept when a display name can be derived from `projectDirName`. The `Directory.Exists`-based filter for *deleted project directories* remains intact.
 - [x] **DROPDOWN-04**: A new Settings option `SessionVisibilityWindowDays` (default 30, options 7 / 30 / 90 / 0=unlimited) appears in the General Settings tab as a ComboBox. Changing it triggers `SessionVisibilityChangedMessage`, and the next session-list refresh applies the new filter at the display layer in `MainViewModel.RefreshSessionList` — NOT in `JsonlService` (stats/cost aggregation must keep all data).
-- [ ] **DROPDOWN-05**: Existing installs see a one-time toast notification on first launch after upgrade ("Sessions older than 30 days are now hidden — adjustable in Settings"); tracked by a `SessionVisibilityMigrationShown` boolean in `AppSettings`.
+- [x] **DROPDOWN-05**: Existing installs see a one-time toast notification on first launch after upgrade ("Sessions older than 30 days are now hidden — adjustable in Settings"); tracked by a `SessionVisibilityMigrationShown` boolean in `AppSettings`.
 - [x] **DROPDOWN-06**: The cold-start data-loss race in `JsonlService` (lines written between `Directory.GetFiles` and `stream.Length` capture marked "already read" but never consumed) is fixed: either start the FileSystemWatcher BEFORE `DiscoverSessions`, or use `stream.Position` after final `ReadLine` instead of `stream.Length`. Verified by an explicit data-loss regression test.
 
 #### ORGID — Multi-Account Org-ID Picker (B2)
@@ -118,7 +118,7 @@ All 34 v1.5 REQ-IDs map to exactly one phase. 100% coverage validated 2026-05-08
 | DROPDOWN-02 | Phase 25 | Complete |
 | DROPDOWN-03 | Phase 25 | Complete |
 | DROPDOWN-04 | Phase 25 | Complete |
-| DROPDOWN-05 | Phase 25 | Pending |
+| DROPDOWN-05 | Phase 25 | Complete |
 | DROPDOWN-06 | Phase 25 | Complete |
 | RENAME-01 | Phase 26 | Pending |
 | RENAME-02 | Phase 26 | Pending |
