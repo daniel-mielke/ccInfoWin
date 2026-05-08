@@ -42,11 +42,11 @@ Bring CCInfoWindows to upstream stefanlange/ccInfo v1.12.0 feature parity (next 
 
 #### ORGID — Multi-Account Org-ID Picker (B2)
 
-- [ ] **ORGID-01**: A new "Re-detect organization" button on the Settings Account tab calls `IClaudeApiService.ListAvailableOrganizationsAsync` (using the existing `/api/organizations` endpoint at `ClaudeApiService.cs:163`), shows the available orgs in a `ContentDialog` with name + uuid, and lets the user pick one.
-- [ ] **ORGID-02**: Selecting a different org persists the new org-id to `claude-org` Credential Manager key, then triggers the existing `MainViewModel.Logout` sequence — switching orgs requires re-authentication because the WebView2 cookie jar is per-org-context.
-- [ ] **ORGID-03**: After 5 consecutive polls returning `utilization: 0` while an active session exists, a dismissible `InfoBar` soft-prompt appears in MainView ("Detected possible organization mismatch — re-resolve?") with a button that opens the same Settings Account → Re-detect dialog. Threshold is a tuneable code constant `OrgMismatchPollThreshold = 5`.
-- [ ] **ORGID-04**: The soft-prompt is dismissable with a "Don't show again this session" checkbox; dismissal state lives in-memory only (resets on app restart) — NOT persisted, so a true mismatch reappears next session.
-- [ ] **ORGID-05**: All ORGID UI strings are localized in DE and EN (label "Organisation neu erkennen" / "Re-detect organization", InfoBar warning text, dialog headers).
+- [x] **ORGID-01**: A new "Re-detect organization" button on the Settings Account tab calls `IClaudeApiService.ListAvailableOrganizationsAsync` (using the existing `/api/organizations` endpoint at `ClaudeApiService.cs:163`), shows the available orgs in a `ContentDialog` with name + uuid, and lets the user pick one.
+- [x] **ORGID-02**: Selecting a different org persists the new org-id to `claude-org` Credential Manager key, then triggers the existing `MainViewModel.Logout` sequence — switching orgs requires re-authentication because the WebView2 cookie jar is per-org-context.
+- [x] **ORGID-03**: After 5 consecutive polls returning `utilization: 0` while an active session exists, a dismissible `InfoBar` soft-prompt appears in MainView ("Detected possible organization mismatch — re-resolve?") with a button that opens the same Settings Account → Re-detect dialog. Threshold is a tuneable code constant `OrgMismatchPollThreshold = 5`.
+- [x] **ORGID-04**: The soft-prompt is dismissable with a "Don't show again this session" checkbox; dismissal state lives in-memory only (resets on app restart) — NOT persisted, so a true mismatch reappears next session.
+- [x] **ORGID-05**: All ORGID UI strings are localized in DE and EN (label "Organisation neu erkennen" / "Re-detect organization", InfoBar warning text, dialog headers).
 
 #### PRICING — Pricing-Service Silent-Failure Surfacing (B3)
 
@@ -131,11 +131,11 @@ All 34 v1.5 REQ-IDs map to exactly one phase. 100% coverage validated 2026-05-08
 | NEXTWIN-01 | Phase 27 | Complete |
 | NEXTWIN-02 | Phase 27 | Complete |
 | NEXTWIN-03 | Phase 27 | Complete |
-| ORGID-01 | Phase 27 | Pending |
-| ORGID-02 | Phase 27 | Pending |
-| ORGID-03 | Phase 27 | Pending |
-| ORGID-04 | Phase 27 | Pending |
-| ORGID-05 | Phase 27 | Pending |
+| ORGID-01 | Phase 27 | Complete |
+| ORGID-02 | Phase 27 | Complete |
+| ORGID-03 | Phase 27 | Complete |
+| ORGID-04 | Phase 27 | Complete |
+| ORGID-05 | Phase 27 | Complete |
 | PRICING-01 | Phase 27 | Complete |
 | PRICING-02 | Phase 27 | Complete |
 | PRICING-03 | Phase 27 | Complete |

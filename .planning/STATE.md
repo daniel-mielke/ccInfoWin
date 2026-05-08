@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: macOS v1.12.0 Feature Parity + Hardening
-status: executing
-stopped_at: Completed 27-03-pricing-error-PLAN.md
-last_updated: "2026-05-08T18:07:42.312Z"
+status: verifying
+stopped_at: Completed 27-04-org-id-picker-PLAN.md
+last_updated: "2026-05-08T20:40:00.000Z"
 last_activity: 2026-05-08
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 13
-  completed_plans: 12
-  percent: 92
+  completed_plans: 13
+  percent: 100
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-08)
 
 Phase: 27 (Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-08
 
 **v1.5 Phase Sequence (research-validated, do not reorder):**
@@ -69,6 +69,7 @@ Last activity: 2026-05-08
 | Phase 27-nextwin-orgid-pricing-l10n P01 | 15 | 3 tasks | 5 files |
 | Phase 27-nextwin-orgid-pricing-l10n P02 | 20 | 3 tasks | 5 files |
 | Phase 27-nextwin-orgid-pricing-l10n P03 | 4min | 3 tasks | 6 files |
+| Phase 27-nextwin-orgid-pricing-l10n P04 | 240min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 - [Phase ?]: D-L10-01: 5 LastFetchRelative resw keys with {0} placeholders on MinutesAgo/HoursAgo/DaysAgo
 - [Phase ?]: D-L10-02: LastFetchRelativeTime uses 5-branch if-chain calling Localizer.Get() per category; DateTimeOffset.Now retained
 - [Phase ?]: IsPricingErrorVisible = IsPricingError && !IsSessionExpired (D-PR-04 banner-stack policy: auth wins)
+- D-OG-01: ListAvailableOrganizationsAsync extracted from private TryMigrateOrgIdAsync as public IClaudeApiService method
+- D-OG-02: OrgPicker ContentDialog created fully programmatically in View code-behind (XamlReader.Load unavailable in WinUI 3)
+- D-OG-03: Event-bridge pattern (RequestOpenOrgPickerDialog) for MVVM-safe ContentDialog from ViewModel
+- D-OG-04: D-13 workaround — org-switch logout uses AuthStateChangedMessage(false) broadcast (MainViewModel is AddTransient)
+- D-OG-05: OrgMismatch InfoBar poll-counter threshold=5, in-memory suppression only (not persisted)
 
 ### Open Tech Debt (carried into v1.5)
 
@@ -132,6 +138,6 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 
 ## Session Continuity
 
-Last session: 2026-05-08T18:07:42.303Z
-Stopped at: Completed 27-03-pricing-error-PLAN.md
+Last session: 2026-05-08T20:40:00.000Z
+Stopped at: Completed 27-04-org-id-picker-PLAN.md
 Resume file: None

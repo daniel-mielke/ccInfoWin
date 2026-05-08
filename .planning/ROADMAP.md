@@ -335,7 +335,7 @@ Plans:
 - [x] 27-03-pricing-error-PLAN.md — PRICING-01..03: IsPricingError + IsPricingErrorVisible computed property + Site 1 (InitializeAsync, G-1 marshaled) + Site 2 (Refresh path) + MainView pricing InfoBar + 2 resw key pairs + BannerStackPolicyTests (4 matrix cases)
 
 **Wave 4** *(blocked on Wave 3 — largest surface, autonomous=false visual smoke required)*
-- [ ] 27-04-org-id-picker-PLAN.md — ORGID-01..05: OrganizationInfo model + OpenOrgPickerRequestedMessage + ListAvailableOrganizationsAsync extraction (DRY refactor of TryMigrateOrgIdAsync) + MainViewModel poll-counter + 2 RelayCommands + SettingsViewModel.OpenOrgPickerCommand (event-bridged ContentDialog) + SettingsView Re-detect button + ContentDialog markup + MainView OrgMismatch InfoBar + 8 resw key pairs + OrgMismatchSoftPromptTests + visual smoke checkpoint
+- [x] 27-04-org-id-picker-PLAN.md — ORGID-01..05: OrganizationInfo model + OpenOrgPickerRequestedMessage + ListAvailableOrganizationsAsync extraction (DRY refactor of TryMigrateOrgIdAsync) + MainViewModel poll-counter + 2 RelayCommands + SettingsViewModel.OpenOrgPickerCommand (event-bridged ContentDialog) + SettingsView Re-detect button + ContentDialog markup + MainView OrgMismatch InfoBar + 8 resw key pairs + OrgMismatchSoftPromptTests + visual smoke checkpoint
 **UI hint**: yes
 
 ### Phase 28: v1.4 Cleanup & Final UAT
@@ -380,5 +380,5 @@ Plans:
 | 24. Dispatcher Foundation & Marshaling Convention | v1.5 | 3/3 | Complete   | 2026-05-08 |
 | 25. Cold-Start Session Hydration & Visibility Window | v1.5 | 3/3 | Complete   | 2026-05-08 |
 | 26. Persistent Session Renaming | v1.5 | 3/3 | Complete   | 2026-05-08 |
-| 27. Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N | v1.5 | 3/4 | In Progress|  |
+| 27. Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N | v1.5 | 4/4 | Complete   | 2026-05-08 |
 | 28. v1.4 Cleanup & Final UAT | v1.5 | 0/0 | Not started | - |
