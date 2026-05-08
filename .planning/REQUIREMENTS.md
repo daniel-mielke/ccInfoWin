@@ -22,11 +22,11 @@ Bring CCInfoWindows to upstream stefanlange/ccInfo v1.12.0 feature parity (next 
 
 - [ ] **RENAME-01**: User can click a pencil button next to the session switcher in MainView; this opens a `ContentDialog` with a TextBox pre-filled with the current display name, plus Save and Cancel buttons. Save persists the new name immediately.
 - [ ] **RENAME-02**: A new "Sessions" Settings tab (5th segment in the existing Segmented Control, between Account and About) lists all known sessions with inline-editable name fields. Edits save on focus-loss or Enter; clear-name reverts to auto-derived display name.
-- [ ] **RENAME-03**: Custom session names persist across app restarts via a JSON file at `%LOCALAPPDATA%\CCInfoWindows\session-names.json`. Schema: `Dictionary<string projectDirName, string customName>`. Storage key is encoded `projectDirName` (= `SessionInfo.Id`), NOT decoded `Cwd`.
+- [x] **RENAME-03**: Custom session names persist across app restarts via a JSON file at `%LOCALAPPDATA%\CCInfoWindows\session-names.json`. Schema: `Dictionary<string projectDirName, string customName>`. Storage key is encoded `projectDirName` (= `SessionInfo.Id`), NOT decoded `Cwd`.
 - [ ] **RENAME-04**: A renamed session's display name immediately reflects in the MainView session switcher and in any other open Settings Sessions tab without app restart, via `ISessionNameStore.NameChanged` event marshalled through `IDispatcherQueue.TryEnqueue`.
-- [ ] **RENAME-05**: Custom names support the same Unicode ranges as the auto-derived display names; control characters U+0000..U+001F and U+007F are stripped before persistence (CVE-2021-42574 mitigation, mirroring macOS reference).
-- [ ] **RENAME-06**: A session whose JSONL files are deleted from disk leaves its custom name orphaned in `session-names.json`; orphans are kept across app launches (no auto-prune in v1.5).
-- [ ] **RENAME-07**: `ISessionNameStore` follows the G-2 convention (`SemaphoreSlim` write guard, sync + async write methods, atomic-rename via `tmp + File.Move`, `_lastSavedSnapshot` cache), mirroring `IUsageHistoryService`.
+- [x] **RENAME-05**: Custom names support the same Unicode ranges as the auto-derived display names; control characters U+0000..U+001F and U+007F are stripped before persistence (CVE-2021-42574 mitigation, mirroring macOS reference).
+- [x] **RENAME-06**: A session whose JSONL files are deleted from disk leaves its custom name orphaned in `session-names.json`; orphans are kept across app launches (no auto-prune in v1.5).
+- [x] **RENAME-07**: `ISessionNameStore` follows the G-2 convention (`SemaphoreSlim` write guard, sync + async write methods, atomic-rename via `tmp + File.Move`, `_lastSavedSnapshot` cache), mirroring `IUsageHistoryService`.
 - [ ] **RENAME-08**: Display-layer integration: `MainViewModel.RefreshSessionList` resolves the final display name as `_sessionNameStore.GetCustomName(s.Id) ?? s.DisplayName` — `JsonlService` stays storage-free.
 
 ### Cluster B — Bug Hardening
@@ -122,11 +122,11 @@ All 34 v1.5 REQ-IDs map to exactly one phase. 100% coverage validated 2026-05-08
 | DROPDOWN-06 | Phase 25 | Complete |
 | RENAME-01 | Phase 26 | Pending |
 | RENAME-02 | Phase 26 | Pending |
-| RENAME-03 | Phase 26 | Pending |
+| RENAME-03 | Phase 26 | Complete |
 | RENAME-04 | Phase 26 | Pending |
-| RENAME-05 | Phase 26 | Pending |
-| RENAME-06 | Phase 26 | Pending |
-| RENAME-07 | Phase 26 | Pending |
+| RENAME-05 | Phase 26 | Complete |
+| RENAME-06 | Phase 26 | Complete |
+| RENAME-07 | Phase 26 | Complete |
 | RENAME-08 | Phase 26 | Pending |
 | NEXTWIN-01 | Phase 27 | Pending |
 | NEXTWIN-02 | Phase 27 | Pending |

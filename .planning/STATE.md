@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: macOS v1.12.0 Feature Parity + Hardening
-status: verifying
-stopped_at: Completed 25-03-migration-toast-PLAN.md
-last_updated: "2026-05-08T16:17:42.772Z"
+status: executing
+stopped_at: Completed 26-01-session-name-store-PLAN.md
+last_updated: "2026-05-08T16:48:39.893Z"
 last_activity: 2026-05-08
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
-  percent: 100
+  total_plans: 9
+  completed_plans: 7
+  percent: 78
 ---
 
 # Project State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-08)
 
 **Core value:** Developers can see their Claude usage limits (5-hour window, weekly quota, context window) at a glance in real-time, preventing unexpected throttling.
-**Current focus:** Phase 25 — Cold-Start Session Hydration & Visibility Window
+**Current focus:** Phase 26 — Persistent Session Renaming
 
 ## Current Position
 
-Phase: 25 (Cold-Start Session Hydration & Visibility Window) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
+Phase: 26 (Persistent Session Renaming) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
 Last activity: 2026-05-08
 
 **v1.5 Phase Sequence (research-validated, do not reorder):**
@@ -63,6 +63,7 @@ Last activity: 2026-05-08
 | Phase 25 P01 | 35min | 2 tasks | 4 files |
 | Phase 25 P02 | 5 | 3 tasks | 7 files |
 | Phase 25 P25-03 | 10 | 2 tasks | 5 files |
+| Phase 26-persistent-session-renaming P01 | 18m | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 - [Phase ?]: CD-01: ComboBox for SessionVisibilityWindowDays (mirrors SessionTimeoutMinutes precedent)
 - [Phase ?]: CD-04: MainViewModel handles SessionVisibilityChangedMessage directly via IRecipient (not JsonlService re-emit)
 - [Phase ?]: DROPDOWN-05: InfoBar migration toast in MainViewModel.InitializeAsync with synchronous SaveSettings on dismiss (D-04 + CD-02 + CD-05 honored)
+- [Phase ?]: ISessionNameStore D-01 shape locked: GetCustomName/SetCustomName/ClearCustomName/Save/SaveAsync/NameChanged
+- [Phase ?]: session-names.json path D-02: %LOCALAPPDATA%\CCInfoWindows\, Dictionary<string,string> keyed by encoded projectDirName
 
 ### Open Tech Debt (carried into v1.5)
 
@@ -121,6 +124,6 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 
 ## Session Continuity
 
-Last session: 2026-05-08T16:17:42.763Z
-Stopped at: Completed 25-03-migration-toast-PLAN.md
+Last session: 2026-05-08T16:48:39.883Z
+Stopped at: Completed 26-01-session-name-store-PLAN.md
 Resume file: None
