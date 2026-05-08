@@ -80,6 +80,17 @@
                 Visibility="{x:Bind ViewModel.HasApiError, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                 IsClosable="True"
                 Margin="0,0,0,12" />
+
+            <!-- DROPDOWN-05 / D-04: Session visibility migration toast (one-time, dismissable) -->
+            <InfoBar
+                x:Name="MigrationToastInfoBar"
+                l:Uids.Uid="Toast.SessionVisibilityMigration"
+                Severity="Informational"
+                IsOpen="{x:Bind ViewModel.IsSessionVisibilityMigrationToastVisible, Mode=TwoWay}"
+                Visibility="{x:Bind ViewModel.IsSessionVisibilityMigrationToastVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                IsClosable="True"
+                Closed="OnMigrationToastClosed"
+                Margin="0,0,0,12" />
         </StackPanel>
 
         <!-- Row 1: Dashboard content -->

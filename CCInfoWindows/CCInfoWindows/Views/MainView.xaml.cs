@@ -164,6 +164,20 @@ public sealed partial class MainView : Page
         ViewModel.DismissUpdate();
     }
 
+    /// <summary>
+    /// DROPDOWN-05 / D-04 / CD-02: when the user dismisses the migration toast,
+    /// invoke the VM command which persists SessionVisibilityMigrationShown = true synchronously.
+    /// Closed (not Closing) fires AFTER the InfoBar collapses; TwoWay binding on IsOpen
+    /// keeps the VM in sync, but persistence requires the explicit command call.
+    /// </summary>
+    private void OnMigrationToastClosed(InfoBar sender, InfoBarClosedEventArgs args)
+    {
+        if (ViewModel.DismissMigrationToastCommand.CanExecute(null))
+        {
+            ViewModel.DismissMigrationToastCommand.Execute(null);
+        }
+    }
+
     private void OnSpinnerCompleted(object? sender, object e)
     {
         if (_stopOnComplete)
