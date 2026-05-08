@@ -104,14 +104,58 @@ Carried forward unchanged from PROJECT.md "Future" section (V2-01 through V2-05)
 
 ## Traceability
 
-Phase mapping is filled in by the roadmapper in the next workflow step (Step 10). Expected approximate mapping per `SUMMARY.md` Decision 2 build order:
+All 34 v1.5 REQ-IDs map to exactly one phase. 100% coverage validated 2026-05-08 by GSD roadmapper.
 
-| Category | Items | Expected Phase |
-|----------|-------|----------------|
-| DISPATCH | DISPATCH-01..06 | Phase 24 (Foundation) |
-| DROPDOWN | DROPDOWN-01..06 | Phase 25 |
-| RENAME | RENAME-01..08 | Phase 26 |
-| NEXTWIN, ORGID, PRICING, L10N | NEXTWIN-01..03, ORGID-01..05, PRICING-01..03, L10N-01..03 | Phase 27 |
-| CLEANUP | CLEANUP-01..04 | Phase 28 |
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| DISPATCH-01 | Phase 24 | Pending |
+| DISPATCH-02 | Phase 24 | Pending |
+| DISPATCH-03 | Phase 24 | Pending |
+| DISPATCH-04 | Phase 24 | Pending |
+| DISPATCH-05 | Phase 24 | Pending |
+| DISPATCH-06 | Phase 24 | Pending |
+| DROPDOWN-01 | Phase 25 | Pending |
+| DROPDOWN-02 | Phase 25 | Pending |
+| DROPDOWN-03 | Phase 25 | Pending |
+| DROPDOWN-04 | Phase 25 | Pending |
+| DROPDOWN-05 | Phase 25 | Pending |
+| DROPDOWN-06 | Phase 25 | Pending |
+| RENAME-01 | Phase 26 | Pending |
+| RENAME-02 | Phase 26 | Pending |
+| RENAME-03 | Phase 26 | Pending |
+| RENAME-04 | Phase 26 | Pending |
+| RENAME-05 | Phase 26 | Pending |
+| RENAME-06 | Phase 26 | Pending |
+| RENAME-07 | Phase 26 | Pending |
+| RENAME-08 | Phase 26 | Pending |
+| NEXTWIN-01 | Phase 27 | Pending |
+| NEXTWIN-02 | Phase 27 | Pending |
+| NEXTWIN-03 | Phase 27 | Pending |
+| ORGID-01 | Phase 27 | Pending |
+| ORGID-02 | Phase 27 | Pending |
+| ORGID-03 | Phase 27 | Pending |
+| ORGID-04 | Phase 27 | Pending |
+| ORGID-05 | Phase 27 | Pending |
+| PRICING-01 | Phase 27 | Pending |
+| PRICING-02 | Phase 27 | Pending |
+| PRICING-03 | Phase 27 | Pending |
+| L10N-01 | Phase 27 | Pending |
+| L10N-02 | Phase 27 | Pending |
+| L10N-03 | Phase 27 | Pending |
+| CLEANUP-01 | Phase 28 | Pending |
+| CLEANUP-02 | Phase 28 | Pending |
+| CLEANUP-03 | Phase 28 | Pending |
+| CLEANUP-04 | Phase 28 | Pending |
 
-(Roadmapper writes the actual mapping. Above is anticipated structure for cross-checking.)
+### Coverage Summary
+
+| Cluster | Items | Phase | Count |
+|---------|-------|-------|-------|
+| DISPATCH (Cluster C foundation) | DISPATCH-01..06 | Phase 24 | 6 |
+| DROPDOWN (Cluster B1) | DROPDOWN-01..06 | Phase 25 | 6 |
+| RENAME (Cluster A2) | RENAME-01..08 | Phase 26 | 8 |
+| NEXTWIN + ORGID + PRICING + L10N (Clusters A1/B2/B3/M-2) | NEXTWIN-01..03, ORGID-01..05, PRICING-01..03, L10N-01..03 | Phase 27 | 14 |
+| CLEANUP (Cluster C cleanup wave) | CLEANUP-01..04 | Phase 28 | 4 |
+| **Total** | | | **34** |
+
+**Coverage check:** 34/34 REQ-IDs mapped, 0 orphans, 0 duplicates. Each requirement appears in exactly one phase.

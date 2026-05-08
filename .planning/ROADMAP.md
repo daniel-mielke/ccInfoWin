@@ -7,6 +7,7 @@
 - ✅ **v1.2 macOS v1.8.3 Feature Parity** — Phases 12-15 (shipped 2026-04-12)
 - ✅ **v1.3 macOS v1.10.0 Feature Parity** — Phases 16-19 (shipped 2026-04-14)
 - ✅ **v1.4 macOS v1.11.1 Feature Parity** — Phases 20-23 (shipped 2026-05-07)
+- 🚧 **v1.5 macOS v1.12.0 Feature Parity + Hardening** — Phases 24-28 (IN PROGRESS, started 2026-05-08)
 
 ## Phases
 
@@ -85,9 +86,24 @@ Audit: `.planning/milestones/v1.4-MILESTONE-AUDIT.md`
 
 </details>
 
+<details open>
+<summary>🚧 v1.5 macOS v1.12.0 Feature Parity + Hardening (Phases 24-28) — IN PROGRESS</summary>
+
+**Milestone Goal:** Bring CCInfoWindows to upstream stefanlange/ccInfo v1.12.0 feature parity (next 5h-window start time label + persistent session renaming) while remediating six v1.4 code-review findings and fixing three reproducible cold-start / silent-failure bugs. Build order is research-validated (foundation → dependent UX → cleanup).
+
+- [ ] **Phase 24: Dispatcher Foundation & Marshaling Convention** — `IDispatcherQueue` adapter (mirror of v1.4 `IDispatcherTimer`), C-1/C-2 fix in `MainViewModel.Receive(AuthStateChangedMessage)`, project-wide G-1 marshaling rule documented + enforced
+- [ ] **Phase 25: Cold-Start Session Hydration & Visibility Window** — `JsonlService` Cwd hydration fix, data-loss race remediation, configurable `SessionVisibilityWindowDays` setting (7/30/90/unlimited, default 30)
+- [ ] **Phase 26: Persistent Session Renaming** — Pencil button + ContentDialog in MainView, new "Sessions" Settings tab (5th segment), `ISessionNameStore` JSON persistence following G-2 pattern
+- [ ] **Phase 27: Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N** — A1 label below countdown, B2 multi-account org picker, B3 pricing-error InfoBar, M-2 `LastFetchRelativeTime` localization
+- [ ] **Phase 28: v1.4 Cleanup & Final UAT** — Delete orphan `LogoutRequestedMessage`, restore real default for `_contextModelBadgeColor`, opportunistic Nits cleanup, full milestone UAT
+
+</details>
+
 ## Active Phases
 
-(None — v1.4 shipped. Run `/gsd-new-milestone` to plan v1.5.)
+**Next up: Phase 24 — Dispatcher Foundation & Marshaling Convention**
+
+Run `/gsd-plan-phase 24` to begin.
 
 <details>
 <summary>Phase details from completed milestones (collapsed)</summary>
@@ -239,6 +255,71 @@ Plans:
 
 </details>
 
+## Phase Details
+
+### Phase 24: Dispatcher Foundation & Marshaling Convention
+**Goal**: Cross-VM messenger handlers safely mutate UI state from any thread, and the project enforces a documented marshaling rule that prevents the v1.4 fire-and-forget / off-thread regression from recurring
+**Depends on**: Phase 23 (prior milestone complete) — first phase of v1.5
+**Requirements**: DISPATCH-01, DISPATCH-02, DISPATCH-03, DISPATCH-04, DISPATCH-05, DISPATCH-06
+**Success Criteria** (what must be TRUE):
+  1. `IDispatcherQueue` interface with `bool TryEnqueue(Action)` + `bool HasThreadAccess` exists, a `WinuiDispatcherQueueAdapter` is registered as singleton in DI, and a `FakeDispatcherQueue` exists in the test project and replaces every `DispatcherQueue.TryEnqueue` test seam in headless xUnit tests
+  2. `MainViewModel.Receive(AuthStateChangedMessage)` always wraps its body in `_dispatcherQueue.TryEnqueue(...)` (no `if (!HasThreadAccess)` shortcut) and surfaces post-login refresh failures via `HasApiError` instead of swallowing them in a fire-and-forget Task — both C-1 and C-2 fixed in a single edit, asserted by a regression test that fails when off-thread mutation is reintroduced
+  3. `CLAUDE.md` documents convention G-1 (every `IRecipient<T>.Receive(T)` body that mutates `[ObservableProperty]`, calls `INavigationService`, or touches XAML must wrap in `IDispatcherQueue.TryEnqueue`; exception only via `[ThreadSafeReceive]` attribute or inline justification comment)
+  4. `MessengerThreadingConventionTests` xUnit class passes — every `IRecipient<>` implementation in the codebase respects G-1 (verified by reflection or `[RequiresMarshal]` / `[ThreadSafeReceive]` attribute pair after a 30-min Phase-24 spike decides the mechanism)
+  5. Two patch bumps (CommunityToolkit.Mvvm 8.4.0→8.4.2, Microsoft.WindowsAppSDK 1.8.260209005→1.8.260416003) ship cleanly with all existing tests green
+**Plans**: TBD
+
+### Phase 25: Cold-Start Session Hydration & Visibility Window
+**Goal**: After cold start, the session ComboBox lists every relevant session whose JSONL files exist within the user-configurable visibility window — the silent dropping of recently-active sessions and the underlying file-watcher data-loss race are both eliminated
+**Depends on**: Phase 24 (G-1 + `IDispatcherQueue` foundation required for `SessionVisibilityChangedMessage` handler)
+**Requirements**: DROPDOWN-01, DROPDOWN-02, DROPDOWN-03, DROPDOWN-04, DROPDOWN-05, DROPDOWN-06
+**Success Criteria** (what must be TRUE):
+  1. After cold start, the "Aktive Sitzung" / "Active Session" ComboBox lists ALL sessions whose JSONL files were modified within `SessionVisibilityWindowDays` — not only sessions that received tool events since launch (manually verified by smoke + automated `JsonlServiceColdStartTests`)
+  2. `JsonlService.ParseFileIntoProject` resolves `Cwd` from the FIRST non-empty `cwd` field across ALL parsed entries, falling back to `SessionNameHelper.DecodeProjectDirectory(projectDirName)` when none is present; `RebuildSessionsList` no longer drops sessions because Cwd was empty (only because the project directory was deleted)
+  3. A new General-tab `SessionVisibilityWindowDays` ComboBox (7 / 30 / 90 / 0=unlimited, default 30) is wired through `SessionVisibilityChangedMessage`; the filter applies at the display layer in `MainViewModel.RefreshSessionList` only, and `JsonlService` continues to aggregate stats across ALL sessions (no data lost from totals)
+  4. Existing installs see a one-time toast on first launch after upgrade ("Sessions older than 30 days are now hidden — adjustable in Settings"), tracked by `SessionVisibilityMigrationShown` in `AppSettings`
+  5. The cold-start data-loss regression test passes: lines written between `Directory.GetFiles` and the file-position capture in `JsonlService` are NOT silently dropped (fix verified by an explicit data-loss regression test that writes lines during the race window — DROPDOWN-06 is not allowed to land silently)
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 26: Persistent Session Renaming
+**Goal**: Users can rename any session via a pencil button next to the MainView switcher or via a new "Sessions" Settings tab, and custom names persist across app restarts in `session-names.json` while staying decoupled from `JsonlService`'s storage-free design
+**Depends on**: Phase 25 (stable session list from B1 Cwd fix is the substrate the rename UI binds to)
+**Requirements**: RENAME-01, RENAME-02, RENAME-03, RENAME-04, RENAME-05, RENAME-06, RENAME-07, RENAME-08
+**Success Criteria** (what must be TRUE):
+  1. A pencil button next to the MainView session switcher opens a `ContentDialog` (TextBox pre-filled with current display name + Save/Cancel); Save persists the new name immediately and the MainView ComboBox updates without app restart
+  2. A new "Sessions" Settings tab — inserted as the 5th segment between Account and About — lists all known sessions with inline-editable name fields; edits save on focus-loss or Enter, clearing reverts to auto-derived display name; the 5-tab Segmented Control fits at 360px (badges 30×30 with documented 28×28 fallback if clipping is observed during the Phase-26 layout spike)
+  3. Custom names persist to `%LOCALAPPDATA%\CCInfoWindows\session-names.json` (schema: `Dictionary<projectDirName, customName>`, key is encoded `SessionInfo.Id` not decoded `Cwd`) and survive an app restart — a kill-and-relaunch smoke test confirms persistence
+  4. Display-layer integration is `_sessionNameStore.GetCustomName(s.Id) ?? s.DisplayName` in `MainViewModel.RefreshSessionList`; `JsonlService` stays storage-free; the rename → refresh propagation uses `ISessionNameStore.NameChanged` event marshalled through `IDispatcherQueue.TryEnqueue` (NOT a `WeakReferenceMessenger` broadcast — D-13 lesson honored)
+  5. `ISessionNameStore` follows convention G-2 (`SemaphoreSlim` write guard, sync + async write methods, atomic-rename via `tmp + File.Move`, `_lastSavedSnapshot` cache); control characters U+0000..U+001F and U+007F are stripped before persistence (CVE-2021-42574 mitigation); deleted sessions leave their custom name orphaned in v1.5 (no auto-prune)
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 27: Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N
+**Goal**: Three mid-risk feature additions ship together because their file surfaces don't overlap — the next 5h-window start time is visible below the countdown, multi-account users can switch organizations without losing all metrics silently, pricing failures are surfaced instead of swallowed, and `LastFetchRelativeTime` is no longer hardcoded English
+**Depends on**: Phase 26 (uses `IDispatcherQueue` foundation for new InfoBar handlers and shares the Settings Segmented Control extended in Phase 26)
+**Requirements**: NEXTWIN-01, NEXTWIN-02, NEXTWIN-03, ORGID-01, ORGID-02, ORGID-03, ORGID-04, ORGID-05, PRICING-01, PRICING-02, PRICING-03, L10N-01, L10N-02, L10N-03
+**Success Criteria** (what must be TRUE):
+  1. A second time label below the 5h-window countdown shows the absolute reset time using `UsageResponse.FiveHour.ResetsAt` ("Mo 1.5. 16:30" or "Wed 14:30" depending on `CultureInfo.CurrentUICulture`); the label is hidden — not "—" — when `ResetsAt` is null; format auto-switches DE/EN via `l:Uids.Uid`
+  2. A new "Re-detect organization" button on the Settings Account tab calls `IClaudeApiService.ListAvailableOrganizationsAsync` (existing `/api/organizations` endpoint at `ClaudeApiService.cs:163`), shows orgs in a `ContentDialog` (name + uuid), and on selection persists the new org-id and triggers the full `MainViewModel.Logout` sequence — switching orgs requires re-authentication because the WebView2 cookie jar is per-org-context (verified by smoke: select different org → land on LoginView)
+  3. After 5 consecutive polls returning `utilization: 0` while an active session exists (`OrgMismatchPollThreshold = 5`), a dismissable InfoBar soft-prompt appears in MainView ("Detected possible organization mismatch — re-resolve?") with a button that opens the Account → Re-detect dialog; the "Don't show again this session" checkbox suppresses it in-memory only (resets on app restart, NOT persisted)
+  4. Pricing failures surface via a dedicated `IsPricingError` warning InfoBar in MainView ("Pricing data unavailable — cost figures may be inaccurate"); the banner clears automatically when a subsequent retry succeeds; the banner stack policy caps visible banners at 2 and suppresses `IsPricingError` rendering when `IsSessionExpired == true` (auth banner takes priority — verified by a banner-stack policy test); decision is documented in PROJECT.md after Phase 27 ships
+  5. `SettingsViewModel.LastFetchRelativeTime` reads from new resw keys `LastFetchRelative.JustNow`, `LastFetchRelative.MinutesAgo`, `LastFetchRelative.HoursAgo`, `LastFetchRelative.DaysAgo`, `LastFetchRelative.Never` in both `de-DE/Resources.resw` and `en-US/Resources.resw`; all ~30 new resw keys across NEXTWIN/ORGID/PRICING/L10N exist in both locales and are validated by the extended `ResourceCoverageTests`
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 28: v1.4 Cleanup & Final UAT
+**Goal**: All remaining v1.4 code-review remediation lands, the `[ObservableProperty]` default-value convention is documented, opportunistic Nits are bundled into a single commit, and a full milestone-level UAT pass confirms v1.5 ships clean
+**Depends on**: Phase 27 (cleanup ships last to keep the test surface stable while feature work is in flight)
+**Requirements**: CLEANUP-01, CLEANUP-02, CLEANUP-03, CLEANUP-04
+**Success Criteria** (what must be TRUE):
+  1. `Messages/LogoutRequestedMessage.cs` is deleted and no references remain (orphan dead code from reverted Plan 21-03 fully removed)
+  2. `MainViewModel._contextModelBadgeColor = null!` is replaced with a real default initializer (e.g. `ParseHexBrush(...)` matching the gray fallback shown when no model is yet detected); the visible behavior matches the pre-`null!` regression and is asserted by a unit test
+  3. The three opportunistic minor cleanups bundled from `2026-05-07-nits-v14-code-review-cleanups.md` land in a single commit with no behavioral change
+  4. `CLAUDE.md` documents convention G-3 ("prefer `= string.Empty;`, `= "--";`, or `= ParseHexBrush(...)` initializers over `null!` for `[ObservableProperty]` fields"), and the M-3 fix is cited as the precedent
+  5. Full milestone UAT runs green: every v1.5 success criterion above (24-27) is re-verified in a single end-to-end pass; no new test failures appear on the v1.5-modified surface beyond the documented pre-existing baselines
+**Plans**: TBD
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -266,3 +347,8 @@ Plans:
 | 21. History Persistence Hardening | v1.4 | 3/3 | Complete | 2026-05-07 |
 | 22. UI Polish | v1.4 | 4/4 | Complete | 2026-05-07 |
 | 23. Localization Gaps | v1.4 | 1/1 | Complete | 2026-05-07 |
+| 24. Dispatcher Foundation & Marshaling Convention | v1.5 | 0/0 | Not started | - |
+| 25. Cold-Start Session Hydration & Visibility Window | v1.5 | 0/0 | Not started | - |
+| 26. Persistent Session Renaming | v1.5 | 0/0 | Not started | - |
+| 27. Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N | v1.5 | 0/0 | Not started | - |
+| 28. v1.4 Cleanup & Final UAT | v1.5 | 0/0 | Not started | - |

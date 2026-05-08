@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: macOS v1.12.0 Feature Parity + Hardening
 status: planning
-last_updated: "2026-05-07T18:16:06.845Z"
-last_activity: 2026-05-07
+last_updated: "2026-05-08T11:09:00.000Z"
+last_activity: 2026-05-08
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,21 +17,29 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-07)
+See: .planning/PROJECT.md (updated 2026-05-08)
 
 **Core value:** Developers can see their Claude usage limits (5-hour window, weekly quota, context window) at a glance in real-time, preventing unexpected throttling.
-**Current focus:** Planning next milestone (v1.5 — to be defined via `/gsd-new-milestone`)
+**Current focus:** v1.5 milestone — Phase 24 (Dispatcher Foundation & Marshaling Convention) is next up to plan.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: **24 — Dispatcher Foundation & Marshaling Convention** (next to plan)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-07 — Milestone v1.5 started
+Status: Roadmap approved; ready for `/gsd-plan-phase 24`
+Last activity: 2026-05-08 — v1.5 ROADMAP created (Phases 24-28, 34 REQ-IDs mapped, 100% coverage)
+
+**v1.5 Phase Sequence (research-validated, do not reorder):**
+
+1. **Phase 24** — DISPATCH foundation (`IDispatcherQueue` adapter + C-1/C-2 fix + G-1 convention enforcement)
+2. **Phase 25** — DROPDOWN (Cwd hydration + visibility window + cold-start data-loss race fix)
+3. **Phase 26** — RENAME (session-rename feature, biggest phase: ContentDialog + 5th Settings tab + `ISessionNameStore`)
+4. **Phase 27** — NEXTWIN + ORGID + PRICING + L10N (mid-risk feature trio with non-overlapping surfaces; B3 + M-2/L10N must couple)
+5. **Phase 28** — CLEANUP (M-1 + M-3 + Nits + final UAT)
 
 ## Performance Metrics
 
-**v1.4 totals:**
+**v1.4 totals (shipped):**
 
 - Total phases: 4 (Phase 20-23)
 - Total plans: 13 (10 base + 3 gap-closure)
@@ -39,14 +47,15 @@ Last activity: 2026-05-07 — Milestone v1.5 started
 - LOC delta: 64 files, +11,115 / -42 lines
 - Test coverage delta: +26 tests on modified surface, 4 new test classes
 
-**By Phase:**
+**v1.5 in flight:**
 
 | Phase | Plans | Status | Completed |
 |-------|-------|--------|-----------|
-| 20 Auth Flow Stability | 5 | Complete | 2026-05-07 |
-| 21 History Persistence Hardening | 3 | Complete | 2026-05-07 |
-| 22 UI Polish | 4 | Complete | 2026-05-07 |
-| 23 Localization Gaps | 1 | Complete | 2026-05-07 |
+| 24 Dispatcher Foundation & Marshaling Convention | 0 | Not started | — |
+| 25 Cold-Start Session Hydration & Visibility Window | 0 | Not started | — |
+| 26 Persistent Session Renaming | 0 | Not started | — |
+| 27 Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N | 0 | Not started | — |
+| 28 v1.4 Cleanup & Final UAT | 0 | Not started | — |
 
 ## Accumulated Context
 
@@ -61,34 +70,46 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 - Gap-closure as additional wave within parent phase
 - Belt-and-suspenders `IsEnabled` x:Bind on `[RelayCommand]` buttons
 
-### Open Tech Debt (carried into v1.5+)
+**v1.5 architecture decisions (from research/SUMMARY.md, to be logged in PROJECT.md as phases ship):**
 
-**v1.4 code-review findings (2026-05-07, see `.planning/todos/pending/`):**
+- Decision 1: `ISessionNameStore` hooks at the display layer in `MainViewModel.RefreshSessionList` — NOT inside `JsonlService` (preserves storage-free service tests; honors D-13 lesson)
+- Decision 2: Phase build order 24 → 25 → 26 → 27 → 28 (foundation before any new `IRecipient<>` lands)
+- Decision 3: `IDispatcherQueue` ships as full adapter in Phase 24 (interface + production adapter + `FakeDispatcherQueue` + convention test) — mirrors v1.4 `IDispatcherTimer` precedent
 
-- 🔴 **C-1**: Fire-and-forget Task in `MainViewModel.Receive(AuthStateChangedMessage)` — swallowed exceptions in post-login refresh path (`2026-05-07-c1-fix-fire-and-forget-task-in-mainviewmodel-receive-authstatechanged.md`)
-- 🔴 **C-2**: `Receive(AuthStateChangedMessage)` mutates UI state without DispatcherQueue marshaling — same architectural family as the WeakReferenceMessenger pitfall (`2026-05-07-c2-add-dispatcher-marshaling-to-receive-authstatechanged.md`)
-- 🟡 **M-1**: Orphan `LogoutRequestedMessage.cs` from reverted Plan 21-03 (`2026-05-07-m1-delete-orphan-logoutrequestedmessage.md`)
-- 🟡 **M-2**: `LastFetchRelativeTime` hardcoded EN strings — bundle with pricing-service fix (`2026-05-07-m2-localize-lastfetchrelativetime-strings.md`)
-- 🟡 **M-3**: `_contextModelBadgeColor = null!` — restore real default (`2026-05-07-m3-revert-contextmodelbadgecolor-default-to-gray.md`)
-- ⚪ **Nits**: 3 minor cleanups (`2026-05-07-nits-v14-code-review-cleanups.md`)
+**v1.5 conventions to land in CLAUDE.md:**
+
+- G-1: `IRecipient<>.Receive` always-TryEnqueue rule (Phase 24)
+- G-2: JSON-on-disk store pattern with `SemaphoreSlim` write guard (Phase 26 first consumer: `ISessionNameStore`)
+- G-3: `[ObservableProperty]` defaults — prefer real initializers over `null!` (Phase 28)
+
+### Open Tech Debt (carried into v1.5)
+
+**v1.4 code-review findings (2026-05-07, scheduled in v1.5):**
+
+- 🔴 **C-1**: Fire-and-forget Task in `MainViewModel.Receive(AuthStateChangedMessage)` → Phase 24 (DISPATCH-04)
+- 🔴 **C-2**: `Receive(AuthStateChangedMessage)` mutates UI state without DispatcherQueue marshaling → Phase 24 (DISPATCH-04)
+- 🟡 **M-1**: Orphan `LogoutRequestedMessage.cs` from reverted Plan 21-03 → Phase 28 (CLEANUP-01)
+- 🟡 **M-2**: `LastFetchRelativeTime` hardcoded EN strings — couples with B3 → Phase 27 (L10N-01)
+- 🟡 **M-3**: `_contextModelBadgeColor = null!` → Phase 28 (CLEANUP-02)
+- ⚪ **Nits**: 3 minor cleanups → Phase 28 (CLEANUP-03)
 
 **Carried from earlier milestones / phase backlog (memory-tracked):**
 
-- WeakReferenceMessenger + AddTransient ViewModels = recipient GC pitfall (`architecture_weakreferencemessenger_with_transient_vms.md`)
-- Cold-start session scanning (`backlog_session_dropdown_recent_sessions.md`) — blocks POLISH-04 visual smoke
-- Multi-account org-id picker (`backlog_org_id_picker.md`) — `TryMigrateOrgIdAsync` blindly takes `orgs[0]`
-- Pricing service silent failure (`backlog_pricing_never_loaded.md`) — blocks POLISH-07 visual smoke; couples with M-2 above
-- Next 5h-window start label feature request (`backlog_next_window_start_label.md`)
-- 2 pre-existing `ClaudeApiServiceTests` failures (parameter naming mismatch, production unaffected, unchanged from v1.3)
-- 13 pre-existing `JsonlServiceTests` failures (parameter naming mismatch, production unaffected, unchanged from v1.0)
-- AUTH-01/02 visual smoke deferred — dev build can't easily force a 401 (full unit-test coverage applies)
+- Cold-start session scanning (`backlog_session_dropdown_recent_sessions.md`) → Phase 25 (DROPDOWN-01..06)
+- Multi-account org-id picker (`backlog_org_id_picker.md`) → Phase 27 (ORGID-01..05)
+- Pricing service silent failure (`backlog_pricing_never_loaded.md`) → Phase 27 (PRICING-01..03)
+- Next 5h-window start label (`backlog_next_window_start_label.md`) → Phase 27 (NEXTWIN-01..03)
+- WeakReferenceMessenger + AddTransient ViewModels = recipient GC pitfall — codified as G-1 convention in Phase 24
+- 2 pre-existing `ClaudeApiServiceTests` failures (parameter naming mismatch, production unaffected — out of scope per REQUIREMENTS.md)
+- 13 pre-existing `JsonlServiceTests` failures (parameter naming mismatch, production unaffected — out of scope per REQUIREMENTS.md)
+- AUTH-01/02 visual smoke deferred — dev build can't easily force a 401
 
 ### Blockers/Concerns
 
-(None — milestone complete, ready to plan v1.5)
+(None — roadmap approved, ready for Phase 24 planning)
 
 ## Session Continuity
 
-Last session: v1.4 milestone close
-Stopped at: All archives written, ready for safety commit + git tag
-Resume file: —
+Last session: v1.5 roadmap creation (2026-05-08)
+Stopped at: ROADMAP.md, STATE.md, REQUIREMENTS.md (Traceability) all written; awaiting `/gsd-plan-phase 24`
+Resume file: `.planning/ROADMAP.md` (Phase 24 detail section)
