@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: macOS v1.12.0 Feature Parity + Hardening
-status: Roadmap approved; ready for `/gsd-plan-phase 24`
-stopped_at: Phase 24 context gathered
-last_updated: "2026-05-08T13:11:16.938Z"
-last_activity: 2026-05-08 — v1.5 ROADMAP created (Phases 24-28, 34 REQ-IDs mapped, 100% coverage)
+status: executing
+stopped_at: Completed 24-01-dispatcher-adapter-PLAN.md
+last_updated: "2026-05-08T14:23:46.891Z"
+last_activity: 2026-05-08
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 3
+  completed_plans: 1
+  percent: 33
 ---
 
 # Project State
@@ -20,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-08)
 
 **Core value:** Developers can see their Claude usage limits (5-hour window, weekly quota, context window) at a glance in real-time, preventing unexpected throttling.
-**Current focus:** v1.5 milestone — Phase 24 (Dispatcher Foundation & Marshaling Convention) is next up to plan.
+**Current focus:** Phase 24 — Dispatcher Foundation & Marshaling Convention
 
 ## Current Position
 
-Phase: **24 — Dispatcher Foundation & Marshaling Convention** (next to plan)
-Plan: —
-Status: Roadmap approved; ready for `/gsd-plan-phase 24`
-Last activity: 2026-05-08 — v1.5 ROADMAP created (Phases 24-28, 34 REQ-IDs mapped, 100% coverage)
+Phase: 24 (Dispatcher Foundation & Marshaling Convention) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-05-08
 
 **v1.5 Phase Sequence (research-validated, do not reorder):**
 
@@ -56,6 +57,7 @@ Last activity: 2026-05-08 — v1.5 ROADMAP created (Phases 24-28, 34 REQ-IDs map
 | 26 Persistent Session Renaming | 0 | Not started | — |
 | 27 Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N | 0 | Not started | — |
 | 28 v1.4 Cleanup & Final UAT | 0 | Not started | — |
+| Phase 24 P01 | 25 | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -81,6 +83,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 - G-1: `IRecipient<>.Receive` always-TryEnqueue rule (Phase 24)
 - G-2: JSON-on-disk store pattern with `SemaphoreSlim` write guard (Phase 26 first consumer: `ISessionNameStore`)
 - G-3: `[ObservableProperty]` defaults — prefer real initializers over `null!` (Phase 28)
+- [Phase ?]: IDispatcherQueue adapter ships as full interface + WinuiDispatcherQueueAdapter singleton + FakeDispatcherQueue test double, mirroring v1.4 IDispatcherTimer precedent (Phase 24 Plan 01)
 
 ### Open Tech Debt (carried into v1.5)
 
@@ -110,6 +113,6 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 
 ## Session Continuity
 
-Last session: 2026-05-08T13:11:16.896Z
-Stopped at: Phase 24 context gathered
-Resume file: .planning/phases/24-dispatcher-foundation-marshaling-convention/24-CONTEXT.md
+Last session: 2026-05-08T14:23:46.880Z
+Stopped at: Completed 24-01-dispatcher-adapter-PLAN.md
+Resume file: None
