@@ -4,14 +4,14 @@ milestone: v1.5
 milestone_name: macOS v1.12.0 Feature Parity + Hardening
 status: executing
 stopped_at: Completed 27-nextwin-orgid-pricing-l10n-01-PLAN.md
-last_updated: "2026-05-08T17:52:53.312Z"
+last_updated: "2026-05-08T17:59:46.874Z"
 last_activity: 2026-05-08
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 13
-  completed_plans: 10
-  percent: 77
+  completed_plans: 11
+  percent: 85
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-08)
 ## Current Position
 
 Phase: 27 (Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-05-08
 
@@ -67,6 +67,7 @@ Last activity: 2026-05-08
 | Phase 26 P02 | 45 | 2 tasks | 9 files |
 | Phase 26 P03 | 70 | 2 tasks | 15 files |
 | Phase 27-nextwin-orgid-pricing-l10n P01 | 15 | 3 tasks | 5 files |
+| Phase 27-nextwin-orgid-pricing-l10n P02 | 20 | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -129,6 +130,6 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 
 ## Session Continuity
 
-Last session: 2026-05-08T17:52:53.302Z
+Last session: 2026-05-08T17:59:46.865Z
 Stopped at: Completed 27-nextwin-orgid-pricing-l10n-01-PLAN.md
 Resume file: None

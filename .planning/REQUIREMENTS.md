@@ -14,9 +14,9 @@ Bring CCInfoWindows to upstream stefanlange/ccInfo v1.12.0 feature parity (next 
 
 #### NEXTWIN — Next 5h-Window Start Time Label (A1)
 
-- [ ] **NEXTWIN-01**: User sees the absolute reset time of the current 5-hour window displayed below the existing countdown ("Mo 1.5. 16:30" or "Wed 14:30" depending on locale). Format: weekday + 24h clock; cross-day clarity via `"ddd d. MMM HH:mm"` when reset is more than 12h away or after midnight.
-- [ ] **NEXTWIN-02**: When `UsageResponse.FiveHour.ResetsAt` is null (no current window), the label is hidden — no "—" placeholder.
-- [ ] **NEXTWIN-03**: Label text auto-switches between DE and EN via `CultureInfo.CurrentUICulture` matching the app's localization toggle (`l:Uids.Uid` pattern).
+- [x] **NEXTWIN-01**: User sees the absolute reset time of the current 5-hour window displayed below the existing countdown ("Mo 1.5. 16:30" or "Wed 14:30" depending on locale). Format: weekday + 24h clock; cross-day clarity via `"ddd d. MMM HH:mm"` when reset is more than 12h away or after midnight.
+- [x] **NEXTWIN-02**: When `UsageResponse.FiveHour.ResetsAt` is null (no current window), the label is hidden — no "—" placeholder.
+- [x] **NEXTWIN-03**: Label text auto-switches between DE and EN via `CultureInfo.CurrentUICulture` matching the app's localization toggle (`l:Uids.Uid` pattern).
 
 #### RENAME — Session Renaming with Persistent Custom Names (A2)
 
@@ -128,9 +128,9 @@ All 34 v1.5 REQ-IDs map to exactly one phase. 100% coverage validated 2026-05-08
 | RENAME-06 | Phase 26 | Complete |
 | RENAME-07 | Phase 26 | Complete |
 | RENAME-08 | Phase 26 | Complete |
-| NEXTWIN-01 | Phase 27 | Pending |
-| NEXTWIN-02 | Phase 27 | Pending |
-| NEXTWIN-03 | Phase 27 | Pending |
+| NEXTWIN-01 | Phase 27 | Complete |
+| NEXTWIN-02 | Phase 27 | Complete |
+| NEXTWIN-03 | Phase 27 | Complete |
 | ORGID-01 | Phase 27 | Pending |
 | ORGID-02 | Phase 27 | Pending |
 | ORGID-03 | Phase 27 | Pending |
