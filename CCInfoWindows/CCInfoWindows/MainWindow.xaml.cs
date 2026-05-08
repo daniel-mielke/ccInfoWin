@@ -50,6 +50,7 @@ public sealed partial class MainWindow : Window, IRecipient<ThemeChangedMessage>
     /// <summary>
     /// Applies theme change immediately by setting RequestedTheme on the root FrameworkElement.
     /// </summary>
+    [ThreadSafeReceive("Window receivers run on the UI thread that hosts the window — WinUI 3 Window construction and access is by-design UI-thread-only.")]
     public void Receive(ThemeChangedMessage message)
     {
         if (Content is FrameworkElement fe)
@@ -63,6 +64,7 @@ public sealed partial class MainWindow : Window, IRecipient<ThemeChangedMessage>
     /// <summary>
     /// Resets the window to the default size when triggered via settings.
     /// </summary>
+    [ThreadSafeReceive("Window receivers run on the UI thread that hosts the window — WinUI 3 Window construction and access is by-design UI-thread-only.")]
     public void Receive(ResetWindowSizeMessage message)
     {
         AppWindow.Resize(WindowHelper.GetDefaultWindowSize(GetDpiScale()));

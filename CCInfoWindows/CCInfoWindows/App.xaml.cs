@@ -172,7 +172,8 @@ public partial class App : Application
             sp.GetRequiredService<IPricingService>(),
             sp.GetRequiredService<IUpdateService>(),
             sp.GetRequiredService<IWebViewBridge>(),
-            sp.GetRequiredService<IBurnRateNotificationService>()));
+            sp.GetRequiredService<IBurnRateNotificationService>(),
+            sp.GetRequiredService<IDispatcherQueue>()));
         services.AddTransient<SettingsViewModel>();
 
         return services.BuildServiceProvider();
