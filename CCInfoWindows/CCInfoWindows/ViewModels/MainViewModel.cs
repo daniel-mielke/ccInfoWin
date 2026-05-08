@@ -47,7 +47,8 @@ public class SessionDisplayItem
 /// </summary>
 public partial class MainViewModel : ObservableObject,
     IRecipient<AuthStateChangedMessage>,
-    IRecipient<SessionTimeoutChangedMessage>   // D-08
+    IRecipient<SessionTimeoutChangedMessage>,   // D-08
+    IRecipient<SessionVisibilityChangedMessage>   // DROPDOWN-04 / D-03
 {
     // 21-03 gap closure REVERTED: IRecipient<LogoutRequestedMessage> registration was unreliable
     // because MainViewModel is AddTransient and WeakReferenceMessenger silently dropped the
@@ -314,6 +315,7 @@ public partial class MainViewModel : ObservableObject,
         WeakReferenceMessenger.Default.UnregisterAll(this);
         WeakReferenceMessenger.Default.Register<AuthStateChangedMessage>(this);
         WeakReferenceMessenger.Default.Register<SessionTimeoutChangedMessage>(this);   // D-08
+        WeakReferenceMessenger.Default.Register<SessionVisibilityChangedMessage>(this);   // DROPDOWN-04 / D-03
 
         // Load settings
         var settings = _settingsService.LoadSettings();
@@ -688,7 +690,16 @@ public partial class MainViewModel : ObservableObject,
         //       in ComboBox to support POLISH-04 (two-line tooltip). Per-item IsActive replaces
         //       the previous hardcoded `IsActive = true` (was correct only because of the filter).
         var thresholdMinutes = settings.SessionActivityThresholdMinutes;
+
+        // DROPDOWN-01 / DROPDOWN-04 / D-03: display-layer visibility cutoff.
+        // JsonlService keeps aggregating ALL sessions (cost / quota totals must NOT lose data) —
+        // we only filter the user-visible ComboBox source here.
+        var visibilityCutoff = settings.SessionVisibilityWindowDays > 0
+            ? DateTimeOffset.UtcNow.AddDays(-settings.SessionVisibilityWindowDays)
+            : DateTimeOffset.MinValue;
+
         var displayItems = latestSessions
+            .Where(s => s.LastActivity >= visibilityCutoff)
             .OrderByDescending(s => s.LastActivity)
             .Select(s =>
             {
@@ -1045,6 +1056,14 @@ public partial class MainViewModel : ObservableObject,
         // D-08: rebuild SortedSessions on threshold change so TooltipText reflects new minutes.
         // Dispatched to UI thread — RefreshSessionList requires it.
         // G-1 compliant: constructor-injected _dispatcherQueue is non-null. CD-05 #2 — implicit-default exemption (no [ThreadSafeReceive] needed).
+        _dispatcherQueue.TryEnqueue(RefreshSessionList);
+    }
+
+    public void Receive(SessionVisibilityChangedMessage message)
+    {
+        // DROPDOWN-04 / D-03: re-apply visibility cutoff filter on SortedSessions.
+        // Dispatched to UI thread — RefreshSessionList requires it.
+        // G-1 compliant: constructor-injected _dispatcherQueue is non-null. L-02 honored.
         _dispatcherQueue.TryEnqueue(RefreshSessionList);
     }
 }
