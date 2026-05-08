@@ -764,17 +764,7 @@ public partial class MainViewModel : ObservableObject,
             return session.Cwd;
         }
 
-        string template;
-        try
-        {
-            template = Localizer.Get().GetLocalizedString("InactiveSessionTooltip");
-        }
-        catch
-        {
-            // Defensive fallback if Localizer throws (Phase 23 authors the resw key).
-            template = "Inactive for > {0}min";
-        }
-
+        var template = Localizer.Get().GetLocalizedString("InactiveSessionTooltip");
         return $"{session.Cwd}\n{string.Format(template, sessionTimeoutMinutes)}";
     }
 

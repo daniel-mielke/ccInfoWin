@@ -15,9 +15,6 @@ namespace CCInfoWindows.Views;
 /// </summary>
 public sealed partial class SettingsView : Page
 {
-    // D-10: tab order defined in SettingsViewModel constants (shared)
-    private const int AboutTabIndex = SettingsViewModel.AboutTabIndex;
-
     public SettingsViewModel ViewModel { get; }
 
     public SettingsView()
@@ -34,7 +31,7 @@ public sealed partial class SettingsView : Page
         ApplyTabTooltips();
         // D-10: if Settings opens with About already selected (rare — persistence),
         // start the timer immediately so "X minutes ago" is live from t=0.
-        if (TabsSegmented.SelectedIndex == AboutTabIndex)
+        if (TabsSegmented.SelectedIndex == SettingsViewModel.AboutTabIndex)
             ViewModel.StartAboutTimestampTimer();
         ViewModel.Activate();   // Phase 26: subscribe to NameChanged + snapshot if Sessions tab visible
 
@@ -45,10 +42,7 @@ public sealed partial class SettingsView : Page
     private void OnSegmentedSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         // D-10: route Segmented.SelectionChanged to ViewModel timer lifecycle.
-        // ViewModel may be null during early initialization; guard.
-        if (ViewModel == null) return;
-
-        if (TabsSegmented.SelectedIndex == AboutTabIndex)
+        if (TabsSegmented.SelectedIndex == SettingsViewModel.AboutTabIndex)
             ViewModel.StartAboutTimestampTimer();
         else
             ViewModel.StopAboutTimestampTimer();
