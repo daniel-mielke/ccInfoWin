@@ -86,8 +86,15 @@ public partial class MainViewModel : ObservableObject,
 
     // --- Auth state ---
 
+    // PRICING-03 / D-PR-04: IsPricingErrorVisible depends on IsSessionExpired (auth banner priority)
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPricingErrorVisible))]
     private bool _isSessionExpired;
+
+    // PRICING-01..03 (D-PR-01, D-PR-04): surfaces _pricingService.EnsurePricesLoadedAsync() failures
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPricingErrorVisible))]
+    private bool _isPricingError;
 
     // DROPDOWN-05 / D-04: one-time migration toast for existing installs.
     // True only on first launch after upgrade -- persisted via SaveSettings on dismiss (CD-02).
@@ -290,6 +297,12 @@ public partial class MainViewModel : ObservableObject,
     /// </summary>
     public DateTimeOffset? FiveHourWindowStart => _fiveHourResetsAt?.AddHours(-5);
 
+    /// <summary>
+    /// PRICING-03 / D-PR-04: banner-stack policy — pricing InfoBar suppressed while auth banner shows.
+    /// Auto-notifies via [NotifyPropertyChangedFor] on IsPricingError + IsSessionExpired.
+    /// </summary>
+    public bool IsPricingErrorVisible => IsPricingError && !IsSessionExpired;
+
     public MainViewModel(
         ICredentialService credentialService,
         INavigationService navigationService,
@@ -406,11 +419,21 @@ public partial class MainViewModel : ObservableObject,
             Debug.WriteLine($"[MainViewModel] JSONL init failed: {ex.Message}");
         }
 
-        // Load pricing in background — non-blocking, fallback activates on failure
+        // Load pricing in background — non-blocking, fallback activates on failure.
+        // PRICING-01..03 (D-PR-01, D-PR-03): surface failures via IsPricingError; clear on subsequent success.
+        // Marshal back to the UI thread because Task.Run runs off the UI thread (G-1 alignment for property mutation).
         _ = Task.Run(async () =>
         {
-            try { await _pricingService.EnsurePricesLoadedAsync(); }
-            catch (Exception ex) { Debug.WriteLine($"[MainViewModel] Pricing load failed: {ex.Message}"); }
+            try
+            {
+                await _pricingService.EnsurePricesLoadedAsync();
+                _dispatcherQueue.TryEnqueue(() => IsPricingError = false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MainViewModel] Pricing load failed: {ex.Message}");
+                _dispatcherQueue.TryEnqueue(() => IsPricingError = true);
+            }
         });
 
         RefreshSessionList();
@@ -933,7 +956,10 @@ public partial class MainViewModel : ObservableObject,
         }
         try
         {
+            // PRICING-02 / CD-04: manual refresh + auto-poll BOTH clear IsPricingError on success.
+            // This site runs inside the existing dispatcher chain (no extra TryEnqueue needed — G-1).
             await _pricingService.EnsurePricesLoadedAsync();
+            IsPricingError = false;
             ct.ThrowIfCancellationRequested();
             var stats = await Task.Run(() => _jsonlService.GetStatistics(period), ct);
             _dispatcherQueue.TryEnqueue(() => ApplyStatistics(stats));
@@ -945,6 +971,7 @@ public partial class MainViewModel : ObservableObject,
         catch (Exception ex)
         {
             Debug.WriteLine($"[MainViewModel] AggregateStatistics failed: {ex.Message}");
+            IsPricingError = true;
             _dispatcherQueue.TryEnqueue(() => ApplyStatistics(StatisticsSummary.Empty));
         }
         finally
