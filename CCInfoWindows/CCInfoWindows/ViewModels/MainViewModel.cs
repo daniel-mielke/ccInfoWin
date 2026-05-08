@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Messages;
 using CCInfoWindows.Models;
@@ -109,6 +110,13 @@ public partial class MainViewModel : ObservableObject,
 
     [ObservableProperty]
     private string _fiveHourCountdown = "--";
+
+    // NEXTWIN-01..03: absolute reset-time label below the countdown (D-NW-04)
+    [ObservableProperty]
+    private string _fiveHourNextWindowText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isFiveHourNextWindowVisible;
 
     private DateTimeOffset? _fiveHourResetsAt;
 
@@ -378,6 +386,7 @@ public partial class MainViewModel : ObservableObject,
             {
                 _fiveHourResetsAt = history.ResetsAt;
             }
+            RecomputeNextWindowLabel();   // NEXTWIN — show absolute label from persisted history at cold start
             InvalidateChart();
         }
 
@@ -524,6 +533,7 @@ public partial class MainViewModel : ObservableObject,
             FiveHourPercentageText = "--";
             FiveHourCountdown = "--";
             _fiveHourResetsAt = null;
+            RecomputeNextWindowLabel();   // NEXTWIN — clears label when API returns no FiveHour
             IsBurnRateWarningVisible = false;
             BurnRateWarningText = string.Empty;
             _burnRateNotificationService.CheckBurnRate(null);
@@ -607,6 +617,7 @@ public partial class MainViewModel : ObservableObject,
 
         // Set window timestamp BEFORE invalidating chart so FiveHourWindowStart is non-null when draw handler runs
         _fiveHourResetsAt = apiResetsAt;
+        RecomputeNextWindowLabel();   // NEXTWIN — recomputes when fresh API resetsAt arrives
         UsageHistoryPoints = history.Points.AsReadOnly();
         InvalidateChart();
     }
@@ -624,8 +635,35 @@ public partial class MainViewModel : ObservableObject,
     private void UpdateCountdowns()
     {
         FiveHourCountdown = CountdownFormatter.FormatCountdown(_fiveHourResetsAt);
+        RecomputeNextWindowLabel();
         WeeklyCountdown = CountdownFormatter.FormatCountdown(_weeklyResetsAt);
         SonnetCountdown = CountdownFormatter.FormatCountdown(_sonnetResetsAt);
+    }
+
+    /// <summary>
+    /// NEXTWIN-01..03 (D-NW-02..04): recomputes the absolute next-window label from
+    /// _fiveHourResetsAt. Hides the label (Visibility=Collapsed) when ResetsAt is null OR
+    /// IsSessionExpired is true (auth banner takes priority — banner-stack alignment with PRICING).
+    /// Format pattern is loaded from MainView.NextWindow.Label{De,En} resw key based on
+    /// CultureInfo.CurrentUICulture.
+    /// </summary>
+    private void RecomputeNextWindowLabel()
+    {
+        if (_fiveHourResetsAt is null || IsSessionExpired)
+        {
+            IsFiveHourNextWindowVisible = false;
+            FiveHourNextWindowText = string.Empty;
+            return;
+        }
+
+        var culture = CultureInfo.CurrentUICulture;
+        var formatKey = culture.Name.StartsWith("de", StringComparison.OrdinalIgnoreCase)
+            ? "MainView.NextWindow.LabelDe"
+            : "MainView.NextWindow.LabelEn";
+        var format = Localizer.Get().GetLocalizedString(formatKey);
+
+        FiveHourNextWindowText = _fiveHourResetsAt.Value.LocalDateTime.ToString(format, culture);
+        IsFiveHourNextWindowVisible = true;
     }
 
     /// <summary>
@@ -1157,5 +1195,8 @@ public partial class MainViewModel : ObservableObject,
         // G-1 compliant: constructor-injected _dispatcherQueue is non-null. L-02 honored.
         _dispatcherQueue.TryEnqueue(RefreshSessionList);
     }
+
+    // NEXTWIN-02 (D-NW-02): hide the next-window label when auth banner appears.
+    partial void OnIsSessionExpiredChanged(bool value) => RecomputeNextWindowLabel();
 }
 
