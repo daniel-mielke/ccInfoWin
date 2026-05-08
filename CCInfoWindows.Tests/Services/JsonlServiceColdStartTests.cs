@@ -141,9 +141,9 @@ public class JsonlServiceColdStartTests : IDisposable
         for (var i = 0; i < 2; i++)
             WriteAssistantJsonlLine(sessionFile, "sess-r", cwd: null, outputTokens: 1);
 
-        // Second incremental read via test seam -- must pick up the 2 new lines without
-        // the CAS-guard that prevents double-InitializeAsync calls in production.
-        await ((JsonlService)svc).ScanAsync();
+        // Second incremental read via test seam -- mirrors the FileSystemWatcher debounce
+        // path (incremental, not forceFullRead). Must pick up the 2 new lines.
+        await svc.ProcessFilesForTestAsync([sessionFile]);
 
         // Total token output == 5 (5 lines x outputTokens=1 each), confirming all 5 entries parsed
         var session = svc.Sessions.SingleOrDefault(s => s.Id == ProjectDirName);
@@ -158,10 +158,6 @@ public class JsonlServiceColdStartTests : IDisposable
     // Test seam
     // -------------------------------------------------------------------------
 
-    /// <summary>
-    /// Accesses the internal per-project entry count via the test seam on JsonlService.
-    /// Added in Phase 25 Task 2 (the seam method is part of the GREEN implementation).
-    /// </summary>
     private static int GetEntryCountForProject(JsonlService svc, string projectDirName)
         => svc.GetEntryCountForProject(projectDirName);
 
@@ -183,13 +179,17 @@ public class JsonlServiceColdStartTests : IDisposable
     /// </summary>
     private static void WriteAssistantJsonlLine(string filePath, string sessionId, string? cwd, int outputTokens)
     {
+        var uuid = $"msg_{Guid.NewGuid():N}";
+        var requestId = $"req_{Guid.NewGuid():N}";
+        var uniqueHash = $"{uuid}|{requestId}";
         string line;
         if (cwd is null)
         {
             line = JsonSerializer.Serialize(new
             {
-                uuid = $"msg_{Guid.NewGuid():N}",
-                requestId = $"req_{Guid.NewGuid():N}",
+                uuid,
+                requestId,
+                uniqueHash,
                 sessionId,
                 timestamp = DateTimeOffset.UtcNow.ToString("O"),
                 isSidechain = false,
@@ -211,8 +211,9 @@ public class JsonlServiceColdStartTests : IDisposable
         {
             line = JsonSerializer.Serialize(new
             {
-                uuid = $"msg_{Guid.NewGuid():N}",
-                requestId = $"req_{Guid.NewGuid():N}",
+                uuid,
+                requestId,
+                uniqueHash,
                 sessionId,
                 cwd,
                 timestamp = DateTimeOffset.UtcNow.ToString("O"),

@@ -378,15 +378,20 @@ public class JsonlServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task RebuildSessionsList_ExcludesEmptyCwd()
+    public async Task RebuildSessionsList_EmptyCwd_KeepsSessionWithDecodedDisplayName()
     {
+        // DROPDOWN-03: sessions with empty cwd are kept when a display name can be derived
+        // from the encoded project directory name. The old behaviour (Assert.Empty) described
+        // the pre-Phase-25 bug and has been updated to reflect the hardened filter.
         const string SessionId = "ddd00004-0000-0000-0000-000000000004";
         CreateSessionFile(SessionId, cwd: "");
 
         var service = new JsonlService(_tempDir);
         await service.InitializeAsync();
 
-        Assert.Empty(service.Sessions);
+        // The project dir is "project-ddd00004" -- DecodeProjectDirectory extracts "ddd00004".
+        Assert.Single(service.Sessions);
+        Assert.Equal("project-ddd00004", service.Sessions[0].Id);
     }
 
     [Fact]

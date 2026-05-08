@@ -441,7 +441,11 @@ public sealed class JsonlService : IJsonlService, IDisposable
             if (!string.IsNullOrWhiteSpace(line))
                 lines.Add(line);
         }
-        return (lines, stream.Length);
+        // DROPDOWN-06: use stream.Position (bytes consumed by reader) not stream.Length.
+        // stream.Length reflects the file size at the moment of the call, which may have grown
+        // while we were reading. stream.Position is the byte offset after the last ReadLine,
+        // so a subsequent incremental read correctly picks up lines written after this drain.
+        return (lines, stream.Position);
     }
 
     /// <summary>
@@ -467,7 +471,8 @@ public sealed class JsonlService : IJsonlService, IDisposable
                 lines.Add(line);
         }
 
-        return (lines, stream.Length);
+        // DROPDOWN-06: same as ReadAllLines -- use stream.Position not stream.Length.
+        return (lines, stream.Position);
     }
 
     /// <summary>
@@ -572,13 +577,27 @@ public sealed class JsonlService : IJsonlService, IDisposable
             return;
         }
 
-        // Populate project cwd from first entry if not yet set
-        var firstEntry = entries[0];
-        if (string.IsNullOrEmpty(data.Cwd))
-            data.Cwd = firstEntry.Cwd;
-
         foreach (var entry in entries)
+        {
+            // DROPDOWN-02: resolve Cwd from the FIRST non-empty cwd across ALL parsed entries.
+            // Tail-window reads frequently land on entries that omit the cwd field; iterating all
+            // entries instead of relying on entries[0] stabilises hydration across cold starts.
+            if (string.IsNullOrEmpty(data.Cwd) && !string.IsNullOrEmpty(entry.Cwd))
+                data.Cwd = entry.Cwd;
+
             ApplyEntryToProjectData(entry, data, filePath);
+        }
+
+        // DROPDOWN-02 diagnostic: when no entry in this file carries a cwd field, log the
+        // surrogate that GetDisplayName will derive from the encoded project directory name.
+        // data.Cwd intentionally stays empty here so the DROPDOWN-03 filter (IsNullOrEmpty path)
+        // keeps the session visible; DisplayName is resolved by RebuildSessionsList via
+        // SessionNameHelper.GetDisplayName(cwd: null, fallbackDirName: projectDirName).
+        if (string.IsNullOrEmpty(data.Cwd) && !string.IsNullOrEmpty(data.ProjectDirName))
+        {
+            var decoded = SessionNameHelper.DecodeProjectDirectory(data.ProjectDirName);
+            Debug.WriteLine($"[JsonlService] No cwd in '{data.ProjectDirName}'; display surrogate: '{decoded ?? "(none)"}'");
+        }
 
         UpdateFilePosition(filePath, newPosition);
     }
@@ -795,9 +814,50 @@ public sealed class JsonlService : IJsonlService, IDisposable
                     ModelName = kvp.Value.ModelName
                 };
             })
-            .Where(s => s is not null && IsValidProjectDirectory(s.Cwd))
+            // DROPDOWN-03: keep when Cwd is empty (DisplayName already resolved via fallback in
+            // ParseFileIntoProject) OR when the Cwd path still exists on disk.
+            // Drop only when Cwd is non-empty AND the directory was deleted.
+            .Where(s => s is not null && (string.IsNullOrEmpty(s.Cwd) || Directory.Exists(s.Cwd)))
             .OrderByDescending(s => s!.LastActivity)
             .ToList()!;
+    }
+
+    // -------------------------------------------------------------------------
+    // Test seams (internal — not part of IJsonlService; used by unit tests only)
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Returns the number of deduplicated assistant entries recorded for the given project.
+    /// Used by JsonlServiceColdStartTests to verify incremental read counts without
+    /// coupling tests to token-sum arithmetic.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    internal int GetEntryCountForProject(string projectDirName)
+    {
+        lock (_sessionsLock)
+        {
+            return _projectData.TryGetValue(projectDirName, out var data) ? data.EntryLog.Count : 0;
+        }
+    }
+
+    /// <summary>
+    /// Triggers an incremental re-parse of the given files, exactly as the FileSystemWatcher
+    /// would do after a debounce window. Used by JsonlServiceColdStartTests to simulate a
+    /// second read pass after new lines have been appended to a JSONL file, without triggering
+    /// a full forceFullRead scan that would re-parse already-counted entries.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    internal async Task ProcessFilesForTestAsync(IEnumerable<string> filePaths)
+    {
+        await Task.Run(() =>
+        {
+            lock (_sessionsLock)
+            {
+                foreach (var filePath in filePaths)
+                    ProcessSingleFile(filePath);
+                RebuildSessionsList();
+            }
+        });
     }
 
     // -------------------------------------------------------------------------
