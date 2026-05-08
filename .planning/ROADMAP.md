@@ -287,7 +287,7 @@ Plans:
 
 Plans:
 **Wave 1**
-- [ ] 25-01-jsonlservice-hardening-PLAN.md — JsonlService Cwd per-entry hydration + DecodeProjectDirectory fallback (DROPDOWN-02), RebuildSessionsList filter softening (DROPDOWN-03), stream.Position race fix (DROPDOWN-06), JsonlServiceColdStartTests + ControllableStreamProxy
+- [x] 25-01-jsonlservice-hardening-PLAN.md — JsonlService Cwd per-entry hydration + DecodeProjectDirectory fallback (DROPDOWN-02), RebuildSessionsList filter softening (DROPDOWN-03), stream.Position race fix (DROPDOWN-06), JsonlServiceColdStartTests + ControllableStreamProxy
 
 **Wave 2** *(blocked on Wave 1 completion — shares MainViewModel.cs)*
 - [ ] 25-02-visibility-window-settings-PLAN.md — AppSettings.SessionVisibilityWindowDays/MigrationShown + SessionVisibilityChangedMessage + SettingsViewModel ComboBox + SettingsView.xaml row + 5 resw key pairs + MainViewModel IRecipient + RefreshSessionList cutoff filter (DROPDOWN-01, DROPDOWN-04)
@@ -362,7 +362,7 @@ Plans:
 | 22. UI Polish | v1.4 | 4/4 | Complete | 2026-05-07 |
 | 23. Localization Gaps | v1.4 | 1/1 | Complete | 2026-05-07 |
 | 24. Dispatcher Foundation & Marshaling Convention | v1.5 | 3/3 | Complete   | 2026-05-08 |
-| 25. Cold-Start Session Hydration & Visibility Window | v1.5 | 0/3 | Not started | - |
+| 25. Cold-Start Session Hydration & Visibility Window | v1.5 | 1/3 | In Progress|  |
 | 26. Persistent Session Renaming | v1.5 | 0/0 | Not started | - |
 | 27. Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N | v1.5 | 0/0 | Not started | - |
 | 28. v1.4 Cleanup & Final UAT | v1.5 | 0/0 | Not started | - |
