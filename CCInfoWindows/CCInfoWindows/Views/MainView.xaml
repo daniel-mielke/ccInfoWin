@@ -103,22 +103,46 @@
                            Foreground="{ThemeResource SectionHeaderBrush}"
                            CharacterSpacing="50" />
 
-                <!-- ==================== SESSION DROPDOWN ==================== -->
-                <ComboBox x:Name="SessionComboBox"
-                          l:Uids.Uid="SessionComboBox"
-                          ItemsSource="{x:Bind ViewModel.SortedSessions, Mode=OneWay}"
-                          SelectedItem="{x:Bind ViewModel.SelectedSession, Mode=TwoWay}"
-                          HorizontalAlignment="Stretch"
-                          Background="{ThemeResource SegmentedBackgroundBrush}"
-                          CornerRadius="8">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate x:DataType="viewmodels:SessionDisplayItem">
-                            <TextBlock Text="{x:Bind DisplayName}"
-                                       ToolTipService.ToolTip="{x:Bind TooltipText}"
-                                       VerticalAlignment="Center" />
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
+                <!-- ==================== SESSION DROPDOWN + RENAME PENCIL ==================== -->
+                <Grid ColumnSpacing="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="32" />
+                    </Grid.ColumnDefinitions>
+
+                    <ComboBox x:Name="SessionComboBox"
+                              Grid.Column="0"
+                              l:Uids.Uid="SessionComboBox"
+                              ItemsSource="{x:Bind ViewModel.SortedSessions, Mode=OneWay}"
+                              SelectedItem="{x:Bind ViewModel.SelectedSession, Mode=TwoWay}"
+                              HorizontalAlignment="Stretch"
+                              Background="{ThemeResource SegmentedBackgroundBrush}"
+                              CornerRadius="8">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="viewmodels:SessionDisplayItem">
+                                <TextBlock Text="{x:Bind DisplayName}"
+                                           ToolTipService.ToolTip="{x:Bind TooltipText}"
+                                           VerticalAlignment="Center" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <!-- RENAME-01 / D-03: Pencil button opens ContentDialog -->
+                    <Button x:Name="RenameSessionButton"
+                            Grid.Column="1"
+                            l:Uids.Uid="MainViewRenameButton"
+                            Click="OnRenamePencilClicked"
+                            IsEnabled="{x:Bind ViewModel.HasSelectedSession, Mode=OneWay}"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="4"
+                            CornerRadius="6"
+                            Width="32" Height="32"
+                            VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE70F;" FontSize="14"
+                                  Foreground="{ThemeResource SecondaryTextBrush}" />
+                    </Button>
+                </Grid>
 
                 <!-- Scanning indicator -->
                 <TextBlock l:Uids.Uid="ScanningIndicator"

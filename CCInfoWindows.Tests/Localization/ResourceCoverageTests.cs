@@ -23,6 +23,12 @@ public class ResourceCoverageTests
         "InactiveSessionTooltip",
         "LoginReloadButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip",
         "LoginReloadButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name",
+        // Phase 26 RENAME-01: session rename dialog + pencil button tooltip
+        "Dialog.RenameSession.Title",
+        "Dialog.RenameSession.SaveButton",
+        "Dialog.RenameSession.CancelButton",
+        "Dialog.RenameSession.ResetButton",
+        "MainViewRenameButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip",
     ];
 
     private static readonly Dictionary<string, string> ExpectedEnUs = new()
@@ -33,6 +39,11 @@ public class ResourceCoverageTests
         ["InactiveSessionTooltip"] = "Inactive for > {0}min",
         ["LoginReloadButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Reload page",
         ["LoginReloadButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name"] = "Reload login page",
+        ["Dialog.RenameSession.Title"] = "Rename Session",
+        ["Dialog.RenameSession.SaveButton"] = "Save",
+        ["Dialog.RenameSession.CancelButton"] = "Cancel",
+        ["Dialog.RenameSession.ResetButton"] = "Reset",
+        ["MainViewRenameButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Rename session",
     };
 
     private static readonly Dictionary<string, string> ExpectedDeDe = new()
@@ -43,6 +54,11 @@ public class ResourceCoverageTests
         ["InactiveSessionTooltip"] = "Inaktiv seit > {0}min",
         ["LoginReloadButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Seite neu laden",
         ["LoginReloadButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name"] = "Login-Seite neu laden",
+        ["Dialog.RenameSession.Title"] = "Sitzung umbenennen",
+        ["Dialog.RenameSession.SaveButton"] = "Speichern",
+        ["Dialog.RenameSession.CancelButton"] = "Abbrechen",
+        ["Dialog.RenameSession.ResetButton"] = "Zurücksetzen",
+        ["MainViewRenameButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Sitzung umbenennen",
     };
 
     [Fact]

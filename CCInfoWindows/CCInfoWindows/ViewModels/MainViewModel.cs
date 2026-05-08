@@ -194,6 +194,7 @@ public partial class MainViewModel : ObservableObject,
     private ObservableCollection<SessionInfo> _sessions = [];
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelectedSession))]
     private SessionDisplayItem? _selectedSession;
 
     [ObservableProperty]
@@ -686,6 +687,53 @@ public partial class MainViewModel : ObservableObject,
     {
         _dispatcherQueue.TryEnqueue(RefreshSessionList);
     }
+
+    /// <summary>True when a session is selected — gates the rename pencil button.</summary>
+    public bool HasSelectedSession => SelectedSession != null;
+
+    /// <summary>
+    /// Triggered by the pencil button. View-layer code-behind handles the actual ContentDialog
+    /// because ContentDialog requires an XamlRoot — but MainView passes the SelectedSession
+    /// snapshot through this command so all rename logic stays in the ViewModel.
+    /// Save flow is invoked by the View via SaveCustomNameAsync below.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(HasSelectedSession))]
+    private void OpenRenameDialog()
+    {
+        // Intentionally empty — the View's Click handler queries SelectedSession and shows
+        // the dialog. The Command exists so the Button binds with proper CanExecute gating
+        // and accessibility (RelayCommand publishes IsEnabled).
+    }
+
+    /// <summary>
+    /// Persists a new custom name from the rename dialog. View calls this with already-trimmed input.
+    /// </summary>
+    public async Task SaveCustomNameAsync(string sessionId, string newName)
+    {
+        if (string.IsNullOrEmpty(sessionId)) return;
+        var sanitized = SessionNameSanitizer.Strip(newName).Trim();
+        if (string.IsNullOrEmpty(sanitized))
+        {
+            _sessionNameStore.ClearCustomName(sessionId);
+        }
+        else
+        {
+            _sessionNameStore.SetCustomName(sessionId, sanitized);
+        }
+        await _sessionNameStore.SaveAsync();
+    }
+
+    /// <summary>Persists "no custom name" (Reset button in rename dialog).</summary>
+    public async Task ClearCustomNameAsync(string sessionId)
+    {
+        if (string.IsNullOrEmpty(sessionId)) return;
+        _sessionNameStore.ClearCustomName(sessionId);
+        await _sessionNameStore.SaveAsync();
+    }
+
+    /// <summary>Lookup helper for the View — exposes whether a custom name currently exists.</summary>
+    public bool HasCustomName(string sessionId)
+        => _sessionNameStore.GetCustomName(sessionId) != null;
 
     /// <summary>
     /// Rebuilds the Sessions collection from the JSONL service and restores/retains the selected session.

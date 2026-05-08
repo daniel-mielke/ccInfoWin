@@ -13,6 +13,7 @@ using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.Web.WebView2.Core;
 using CommunityToolkit.Mvvm.Messaging;
 using Windows.UI;
+using WinUI3Localizer;
 
 namespace CCInfoWindows.Views;
 
@@ -215,5 +216,60 @@ public sealed partial class MainView : Page
                 StopShimmerAnimation();
             }
         }
+    }
+
+    /// <summary>
+    /// RENAME-01 / D-03: Opens the session rename ContentDialog.
+    /// Pure view-side concern: ContentDialog requires XamlRoot which is only available here.
+    /// All persistence logic delegates to ViewModel methods.
+    /// </summary>
+    private async void OnRenamePencilClicked(object sender, RoutedEventArgs e)
+    {
+        var selected = ViewModel.SelectedSession;
+        if (selected == null) return;
+
+        var sessionId = selected.Session.Id;
+        var currentDisplayName = selected.DisplayName;
+        var hasCustomName = ViewModel.HasCustomName(sessionId);
+
+        var textBox = new TextBox
+        {
+            Text = currentDisplayName,
+            MaxLength = 100,
+            AcceptsReturn = false
+        };
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = Localizer.Get().GetLocalizedString("Dialog.RenameSession.Title"),
+            PrimaryButtonText = Localizer.Get().GetLocalizedString("Dialog.RenameSession.SaveButton"),
+            SecondaryButtonText = Localizer.Get().GetLocalizedString("Dialog.RenameSession.CancelButton"),
+            CloseButtonText = hasCustomName
+                ? Localizer.Get().GetLocalizedString("Dialog.RenameSession.ResetButton")
+                : string.Empty,
+            DefaultButton = ContentDialogButton.Primary,
+            Content = textBox
+        };
+
+        // Disable Save when TextBox contains only whitespace
+        textBox.TextChanged += (_, _) =>
+        {
+            dialog.IsPrimaryButtonEnabled = !string.IsNullOrWhiteSpace(textBox.Text);
+        };
+        dialog.IsPrimaryButtonEnabled = !string.IsNullOrWhiteSpace(textBox.Text);
+
+        var result = await dialog.ShowAsync();
+
+        if (result == ContentDialogResult.Primary)
+        {
+            await ViewModel.SaveCustomNameAsync(sessionId, textBox.Text);
+        }
+        else if (result == ContentDialogResult.None && hasCustomName)
+        {
+            // CloseButton acts as Reset (only shown when a custom name exists)
+            await ViewModel.ClearCustomNameAsync(sessionId);
+        }
+        // Secondary (Cancel) — no-op
     }
 }

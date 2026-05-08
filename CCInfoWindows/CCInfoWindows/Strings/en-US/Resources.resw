@@ -360,4 +360,21 @@
     <value>At current pace, token limit reached in {0}.</value>
   </data>
 
+  <!-- Phase 26 RENAME-01: Session rename dialog + pencil button tooltip -->
+  <data name="Dialog.RenameSession.Title" xml:space="preserve">
+    <value>Rename Session</value>
+  </data>
+  <data name="Dialog.RenameSession.SaveButton" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="Dialog.RenameSession.CancelButton" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Dialog.RenameSession.ResetButton" xml:space="preserve">
+    <value>Reset</value>
+  </data>
+  <data name="MainViewRenameButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Rename session</value>
+  </data>
+
 </root>
