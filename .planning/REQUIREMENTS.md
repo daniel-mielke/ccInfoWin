@@ -21,7 +21,7 @@ Bring CCInfoWindows to upstream stefanlange/ccInfo v1.12.0 feature parity (next 
 #### RENAME — Session Renaming with Persistent Custom Names (A2)
 
 - [x] **RENAME-01**: User can click a pencil button next to the session switcher in MainView; this opens a `ContentDialog` with a TextBox pre-filled with the current display name, plus Save and Cancel buttons. Save persists the new name immediately.
-- [ ] **RENAME-02**: A new "Sessions" Settings tab (5th segment in the existing Segmented Control, between Account and About) lists all known sessions with inline-editable name fields. Edits save on focus-loss or Enter; clear-name reverts to auto-derived display name.
+- [x] **RENAME-02**: A new "Sessions" Settings tab (5th segment in the existing Segmented Control, between Account and About) lists all known sessions with inline-editable name fields. Edits save on focus-loss or Enter; clear-name reverts to auto-derived display name.
 - [x] **RENAME-03**: Custom session names persist across app restarts via a JSON file at `%LOCALAPPDATA%\CCInfoWindows\session-names.json`. Schema: `Dictionary<string projectDirName, string customName>`. Storage key is encoded `projectDirName` (= `SessionInfo.Id`), NOT decoded `Cwd`.
 - [x] **RENAME-04**: A renamed session's display name immediately reflects in the MainView session switcher and in any other open Settings Sessions tab without app restart, via `ISessionNameStore.NameChanged` event marshalled through `IDispatcherQueue.TryEnqueue`.
 - [x] **RENAME-05**: Custom names support the same Unicode ranges as the auto-derived display names; control characters U+0000..U+001F and U+007F are stripped before persistence (CVE-2021-42574 mitigation, mirroring macOS reference).
@@ -121,7 +121,7 @@ All 34 v1.5 REQ-IDs map to exactly one phase. 100% coverage validated 2026-05-08
 | DROPDOWN-05 | Phase 25 | Complete |
 | DROPDOWN-06 | Phase 25 | Complete |
 | RENAME-01 | Phase 26 | Complete |
-| RENAME-02 | Phase 26 | Pending |
+| RENAME-02 | Phase 26 | Complete |
 | RENAME-03 | Phase 26 | Complete |
 | RENAME-04 | Phase 26 | Complete |
 | RENAME-05 | Phase 26 | Complete |

@@ -91,9 +91,9 @@ Audit: `.planning/milestones/v1.4-MILESTONE-AUDIT.md`
 
 **Milestone Goal:** Bring CCInfoWindows to upstream stefanlange/ccInfo v1.12.0 feature parity (next 5h-window start time label + persistent session renaming) while remediating six v1.4 code-review findings and fixing three reproducible cold-start / silent-failure bugs. Build order is research-validated (foundation → dependent UX → cleanup).
 
-- [ ] **Phase 24: Dispatcher Foundation & Marshaling Convention** — `IDispatcherQueue` adapter (mirror of v1.4 `IDispatcherTimer`), C-1/C-2 fix in `MainViewModel.Receive(AuthStateChangedMessage)`, project-wide G-1 marshaling rule documented + enforced
-- [ ] **Phase 25: Cold-Start Session Hydration & Visibility Window** — `JsonlService` Cwd hydration fix, data-loss race remediation, configurable `SessionVisibilityWindowDays` setting (7/30/90/unlimited, default 30)
-- [ ] **Phase 26: Persistent Session Renaming** — Pencil button + ContentDialog in MainView, new "Sessions" Settings tab (5th segment), `ISessionNameStore` JSON persistence following G-2 pattern
+- [x] **Phase 24: Dispatcher Foundation & Marshaling Convention** — `IDispatcherQueue` adapter (mirror of v1.4 `IDispatcherTimer`), C-1/C-2 fix in `MainViewModel.Receive(AuthStateChangedMessage)`, project-wide G-1 marshaling rule documented + enforced
+- [x] **Phase 25: Cold-Start Session Hydration & Visibility Window** — `JsonlService` Cwd hydration fix, data-loss race remediation, configurable `SessionVisibilityWindowDays` setting (7/30/90/unlimited, default 30)
+- [x] **Phase 26: Persistent Session Renaming** — Pencil button + ContentDialog in MainView, new "Sessions" Settings tab (5th segment), `ISessionNameStore` JSON persistence following G-2 pattern
 - [ ] **Phase 27: Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N** — A1 label below countdown, B2 multi-account org picker, B3 pricing-error InfoBar, M-2 `LastFetchRelativeTime` localization
 - [ ] **Phase 28: v1.4 Cleanup & Final UAT** — Delete orphan `LogoutRequestedMessage`, restore real default for `_contextModelBadgeColor`, opportunistic Nits cleanup, full milestone UAT
 
@@ -310,7 +310,7 @@ Plans:
 Plans:
 - [x] 26-01-session-name-store-PLAN.md — ISessionNameStore + SessionNameStore (G-2 atomic-rename) + SessionNameSanitizer + DI singleton + tests (Wave 1, autonomous)
 - [x] 26-02-mainview-rename-pencil-PLAN.md — MainViewModel 12-arg ctor + NameChanged subscription + display-layer overlay + OpenRenameDialogCommand + ContentDialog + pencil button + 5 resw key pairs (Wave 2)
-- [ ] 26-03-settings-sessions-tab-PLAN.md — SettingsView 5th SegmentedItem (purple badge) + Sessions panel + SessionRenameItem + SettingsViewModel SessionRenameItems + Save/Clear commands + 5 resw key pairs (Wave 3)
+- [x] 26-03-settings-sessions-tab-PLAN.md — SettingsView 5th SegmentedItem (purple badge) + Sessions panel + SessionRenameItem + SettingsViewModel SessionRenameItems + Save/Clear commands + 5 resw key pairs (Wave 3)
 **UI hint**: yes
 
 ### Phase 27: Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N
@@ -367,6 +367,6 @@ Plans:
 | 23. Localization Gaps | v1.4 | 1/1 | Complete | 2026-05-07 |
 | 24. Dispatcher Foundation & Marshaling Convention | v1.5 | 3/3 | Complete   | 2026-05-08 |
 | 25. Cold-Start Session Hydration & Visibility Window | v1.5 | 3/3 | Complete   | 2026-05-08 |
-| 26. Persistent Session Renaming | v1.5 | 2/3 | In Progress|  |
+| 26. Persistent Session Renaming | v1.5 | 3/3 | Complete   | 2026-05-08 |
 | 27. Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N | v1.5 | 0/0 | Not started | - |
 | 28. v1.4 Cleanup & Final UAT | v1.5 | 0/0 | Not started | - |
