@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: macOS v1.12.0 Feature Parity + Hardening
-status: planning
-last_updated: "2026-05-08T11:09:00.000Z"
-last_activity: 2026-05-08
+status: Roadmap approved; ready for `/gsd-plan-phase 24`
+stopped_at: Phase 24 context gathered
+last_updated: "2026-05-08T13:11:16.938Z"
+last_activity: 2026-05-08 — v1.5 ROADMAP created (Phases 24-28, 34 REQ-IDs mapped, 100% coverage)
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
-  percent: 0
 ---
 
 # Project State
@@ -110,6 +110,6 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 
 ## Session Continuity
 
-Last session: v1.5 roadmap creation (2026-05-08)
-Stopped at: ROADMAP.md, STATE.md, REQUIREMENTS.md (Traceability) all written; awaiting `/gsd-plan-phase 24`
-Resume file: `.planning/ROADMAP.md` (Phase 24 detail section)
+Last session: 2026-05-08T13:11:16.896Z
+Stopped at: Phase 24 context gathered
+Resume file: .planning/phases/24-dispatcher-foundation-marshaling-convention/24-CONTEXT.md
