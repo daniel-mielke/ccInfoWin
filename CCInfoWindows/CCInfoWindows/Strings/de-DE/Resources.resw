@@ -427,4 +427,30 @@
     <value>Kostendaten können ungenau sein.</value>
   </data>
 
+  <!-- Phase 27 ORGID-01..05 (D-OG-06): org-id picker localization -->
+  <data name="Settings.Account.RedetectButton" xml:space="preserve">
+    <value>Organisation neu erkennen</value>
+  </data>
+  <data name="Dialog.OrgPicker.Title" xml:space="preserve">
+    <value>Organisation auswählen</value>
+  </data>
+  <data name="Dialog.OrgPicker.SwitchButton" xml:space="preserve">
+    <value>Wechseln</value>
+  </data>
+  <data name="Dialog.OrgPicker.CancelButton" xml:space="preserve">
+    <value>Abbrechen</value>
+  </data>
+  <data name="MainView.OrgMismatchInfoBar.Title" xml:space="preserve">
+    <value>Möglicher Organisations-Mismatch</value>
+  </data>
+  <data name="MainView.OrgMismatchInfoBar.Message" xml:space="preserve">
+    <value>5 Abfragen ergaben 0% Auslastung bei aktiver Sitzung. Organisation neu erkennen?</value>
+  </data>
+  <data name="MainView.OrgMismatchInfoBar.ResolveButton" xml:space="preserve">
+    <value>Neu erkennen</value>
+  </data>
+  <data name="MainView.OrgMismatchInfoBar.SuppressCheckbox" xml:space="preserve">
+    <value>Diese Sitzung nicht mehr anzeigen</value>
+  </data>
+
 </root>

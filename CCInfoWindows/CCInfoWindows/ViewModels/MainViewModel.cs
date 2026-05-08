@@ -76,6 +76,9 @@ public partial class MainViewModel : ObservableObject,
     private string _updateDownloadUrl = string.Empty;
     private string _updateVersion = string.Empty;
 
+    // ORGID-03 (D-OG-04): threshold for soft-prompt trigger after consecutive zero-utilization polls
+    private const int OrgMismatchPollThreshold = 5;
+
     // --- Update state ---
 
     [ObservableProperty]
@@ -100,6 +103,10 @@ public partial class MainViewModel : ObservableObject,
     // True only on first launch after upgrade -- persisted via SaveSettings on dismiss (CD-02).
     [ObservableProperty]
     private bool _isSessionVisibilityMigrationToastVisible;
+
+    // ORGID-03 / D-OG-04: soft-prompt InfoBar visibility — shown after OrgMismatchPollThreshold consecutive zero-utilization polls
+    [ObservableProperty]
+    private bool _isOrgMismatchPromptVisible;
 
     [ObservableProperty]
     private string _statusMessage = string.Empty;
@@ -285,6 +292,12 @@ public partial class MainViewModel : ObservableObject,
     /// PollUsageAsync HTTP 200 success path, Logout command, and Receive(AuthStateChangedMessage(true)).
     /// </summary>
     private bool _autoReauthAttempted;
+
+    // ORGID-03 / D-OG-04: counter for consecutive utilization=0 polls while HasActiveSession
+    private int _zeroUtilizationPollCount;
+
+    // ORGID-04 / D-OG-05: in-memory dismissal — NOT persisted (resets on app restart)
+    private bool _orgMismatchSuppressed;
 
     /// <summary>
     /// Sends a ChartInvalidateMessage to trigger Win2D canvas redraw in MainView.
@@ -503,6 +516,23 @@ public partial class MainViewModel : ObservableObject,
             {
                 await UpdateUsagePropertiesAsync(result);
                 _autoReauthAttempted = false;  // D-02: HTTP 200 resets the auto-reauth budget
+
+                // ORGID-03 / D-OG-04: org-mismatch soft-prompt counter.
+                // Uses Utilization (0-100 integer range) per Phase-2 fix (NormalizedUtilization is 0-1 for display).
+                var utilization = result.FiveHour?.Utilization ?? 0;
+                if (utilization == 0 && HasActiveSession)
+                {
+                    _zeroUtilizationPollCount++;
+                    if (_zeroUtilizationPollCount >= OrgMismatchPollThreshold && !_orgMismatchSuppressed)
+                    {
+                        IsOrgMismatchPromptVisible = true;
+                    }
+                }
+                else
+                {
+                    _zeroUtilizationPollCount = 0;
+                    IsOrgMismatchPromptVisible = false;
+                }
             }
             else
             {
@@ -1225,5 +1255,29 @@ public partial class MainViewModel : ObservableObject,
 
     // NEXTWIN-02 (D-NW-02): hide the next-window label when auth banner appears.
     partial void OnIsSessionExpiredChanged(bool value) => RecomputeNextWindowLabel();
+
+    /// <summary>
+    /// ORGID-03: navigates user to Settings → Account and signals SettingsViewModel
+    /// to open the OrgPicker ContentDialog. Fires from the MainView soft-prompt InfoBar
+    /// "Re-resolve" button.
+    /// </summary>
+    [RelayCommand]
+    private void ResolveOrgMismatch()
+    {
+        IsOrgMismatchPromptVisible = false;
+        _navigationService.NavigateTo<SettingsView>();
+        WeakReferenceMessenger.Default.Send(new OpenOrgPickerRequestedMessage());
+    }
+
+    /// <summary>
+    /// ORGID-04 (D-OG-05): suppresses the soft-prompt for the rest of the in-process session.
+    /// NOT persisted — flag resets to false on next app start.
+    /// </summary>
+    [RelayCommand]
+    private void SuppressOrgMismatchPrompt()
+    {
+        _orgMismatchSuppressed = true;
+        IsOrgMismatchPromptVisible = false;
+    }
 }
 

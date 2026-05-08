@@ -427,4 +427,30 @@
     <value>Cost figures may be inaccurate.</value>
   </data>
 
+  <!-- Phase 27 ORGID-01..05 (D-OG-06): org-id picker localization -->
+  <data name="Settings.Account.RedetectButton" xml:space="preserve">
+    <value>Re-detect organization</value>
+  </data>
+  <data name="Dialog.OrgPicker.Title" xml:space="preserve">
+    <value>Select organization</value>
+  </data>
+  <data name="Dialog.OrgPicker.SwitchButton" xml:space="preserve">
+    <value>Switch</value>
+  </data>
+  <data name="Dialog.OrgPicker.CancelButton" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="MainView.OrgMismatchInfoBar.Title" xml:space="preserve">
+    <value>Possible organization mismatch</value>
+  </data>
+  <data name="MainView.OrgMismatchInfoBar.Message" xml:space="preserve">
+    <value>5 polls returned 0% utilization while a session is active. Re-resolve organization?</value>
+  </data>
+  <data name="MainView.OrgMismatchInfoBar.ResolveButton" xml:space="preserve">
+    <value>Re-resolve</value>
+  </data>
+  <data name="MainView.OrgMismatchInfoBar.SuppressCheckbox" xml:space="preserve">
+    <value>Don't show again this session</value>
+  </data>
+
 </root>

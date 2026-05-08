@@ -53,6 +53,15 @@ public class ResourceCoverageTests
         // Phase 27 PRICING-01..03: pricing-service silent-failure surfacing
         "MainView.PricingErrorInfoBar.Title",
         "MainView.PricingErrorInfoBar.Message",
+        // Phase 27 ORGID-01..05 (D-OG-06): org-id picker localization
+        "Settings.Account.RedetectButton",
+        "Dialog.OrgPicker.Title",
+        "Dialog.OrgPicker.SwitchButton",
+        "Dialog.OrgPicker.CancelButton",
+        "MainView.OrgMismatchInfoBar.Title",
+        "MainView.OrgMismatchInfoBar.Message",
+        "MainView.OrgMismatchInfoBar.ResolveButton",
+        "MainView.OrgMismatchInfoBar.SuppressCheckbox",
     ];
 
     private static readonly Dictionary<string, string> ExpectedEnUs = new()
@@ -86,6 +95,15 @@ public class ResourceCoverageTests
         // Phase 27 PRICING-01..03: pricing-service silent-failure surfacing
         ["MainView.PricingErrorInfoBar.Title"] = "Pricing data unavailable",
         ["MainView.PricingErrorInfoBar.Message"] = "Cost figures may be inaccurate.",
+        // Phase 27 ORGID-01..05 (D-OG-06): org-id picker localization
+        ["Settings.Account.RedetectButton"] = "Re-detect organization",
+        ["Dialog.OrgPicker.Title"] = "Select organization",
+        ["Dialog.OrgPicker.SwitchButton"] = "Switch",
+        ["Dialog.OrgPicker.CancelButton"] = "Cancel",
+        ["MainView.OrgMismatchInfoBar.Title"] = "Possible organization mismatch",
+        ["MainView.OrgMismatchInfoBar.Message"] = "5 polls returned 0% utilization while a session is active. Re-resolve organization?",
+        ["MainView.OrgMismatchInfoBar.ResolveButton"] = "Re-resolve",
+        ["MainView.OrgMismatchInfoBar.SuppressCheckbox"] = "Don't show again this session",
     };
 
     private static readonly Dictionary<string, string> ExpectedDeDe = new()
@@ -119,6 +137,15 @@ public class ResourceCoverageTests
         // Phase 27 PRICING-01..03: pricing-service silent-failure surfacing
         ["MainView.PricingErrorInfoBar.Title"] = "Preisdaten nicht verfügbar",
         ["MainView.PricingErrorInfoBar.Message"] = "Kostendaten können ungenau sein.",
+        // Phase 27 ORGID-01..05 (D-OG-06): org-id picker localization
+        ["Settings.Account.RedetectButton"] = "Organisation neu erkennen",
+        ["Dialog.OrgPicker.Title"] = "Organisation auswählen",
+        ["Dialog.OrgPicker.SwitchButton"] = "Wechseln",
+        ["Dialog.OrgPicker.CancelButton"] = "Abbrechen",
+        ["MainView.OrgMismatchInfoBar.Title"] = "Möglicher Organisations-Mismatch",
+        ["MainView.OrgMismatchInfoBar.Message"] = "5 Abfragen ergaben 0% Auslastung bei aktiver Sitzung. Organisation neu erkennen?",
+        ["MainView.OrgMismatchInfoBar.ResolveButton"] = "Neu erkennen",
+        ["MainView.OrgMismatchInfoBar.SuppressCheckbox"] = "Diese Sitzung nicht mehr anzeigen",
     };
 
     [Fact]
