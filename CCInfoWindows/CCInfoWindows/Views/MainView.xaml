@@ -81,6 +81,17 @@
                 IsClosable="True"
                 Margin="0,0,0,12" />
 
+            <!-- PRICING-01..03 / D-PR-02: pricing-service silent-failure InfoBar -->
+            <!-- Banner-stack order: auth (highest) → API error → pricing → migration toast -->
+            <InfoBar
+                x:Name="PricingErrorInfoBar"
+                l:Uids.Uid="MainView.PricingErrorInfoBar"
+                Severity="Warning"
+                IsOpen="{x:Bind ViewModel.IsPricingErrorVisible, Mode=OneWay}"
+                Visibility="{x:Bind ViewModel.IsPricingErrorVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                IsClosable="False"
+                Margin="0,0,0,12" />
+
             <!-- DROPDOWN-05 / D-04: Session visibility migration toast (one-time, dismissable) -->
             <InfoBar
                 x:Name="MigrationToastInfoBar"
