@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: macOS v1.12.0 Feature Parity + Hardening
 status: executing
-stopped_at: Completed 24-03-convention-test-and-docs-PLAN.md (Phase 24 complete)
-last_updated: "2026-05-08T16:00:05.939Z"
+stopped_at: Completed 25-02-visibility-window-settings-PLAN.md
+last_updated: "2026-05-08T16:09:31.871Z"
 last_activity: 2026-05-08
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
-  percent: 67
+  completed_plans: 5
+  percent: 83
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-08)
 ## Current Position
 
 Phase: 25 (Cold-Start Session Hydration & Visibility Window) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-05-08
 
@@ -61,6 +61,7 @@ Last activity: 2026-05-08
 | Phase 24 P02 | 35min | 3 tasks | 5 files |
 | Phase 24 P03 | 4min | 3 tasks | 3 files |
 | Phase 25 P01 | 35min | 2 tasks | 4 files |
+| Phase 25 P02 | 5 | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 - G-2: JSON-on-disk store pattern with `SemaphoreSlim` write guard (Phase 26 first consumer: `ISessionNameStore`)
 - G-3: `[ObservableProperty]` defaults — prefer real initializers over `null!` (Phase 28)
 - [Phase ?]: IDispatcherQueue adapter ships as full interface + WinuiDispatcherQueueAdapter singleton + FakeDispatcherQueue test double, mirroring v1.4 IDispatcherTimer precedent (Phase 24 Plan 01)
+- [Phase ?]: CD-01: ComboBox for SessionVisibilityWindowDays (mirrors SessionTimeoutMinutes precedent)
+- [Phase ?]: CD-04: MainViewModel handles SessionVisibilityChangedMessage directly via IRecipient (not JsonlService re-emit)
 
 ### Open Tech Debt (carried into v1.5)
 
@@ -116,6 +119,6 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 
 ## Session Continuity
 
-Last session: 2026-05-08T16:00:05.665Z
-Stopped at: Completed 24-03-convention-test-and-docs-PLAN.md (Phase 24 complete)
+Last session: 2026-05-08T16:09:31.863Z
+Stopped at: Completed 25-02-visibility-window-settings-PLAN.md
 Resume file: None
