@@ -306,7 +306,11 @@ Plans:
   3. Custom names persist to `%LOCALAPPDATA%\CCInfoWindows\session-names.json` (schema: `Dictionary<projectDirName, customName>`, key is encoded `SessionInfo.Id` not decoded `Cwd`) and survive an app restart — a kill-and-relaunch smoke test confirms persistence
   4. Display-layer integration is `_sessionNameStore.GetCustomName(s.Id) ?? s.DisplayName` in `MainViewModel.RefreshSessionList`; `JsonlService` stays storage-free; the rename → refresh propagation uses `ISessionNameStore.NameChanged` event marshalled through `IDispatcherQueue.TryEnqueue` (NOT a `WeakReferenceMessenger` broadcast — D-13 lesson honored)
   5. `ISessionNameStore` follows convention G-2 (`SemaphoreSlim` write guard, sync + async write methods, atomic-rename via `tmp + File.Move`, `_lastSavedSnapshot` cache); control characters U+0000..U+001F and U+007F are stripped before persistence (CVE-2021-42574 mitigation); deleted sessions leave their custom name orphaned in v1.5 (no auto-prune)
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 26-01-session-name-store-PLAN.md — ISessionNameStore + SessionNameStore (G-2 atomic-rename) + SessionNameSanitizer + DI singleton + tests (Wave 1, autonomous)
+- [ ] 26-02-mainview-rename-pencil-PLAN.md — MainViewModel 12-arg ctor + NameChanged subscription + display-layer overlay + OpenRenameDialogCommand + ContentDialog + pencil button + 5 resw key pairs (Wave 2)
+- [ ] 26-03-settings-sessions-tab-PLAN.md — SettingsView 5th SegmentedItem (purple badge) + Sessions panel + SessionRenameItem + SettingsViewModel SessionRenameItems + Save/Clear commands + 5 resw key pairs (Wave 3)
 **UI hint**: yes
 
 ### Phase 27: Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N
