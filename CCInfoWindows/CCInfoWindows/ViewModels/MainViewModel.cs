@@ -66,7 +66,7 @@ public partial class MainViewModel : ObservableObject,
     private DispatcherQueueTimer? _pollTimer;
     private DispatcherQueueTimer? _countdownTimer;
     private int _refreshIntervalSeconds;
-    private DispatcherQueue? _dispatcherQueue;
+    private readonly IDispatcherQueue _dispatcherQueue;
     private EventHandler? _dataUpdatedHandler;
     private CancellationTokenSource? _statisticsCts;
 
@@ -284,7 +284,8 @@ public partial class MainViewModel : ObservableObject,
         IPricingService pricingService,
         IUpdateService updateService,
         IWebViewBridge bridge,
-        IBurnRateNotificationService burnRateNotificationService)
+        IBurnRateNotificationService burnRateNotificationService,
+        IDispatcherQueue dispatcherQueue)
     {
         _credentialService = credentialService;
         _navigationService = navigationService;
@@ -296,10 +297,10 @@ public partial class MainViewModel : ObservableObject,
         _updateService = updateService;
         _bridge = bridge;
         _burnRateNotificationService = burnRateNotificationService;
+        _dispatcherQueue = dispatcherQueue;
 
+        // Messenger registration happens in InitializeAsync (paired with UnregisterAll for re-init safety — PITFALLS C2-P3).
         _updateService.UpdateAvailable += OnUpdateAvailable;
-        WeakReferenceMessenger.Default.Register<AuthStateChangedMessage>(this);
-        WeakReferenceMessenger.Default.Register<SessionTimeoutChangedMessage>(this);   // D-08
     }
 
     /// <summary>
@@ -307,24 +308,30 @@ public partial class MainViewModel : ObservableObject,
     /// </summary>
     public async Task InitializeAsync()
     {
-        var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
-        _dispatcherQueue = dispatcherQueue;
+        // CD-04 / PITFALLS C2-P3: prevent double-subscription if InitializeAsync is called twice.
+        // Pairs with constructor-time Register calls at lines 301-302; we re-register below via lambda
+        // overloads. Cheap insurance as Phases 25-27 add new IRecipient<> handlers.
+        WeakReferenceMessenger.Default.UnregisterAll(this);
+        WeakReferenceMessenger.Default.Register<AuthStateChangedMessage>(this);
+        WeakReferenceMessenger.Default.Register<SessionTimeoutChangedMessage>(this);   // D-08
 
         // Load settings
         var settings = _settingsService.LoadSettings();
         _refreshIntervalSeconds = settings.RefreshIntervalSeconds;
 
         // Subscribe to refresh interval changes from Settings
+        // CD-05 #4 audit: UpdateRefreshInterval mutates _pollTimer + _refreshIntervalSeconds; DispatcherQueueTimer requires UI thread → wrap.
         WeakReferenceMessenger.Default.Register<RefreshIntervalChangedMessage>(this, (r, m) =>
         {
-            ((MainViewModel)r).UpdateRefreshInterval(m.Value);
+            var vm = (MainViewModel)r;
+            vm._dispatcherQueue.TryEnqueue(() => vm.UpdateRefreshInterval(m.Value));
         });
 
         // Subscribe to Sonnet context size changes from Settings — refresh context display immediately
         WeakReferenceMessenger.Default.Register<SonnetContextChangedMessage>(this, (r, m) =>
         {
             var vm = (MainViewModel)r;
-            vm._dispatcherQueue?.TryEnqueue(() =>
+            vm._dispatcherQueue.TryEnqueue(() =>
             {
                 if (vm.SelectedSession != null)
                     vm.UpdateSessionData(vm.SelectedSession.Session);
@@ -352,7 +359,7 @@ public partial class MainViewModel : ObservableObject,
         }
 
         // Start JSONL service for local session data
-        _dataUpdatedHandler = (s, e) => dispatcherQueue.TryEnqueue(RefreshSessionList);
+        _dataUpdatedHandler = (s, e) => _dispatcherQueue.TryEnqueue(RefreshSessionList);
         _jsonlService.DataUpdated += _dataUpdatedHandler;
 
         IsJsonlScanning = _jsonlService.IsScanning;
@@ -385,14 +392,18 @@ public partial class MainViewModel : ObservableObject,
             await UpdateUsagePropertiesAsync(cached);
         }
 
+        // WinRT DispatcherQueue required for CreateTimer() — not part of IDispatcherQueue abstraction.
+        // InitializeAsync runs on the UI thread (called from MainView.Loaded), so GetForCurrentThread() is safe.
+        var winuiDispatcherQueue = DispatcherQueue.GetForCurrentThread();
+
         // Start poll timer
-        _pollTimer = dispatcherQueue.CreateTimer();
+        _pollTimer = winuiDispatcherQueue.CreateTimer();
         _pollTimer.Interval = TimeSpan.FromSeconds(_refreshIntervalSeconds);
         _pollTimer.Tick += async (s, e) => await PollUsageAsync();
         _pollTimer.Start();
 
         // Start countdown timer (ticks every 60 seconds)
-        _countdownTimer = dispatcherQueue.CreateTimer();
+        _countdownTimer = winuiDispatcherQueue.CreateTimer();
         _countdownTimer.Interval = TimeSpan.FromMinutes(1);
         _countdownTimer.Tick += (s, e) => UpdateCountdowns();
         _countdownTimer.Start();
@@ -800,7 +811,7 @@ public partial class MainViewModel : ObservableObject,
             await _pricingService.EnsurePricesLoadedAsync();
             ct.ThrowIfCancellationRequested();
             var stats = await Task.Run(() => _jsonlService.GetStatistics(period), ct);
-            _dispatcherQueue?.TryEnqueue(() => ApplyStatistics(stats));
+            _dispatcherQueue.TryEnqueue(() => ApplyStatistics(stats));
         }
         catch (OperationCanceledException)
         {
@@ -809,20 +820,13 @@ public partial class MainViewModel : ObservableObject,
         catch (Exception ex)
         {
             Debug.WriteLine($"[MainViewModel] AggregateStatistics failed: {ex.Message}");
-            _dispatcherQueue?.TryEnqueue(() => ApplyStatistics(StatisticsSummary.Empty));
+            _dispatcherQueue.TryEnqueue(() => ApplyStatistics(StatisticsSummary.Empty));
         }
         finally
         {
             if (showLoading)
             {
-                if (_dispatcherQueue != null)
-                {
-                    _dispatcherQueue.TryEnqueue(() => IsAggregating = false);
-                }
-                else
-                {
-                    IsAggregating = false;
-                }
+                _dispatcherQueue.TryEnqueue(() => IsAggregating = false);
             }
         }
     }
@@ -962,8 +966,10 @@ public partial class MainViewModel : ObservableObject,
     [RelayCommand]
     private async Task CopyChartToClipboard()
     {
-        if (_dispatcherQueue == null) return;
-        await ExportHelper.CopyChartToClipboardAsync(_dispatcherQueue, UsageHistoryPoints, FiveHourWindowStart, FiveHourPercentageText, FiveHourCountdown, FiveHourUtilization);
+        // ExportHelper.CopyChartToClipboardAsync requires the WinRT DispatcherQueue type for
+        // Clipboard.SetContent marshaling. Obtain it here on the UI thread (command executes on UI thread).
+        var winuiDispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        await ExportHelper.CopyChartToClipboardAsync(winuiDispatcherQueue, UsageHistoryPoints, FiveHourWindowStart, FiveHourPercentageText, FiveHourCountdown, FiveHourUtilization);
     }
 
     [RelayCommand]
@@ -978,8 +984,7 @@ public partial class MainViewModel : ObservableObject,
     {
         _updateDownloadUrl = downloadUrl;
         _updateVersion = version;
-        var dispatcherQueue = _dispatcherQueue ?? DispatcherQueue.GetForCurrentThread();
-        dispatcherQueue?.TryEnqueue(() =>
+        _dispatcherQueue.TryEnqueue(() =>
         {
             UpdateMessage = $"Update v{version} verfügbar";
             IsUpdateAvailable = true;
@@ -996,16 +1001,25 @@ public partial class MainViewModel : ObservableObject,
 
     public void Receive(AuthStateChangedMessage message)
     {
+        // L-04 / PITFALLS C2-P1: always-TryEnqueue. ClaudeApiService Send sites at FetchUsageAsync:88
+        // and TryMigrateOrgIdAsync:184 may run on the HttpClient continuation thread; off-thread
+        // mutation of [ObservableProperty] fields below produces inconsistent mid-update state.
+        _dispatcherQueue.TryEnqueue(() => HandleAuthStateChangedCore(message));
+    }
+
+    private void HandleAuthStateChangedCore(AuthStateChangedMessage message)
+    {
         // D-03: post-login refresh — clear error flags, reset auto-reauth budget, refresh immediately.
         if (message.Value)
         {
             IsSessionExpired = false;
             HasApiError = false;
             _autoReauthAttempted = false;
-            // RefreshCommand (NOT RefreshUsageCommand) is the [RelayCommand]-generated symbol from
-            // the Refresh() RelayCommand. Fire-and-forget is intentional — Receive is void
-            // and IsRefreshing guards reentrancy in PollUsageAsync (Pitfall 6 accepted: option (a)).
-            RefreshCommand.ExecuteAsync(null);
+            // CD-02 / PITFALLS C1-P1: explicit discard documents intentional fire-and-forget.
+            // [RelayCommand] machinery already catches exceptions inside Refresh() and surfaces
+            // them via HasApiError / ApiErrorMessage in PollUsageCoreAsync (lines 428-458).
+            // Adding a try/catch at THIS call site would be dead code.
+            _ = RefreshCommand.ExecuteAsync(null);
             return;
         }
 
@@ -1029,7 +1043,8 @@ public partial class MainViewModel : ObservableObject,
     {
         // D-08: rebuild SortedSessions on threshold change so TooltipText reflects new minutes.
         // Dispatched to UI thread — RefreshSessionList requires it.
-        _dispatcherQueue?.TryEnqueue(RefreshSessionList);
+        // G-1 compliant: constructor-injected _dispatcherQueue is non-null. CD-05 #2 — implicit-default exemption (no [ThreadSafeReceive] needed).
+        _dispatcherQueue.TryEnqueue(RefreshSessionList);
     }
 }
 
