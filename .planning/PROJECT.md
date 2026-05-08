@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A Windows 11 desktop application for real-time monitoring of Claude Code usage limits. Port of the macOS app [ccInfo](https://github.com/stefanlange/ccInfo) by Stefan Lange, adapted for Windows with WinUI 3. Shipped as v1.0 (full feature parity, 10 functional areas), v1.1 (UI polish matching macOS reference), v1.2 (macOS v1.8.3 feature parity — model-based context detection, Sonnet context setting, session cleanup, footer accessibility), v1.3 (macOS v1.10.0 feature parity — burn rate warning, chart gradient, settings redesign), and v1.4 (macOS v1.11.1 feature parity — auth flow stability, history persistence hardening, UI polish, localization gaps).
+A Windows 11 desktop application for real-time monitoring of Claude Code usage limits. Port of the macOS app [ccInfo](https://github.com/stefanlange/ccInfo) by Stefan Lange, adapted for Windows with WinUI 3. Shipped as v1.0 (full feature parity, 10 functional areas), v1.1 (UI polish matching macOS reference), v1.2 (macOS v1.8.3 feature parity — model-based context detection, Sonnet context setting, session cleanup, footer accessibility), v1.3 (macOS v1.10.0 feature parity — burn rate warning, chart gradient, settings redesign), v1.4 (macOS v1.11.1 feature parity — auth flow stability, history persistence hardening, UI polish, localization gaps), and v1.5 (macOS v1.12.0 feature parity + hardening — dispatcher foundation with G-1/G-2/G-3 conventions, cold-start session hydration + visibility window, persistent session renaming, next-window label + org-id picker + pricing surfacing + L10N completion).
 
 Target audience: Developers with active Claude Pro/Max subscriptions using Claude Code on Windows.
 
