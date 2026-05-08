@@ -267,7 +267,11 @@ Plans:
   3. `CLAUDE.md` documents convention G-1 (every `IRecipient<T>.Receive(T)` body that mutates `[ObservableProperty]`, calls `INavigationService`, or touches XAML must wrap in `IDispatcherQueue.TryEnqueue`; exception only via `[ThreadSafeReceive]` attribute or inline justification comment)
   4. `MessengerThreadingConventionTests` xUnit class passes — every `IRecipient<>` implementation in the codebase respects G-1 (verified by reflection or `[RequiresMarshal]` / `[ThreadSafeReceive]` attribute pair after a 30-min Phase-24 spike decides the mechanism)
   5. Two patch bumps (CommunityToolkit.Mvvm 8.4.0→8.4.2, Microsoft.WindowsAppSDK 1.8.260209005→1.8.260416003) ship cleanly with all existing tests green
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 24-01-dispatcher-adapter-PLAN.md — IDispatcherQueue interface + ThreadSafeReceiveAttribute + WinuiDispatcherQueueAdapter + FakeDispatcherQueue + DI singleton (Wave 1)
+- [ ] 24-02-mainviewmodel-refactor-PLAN.md — MainViewModel constructor injection + Receive(AuthStateChangedMessage) C-1/C-2 fix + UnregisterAll + line-318 lambda audit + line-1032 cleanup + line-1008 explicit discard + MainWindow [ThreadSafeReceive] (Wave 2)
+- [ ] 24-03-convention-test-and-docs-PLAN.md — MessengerThreadingConventionTests xUnit class + CLAUDE.md G-1 paragraph + NuGet patch bumps (Wave 3)
 
 ### Phase 25: Cold-Start Session Hydration & Visibility Window
 **Goal**: After cold start, the session ComboBox lists every relevant session whose JSONL files exist within the user-configurable visibility window — the silent dropping of recently-active sessions and the underlying file-watcher data-loss race are both eliminated
