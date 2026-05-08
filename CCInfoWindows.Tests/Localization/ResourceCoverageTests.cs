@@ -9,6 +9,12 @@ namespace CCInfoWindows.Tests.Localization;
 ///
 /// Strategy: XDocument-based structural validation (per RESEARCH Pitfall 1 — xUnit
 /// cannot initialize the WinUI3Localizer host, so we read the resw files directly).
+///
+/// Phase 27 extension policy:
+///   - Plan 27-01 (L10N) appends LastFetchRelative.{JustNow,MinutesAgo,HoursAgo,DaysAgo,Never}
+///   - Plan 27-02 (NEXTWIN) appends MainView.NextWindow.LabelDe / .LabelEn
+///   - Plan 27-03 (PRICING) appends MainView.PricingErrorInfoBar.Title / .Message
+///   - Plan 27-04 (ORGID) appends Settings.Account.RedetectButton + Dialog.OrgPicker.* + MainView.OrgMismatchInfoBar.*
 /// </summary>
 public class ResourceCoverageTests
 {
@@ -35,6 +41,12 @@ public class ResourceCoverageTests
         "Settings.Sessions.NoSessions.Text",
         "Settings.Sessions.OrphanLabel.Text",
         "Settings.Sessions.ClearButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip",
+        // Phase 27 L10N-01: localized last-fetch relative time on About tab
+        "LastFetchRelative.JustNow",
+        "LastFetchRelative.MinutesAgo",
+        "LastFetchRelative.HoursAgo",
+        "LastFetchRelative.DaysAgo",
+        "LastFetchRelative.Never",
     ];
 
     private static readonly Dictionary<string, string> ExpectedEnUs = new()
@@ -56,6 +68,12 @@ public class ResourceCoverageTests
         ["Settings.Sessions.NoSessions.Text"] = "No sessions available.",
         ["Settings.Sessions.OrphanLabel.Text"] = "Session not found",
         ["Settings.Sessions.ClearButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Remove custom name",
+        // Phase 27 L10N-01
+        ["LastFetchRelative.JustNow"] = "just now",
+        ["LastFetchRelative.MinutesAgo"] = "{0} minutes ago",
+        ["LastFetchRelative.HoursAgo"] = "{0} hours ago",
+        ["LastFetchRelative.DaysAgo"] = "{0} days ago",
+        ["LastFetchRelative.Never"] = "Never",
     };
 
     private static readonly Dictionary<string, string> ExpectedDeDe = new()
@@ -77,6 +95,12 @@ public class ResourceCoverageTests
         ["Settings.Sessions.NoSessions.Text"] = "Keine Sitzungen verfügbar.",
         ["Settings.Sessions.OrphanLabel.Text"] = "Sitzung nicht gefunden",
         ["Settings.Sessions.ClearButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Eigenen Namen entfernen",
+        // Phase 27 L10N-01
+        ["LastFetchRelative.JustNow"] = "gerade eben",
+        ["LastFetchRelative.MinutesAgo"] = "vor {0} Minuten",
+        ["LastFetchRelative.HoursAgo"] = "vor {0} Stunden",
+        ["LastFetchRelative.DaysAgo"] = "vor {0} Tagen",
+        ["LastFetchRelative.Never"] = "Nie",
     };
 
     [Fact]
