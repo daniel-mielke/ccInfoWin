@@ -43,6 +43,8 @@ public class SettingsLogoutDirectCallTests
         jsonlService.Setup(s => s.Sessions).Returns(Array.Empty<SessionInfo>());
         var dispatcherQueue = new Mock<IDispatcherQueue>();
 
+        var apiService = new Mock<IClaudeApiService>();
+
         var vm = new SettingsViewModel(
             settingsService.Object,
             credentialMock.Object,
@@ -51,7 +53,8 @@ public class SettingsLogoutDirectCallTests
             historyMock.Object,
             sessionNameStore.Object,
             jsonlService.Object,
-            dispatcherQueue.Object);
+            dispatcherQueue.Object,
+            apiService.Object);   // ORGID-01
 
         return (vm, historyMock, credentialMock, navMock);
     }

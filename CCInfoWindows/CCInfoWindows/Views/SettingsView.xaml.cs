@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
 using WinUI3Localizer;
+using static CCInfoWindows.ViewModels.SettingsViewModel;
 
 namespace CCInfoWindows.Views;
 
@@ -36,6 +37,9 @@ public sealed partial class SettingsView : Page
         if (TabsSegmented.SelectedIndex == AboutTabIndex)
             ViewModel.StartAboutTimestampTimer();
         ViewModel.Activate();   // Phase 26: subscribe to NameChanged + snapshot if Sessions tab visible
+
+        // ORGID-01: subscribe to the org-picker dialog request event
+        ViewModel.RequestOpenOrgPickerDialog += OnRequestOpenOrgPickerDialog;
     }
 
     private void OnSegmentedSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -52,9 +56,65 @@ public sealed partial class SettingsView : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        ViewModel?.Deactivate();   // Phase 26: unsubscribe NameChanged
+        ViewModel?.Deactivate();   // Phase 26: unsubscribe NameChanged + ORGID Messenger unregister
         // D-10: belt-and-suspenders — always stop on Page.Unloaded (POLISH-08).
         ViewModel?.StopAboutTimestampTimer();
+        // ORGID-01: symmetric unsubscribe (CD-05 pattern)
+        if (ViewModel != null)
+            ViewModel.RequestOpenOrgPickerDialog -= OnRequestOpenOrgPickerDialog;
+    }
+
+    /// <summary>
+    /// ORGID-01 / D-OG-03: shows the OrgPicker ContentDialog when SettingsViewModel requests it.
+    /// ContentDialog requires XamlRoot — only available in the View layer (Phase 26 / CD-05 pattern).
+    /// PrimaryButtonText / CloseButtonText are set from the Localizer (same approach as Phase 26
+    /// RenameSessionDialog — WinUI 3 ContentDialog does not honor l:Uids.Uid for button text).
+    /// DataTemplate built programmatically: each item is shown as a StackPanel with Name (bold)
+    /// and Uuid (small secondary text).
+    /// </summary>
+    private async void OnRequestOpenOrgPickerDialog(object? sender, OrgPickerDialogRequest request)
+    {
+        var listView = new ListView
+        {
+            ItemsSource = ViewModel.AvailableOrganizations,
+            SelectionMode = ListViewSelectionMode.Single,
+        };
+
+        // Programmatic item container factory — avoids XamlReader (not available in WinUI 3)
+        listView.ContainerContentChanging += (s, e) =>
+        {
+            if (e.Item is not OrganizationInfo org) return;
+            var panel = new StackPanel { Margin = new Thickness(4, 8, 4, 8), Spacing = 2 };
+            panel.Children.Add(new TextBlock { Text = org.Name, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+            panel.Children.Add(new TextBlock { Text = org.Uuid, FontSize = 11 });
+            e.ItemContainer.Content = panel;
+            e.Handled = true;
+        };
+
+        // Wire SelectedItem to ViewModel
+        listView.SelectionChanged += (s, e) =>
+        {
+            if (listView.SelectedItem is OrganizationInfo selected)
+                ViewModel.SelectedOrgPickerItem = selected;
+        };
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = Localizer.Get().GetLocalizedString("Dialog.OrgPicker.Title"),
+            PrimaryButtonText = Localizer.Get().GetLocalizedString("Dialog.OrgPicker.SwitchButton"),
+            CloseButtonText = Localizer.Get().GetLocalizedString("Dialog.OrgPicker.CancelButton"),
+            DefaultButton = ContentDialogButton.Primary,
+            Content = new ScrollViewer
+            {
+                Width = 400,
+                MaxHeight = 300,
+                Content = listView,
+            },
+        };
+
+        var result = await dialog.ShowAsync();
+        request.CompletionSource.TrySetResult(result);
     }
 
     private void ApplyTabTooltips()

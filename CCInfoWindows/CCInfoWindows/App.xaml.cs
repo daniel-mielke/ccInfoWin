@@ -184,7 +184,8 @@ public partial class App : Application
             sp.GetRequiredService<IUsageHistoryService>(),
             sp.GetRequiredService<ISessionNameStore>(),
             sp.GetRequiredService<IJsonlService>(),
-            sp.GetRequiredService<IDispatcherQueue>()));
+            sp.GetRequiredService<IDispatcherQueue>(),
+            sp.GetRequiredService<IClaudeApiService>()));   // ORGID-01
 
         return services.BuildServiceProvider();
     }

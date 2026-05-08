@@ -68,6 +68,8 @@ public class SettingsViewModelTimerTests
         jsonlService.Setup(s => s.Sessions).Returns(Array.Empty<SessionInfo>());
         var dispatcherQueue = new Mock<IDispatcherQueue>();
 
+        var apiService = new Mock<IClaudeApiService>();
+
         var sut = new SettingsViewModel(
             settingsService.Object,
             credentialService.Object,
@@ -76,7 +78,8 @@ public class SettingsViewModelTimerTests
             historyService.Object,
             sessionNameStore.Object,
             jsonlService.Object,
-            dispatcherQueue.Object);
+            dispatcherQueue.Object,
+            apiService.Object);   // ORGID-01
 
         // Inject fake timer factory to avoid WinRT COM context requirement in tests.
         sut.TimerFactory = () => new FakeDispatcherTimer();

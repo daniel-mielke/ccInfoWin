@@ -8,6 +8,7 @@ using CCInfoWindows.Views;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using Microsoft.UI.Xaml.Controls;
 using WinUI3Localizer;
 
 namespace CCInfoWindows.ViewModels;
@@ -16,7 +17,8 @@ namespace CCInfoWindows.ViewModels;
 /// Settings page ViewModel with refresh interval selection, dark/light mode toggle, logout,
 /// and (Phase 26) session rename management via a dedicated Sessions tab.
 /// </summary>
-public partial class SettingsViewModel : ObservableObject
+public partial class SettingsViewModel : ObservableObject,
+    IRecipient<OpenOrgPickerRequestedMessage>   // ORGID-03 / G-1
 {
     private readonly ISettingsService _settingsService;
     private readonly ICredentialService _credentialService;
@@ -26,6 +28,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ISessionNameStore _sessionNameStore;       // Phase 26 / RENAME-07
     private readonly IJsonlService _jsonlService;               // Phase 26 / SessionRenameItems source
     private readonly IDispatcherQueue _dispatcherQueue;         // Phase 26 / G-1
+    private readonly IClaudeApiService _apiService;             // ORGID-01 / D-OG-01
 
     // D-09: 1-minute UI-thread-bound timer. Owned by SettingsViewModel; lifecycle driven by SettingsView code-behind (D-10).
     private IDispatcherTimer? _aboutTimestampTimer;
@@ -283,12 +286,46 @@ public partial class SettingsViewModel : ObservableObject
     public void Deactivate()
     {
         _sessionNameStore.NameChanged -= OnStoreNameChanged;
+        WeakReferenceMessenger.Default.Unregister<OpenOrgPickerRequestedMessage>(this);
+    }
+
+    /// <summary>
+    /// ORGID-03 / G-1: receive open-picker requests dispatched from MainViewModel.
+    /// Body wraps in _dispatcherQueue.TryEnqueue per G-1 convention.
+    /// </summary>
+    public void Receive(OpenOrgPickerRequestedMessage message)
+    {
+        _dispatcherQueue.TryEnqueue(() => _ = OpenOrgPickerCommand.ExecuteAsync(null));
     }
 
     private void OnStoreNameChanged(object? sender, SessionNameChangedEventArgs args)
     {
         // G-1: NameChanged may arrive off-thread.
         _dispatcherQueue.TryEnqueue(RefreshSessionRenameItems);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // ORGID-01..02 (D-OG-01..03): Org picker state
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>ORGID-01: ListView ItemsSource for the OrgPicker ContentDialog.</summary>
+    public ObservableCollection<OrganizationInfo> AvailableOrganizations { get; } = new();
+
+    /// <summary>ORGID-01: selected org in the dialog ListView (TwoWay binding).</summary>
+    [ObservableProperty]
+    private OrganizationInfo? _selectedOrgPickerItem;
+
+    /// <summary>
+    /// ORGID-01: View subscribes to this event and calls OrgPickerDialog.ShowAsync(); the View
+    /// returns the dialog result via the TaskCompletionSource on the event payload, allowing the
+    /// command to await user choice without owning XAML references.
+    /// </summary>
+    public event EventHandler<OrgPickerDialogRequest>? RequestOpenOrgPickerDialog;
+
+    /// <summary>Event payload — View completes the TCS with the dialog result.</summary>
+    public sealed class OrgPickerDialogRequest
+    {
+        public TaskCompletionSource<ContentDialogResult> CompletionSource { get; } = new();
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -303,7 +340,8 @@ public partial class SettingsViewModel : ObservableObject
         IUsageHistoryService historyService,
         ISessionNameStore sessionNameStore,
         IJsonlService jsonlService,
-        IDispatcherQueue dispatcherQueue)
+        IDispatcherQueue dispatcherQueue,
+        IClaudeApiService apiService)   // ORGID-01 — new parameter
     {
         _settingsService = settingsService;
         _credentialService = credentialService;
@@ -313,6 +351,12 @@ public partial class SettingsViewModel : ObservableObject
         _sessionNameStore = sessionNameStore;
         _jsonlService = jsonlService;
         _dispatcherQueue = dispatcherQueue;
+        _apiService = apiService;
+
+        // ORGID-03 / G-1: receive open-picker requests from MainViewModel.ResolveOrgMismatchCommand
+        WeakReferenceMessenger.Default.Register<SettingsViewModel, OpenOrgPickerRequestedMessage>(
+            this,
+            (r, m) => r._dispatcherQueue.TryEnqueue(() => _ = r.OpenOrgPickerCommand.ExecuteAsync(null)));
     }
 
     private static readonly int[] ThresholdMinuteOptions = [15, 30, 60, 120];
@@ -467,6 +511,40 @@ public partial class SettingsViewModel : ObservableObject
     private void GoBack()
     {
         _navigationService.GoBack();
+    }
+
+    /// <summary>
+    /// ORGID-01..02 (D-OG-02..03): async command that loads the org list, fires
+    /// RequestOpenOrgPickerDialog so the View shows the ContentDialog, awaits the user's
+    /// choice, and on Primary — persists the new org-id and triggers Logout via
+    /// AuthStateChangedMessage(false) broadcast (D-13 workaround: NOT direct MainViewModel call).
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenOrgPickerAsync()
+    {
+        AvailableOrganizations.Clear();
+        SelectedOrgPickerItem = null;
+
+        var orgs = await _apiService.ListAvailableOrganizationsAsync();
+
+        _dispatcherQueue.TryEnqueue(() =>
+        {
+            foreach (var o in orgs) AvailableOrganizations.Add(o);
+        });
+
+        var request = new OrgPickerDialogRequest();
+        RequestOpenOrgPickerDialog?.Invoke(this, request);
+        var result = await request.CompletionSource.Task;
+
+        if (result != ContentDialogResult.Primary || SelectedOrgPickerItem is null)
+            return;
+
+        // ORGID-02 / PITFALLS B2: persist new org-id and trigger logout via the verified
+        // AuthStateChangedMessage(false) broadcast (Phase 24 DISPATCH-04 handles cookie-jar
+        // reset + nav-to-LoginView). NOT a direct MainViewModel.LogoutCommand call —
+        // honors D-13 (AddTransient → wrong instance via DI resolution at call time).
+        _credentialService.SaveOrganizationId(SelectedOrgPickerItem.Uuid);
+        WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
     }
 
     /// <summary>

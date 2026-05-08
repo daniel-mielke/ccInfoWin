@@ -39,6 +39,8 @@ public class SettingsViewModelTests
             jsonl.Setup(s => s.Sessions).Returns(Array.Empty<SessionInfo>());
         var dispatcher = dispatcherQueue ?? new Mock<IDispatcherQueue>();
 
+        var apiService = new Mock<IClaudeApiService>();
+
         return new SettingsViewModel(
             settingsService.Object,
             credentialService.Object,
@@ -47,7 +49,8 @@ public class SettingsViewModelTests
             historyService.Object,
             store.Object,
             jsonl.Object,
-            dispatcher.Object);
+            dispatcher.Object,
+            apiService.Object);   // ORGID-01
     }
 
     // ─── Existing tab visibility tests (indexes shifted: About is now 4) ──────────

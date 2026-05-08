@@ -386,6 +386,19 @@
                                 </StackPanel>
                             </Button>
 
+                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
+
+                            <!-- ORGID-01 / D-OG-02: Re-detect organization button -->
+                            <Button x:Name="RedetectOrgButton"
+                                    Command="{x:Bind ViewModel.OpenOrgPickerCommand}"
+                                    HorizontalAlignment="Stretch"
+                                    Margin="12,8,12,12">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8C8;" FontSize="14" />
+                                    <TextBlock l:Uids.Uid="Settings.Account.RedetectButton" />
+                                </StackPanel>
+                            </Button>
+
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -535,4 +548,6 @@
         </ScrollViewer>
 
     </Grid>
+
+
 </Page>
