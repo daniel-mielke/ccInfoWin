@@ -283,7 +283,17 @@ Plans:
   3. A new General-tab `SessionVisibilityWindowDays` ComboBox (7 / 30 / 90 / 0=unlimited, default 30) is wired through `SessionVisibilityChangedMessage`; the filter applies at the display layer in `MainViewModel.RefreshSessionList` only, and `JsonlService` continues to aggregate stats across ALL sessions (no data lost from totals)
   4. Existing installs see a one-time toast on first launch after upgrade ("Sessions older than 30 days are now hidden — adjustable in Settings"), tracked by `SessionVisibilityMigrationShown` in `AppSettings`
   5. The cold-start data-loss regression test passes: lines written between `Directory.GetFiles` and the file-position capture in `JsonlService` are NOT silently dropped (fix verified by an explicit data-loss regression test that writes lines during the race window — DROPDOWN-06 is not allowed to land silently)
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+**Wave 1**
+- [ ] 25-01-jsonlservice-hardening-PLAN.md — JsonlService Cwd per-entry hydration + DecodeProjectDirectory fallback (DROPDOWN-02), RebuildSessionsList filter softening (DROPDOWN-03), stream.Position race fix (DROPDOWN-06), JsonlServiceColdStartTests + ControllableStreamProxy
+
+**Wave 2** *(blocked on Wave 1 completion — shares MainViewModel.cs)*
+- [ ] 25-02-visibility-window-settings-PLAN.md — AppSettings.SessionVisibilityWindowDays/MigrationShown + SessionVisibilityChangedMessage + SettingsViewModel ComboBox + SettingsView.xaml row + 5 resw key pairs + MainViewModel IRecipient + RefreshSessionList cutoff filter (DROPDOWN-01, DROPDOWN-04)
+
+**Wave 3** *(blocked on Wave 2 completion — shares MainViewModel.cs + resw files)*
+- [ ] 25-03-migration-toast-PLAN.md — IsSessionVisibilityMigrationToastVisible ObservableProperty + InitializeAsync first-launch trigger + DismissMigrationToast RelayCommand (synchronous SaveSettings) + MainView InfoBar + 2 resw key pairs (DROPDOWN-05)
 **UI hint**: yes
 
 ### Phase 26: Persistent Session Renaming
@@ -352,7 +362,7 @@ Plans:
 | 22. UI Polish | v1.4 | 4/4 | Complete | 2026-05-07 |
 | 23. Localization Gaps | v1.4 | 1/1 | Complete | 2026-05-07 |
 | 24. Dispatcher Foundation & Marshaling Convention | v1.5 | 3/3 | Complete   | 2026-05-08 |
-| 25. Cold-Start Session Hydration & Visibility Window | v1.5 | 0/0 | Not started | - |
+| 25. Cold-Start Session Hydration & Visibility Window | v1.5 | 0/3 | Not started | - |
 | 26. Persistent Session Renaming | v1.5 | 0/0 | Not started | - |
 | 27. Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N | v1.5 | 0/0 | Not started | - |
 | 28. v1.4 Cleanup & Final UAT | v1.5 | 0/0 | Not started | - |
