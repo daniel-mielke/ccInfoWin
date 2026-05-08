@@ -41,4 +41,10 @@ public class AppSettings
 
     [JsonPropertyName("sonnetContextSize")]
     public int SonnetContextSize { get; set; } = 200_000;
+
+    [JsonPropertyName("sessionVisibilityWindowDays")]
+    public int SessionVisibilityWindowDays { get; set; } = 30;
+
+    [JsonPropertyName("sessionVisibilityMigrationShown")]
+    public bool SessionVisibilityMigrationShown { get; set; }
 }

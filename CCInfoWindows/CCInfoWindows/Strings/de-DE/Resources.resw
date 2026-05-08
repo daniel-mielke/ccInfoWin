@@ -315,6 +315,23 @@
     <value>Zuletzt aktualisiert:</value>
   </data>
 
+  <!-- SettingsView session visibility window (Phase 25 DROPDOWN-04 / D-03) -->
+  <data name="SettingsSessionVisibilityWindow.Text" xml:space="preserve">
+    <value>Sichtbarkeitsfenster</value>
+  </data>
+  <data name="SessionVisibilityWindow7d.Content" xml:space="preserve">
+    <value>7 Tage</value>
+  </data>
+  <data name="SessionVisibilityWindow30d.Content" xml:space="preserve">
+    <value>30 Tage</value>
+  </data>
+  <data name="SessionVisibilityWindow90d.Content" xml:space="preserve">
+    <value>90 Tage</value>
+  </data>
+  <data name="SessionVisibilityWindowUnlimited.Content" xml:space="preserve">
+    <value>Unbegrenzt</value>
+  </data>
+
   <!-- Burn Rate Warning -->
   <data name="BurnRateBannerText" xml:space="preserve">
     <value>Token-Limit erreicht in {0}</value>
