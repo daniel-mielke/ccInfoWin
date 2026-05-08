@@ -332,6 +332,14 @@
     <value>Unlimited</value>
   </data>
 
+  <!-- Migration toast: session visibility window (Phase 25 DROPDOWN-05 / D-04) -->
+  <data name="Toast.SessionVisibilityMigration.Title" xml:space="preserve">
+    <value>Visibility window enabled</value>
+  </data>
+  <data name="Toast.SessionVisibilityMigration.Message" xml:space="preserve">
+    <value>Sessions older than 30 days are now hidden — adjustable in Settings.</value>
+  </data>
+
   <!-- Burn Rate Warning -->
   <data name="BurnRateBannerText" xml:space="preserve">
     <value>Token limit reached in {0}</value>

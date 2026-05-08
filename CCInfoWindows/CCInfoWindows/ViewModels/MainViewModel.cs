@@ -87,6 +87,11 @@ public partial class MainViewModel : ObservableObject,
     [ObservableProperty]
     private bool _isSessionExpired;
 
+    // DROPDOWN-05 / D-04: one-time migration toast for existing installs.
+    // True only on first launch after upgrade -- persisted via SaveSettings on dismiss (CD-02).
+    [ObservableProperty]
+    private bool _isSessionVisibilityMigrationToastVisible;
+
     [ObservableProperty]
     private string _statusMessage = string.Empty;
 
@@ -320,6 +325,14 @@ public partial class MainViewModel : ObservableObject,
         // Load settings
         var settings = _settingsService.LoadSettings();
         _refreshIntervalSeconds = settings.RefreshIntervalSeconds;
+
+        // DROPDOWN-05 / D-04 / CD-05: first-launch migration toast.
+        // Shown when the persisted flag is false (existing install upgrading to v1.5).
+        // Fresh installs also see the toast once -- AppSettings default is false.
+        if (!settings.SessionVisibilityMigrationShown)
+        {
+            IsSessionVisibilityMigrationToastVisible = true;
+        }
 
         // Subscribe to refresh interval changes from Settings
         // CD-05 #4 audit: UpdateRefreshInterval mutates _pollTimer + _refreshIntervalSeconds; DispatcherQueueTimer requires UI thread → wrap.
@@ -964,6 +977,21 @@ public partial class MainViewModel : ObservableObject,
     {
         IsSessionExpired = false;
         _navigationService.NavigateTo<LoginView>();
+    }
+
+    /// <summary>
+    /// DROPDOWN-05 / D-04 / CD-02: dismiss the migration toast and persist immediately.
+    /// CD-02 rule: SaveSettings is synchronous (no app-shutdown dependency) so a crash
+    /// between dismiss and shutdown does not re-show the toast on next launch.
+    /// </summary>
+    [RelayCommand]
+    private void DismissMigrationToast()
+    {
+        IsSessionVisibilityMigrationToastVisible = false;
+
+        var settings = _settingsService.LoadSettings();
+        settings.SessionVisibilityMigrationShown = true;
+        _settingsService.SaveSettings(settings);
     }
 
     [RelayCommand]
