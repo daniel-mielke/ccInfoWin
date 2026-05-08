@@ -19,6 +19,7 @@ Real-time Claude Code usage monitoring: 5-hour window, weekly quota, context win
 - Use `[RelayCommand]` for commands (generates `XxxCommand` from `Xxx` method)
 - No code-behind logic in Views -- all logic in ViewModels
 - Use `partial class` with source generators
+- **G-1 (Messenger receive thread-marshaling)** — Every `IRecipient<T>.Receive(T)` method body that mutates `[ObservableProperty]` fields, calls `INavigationService`, or touches XAML controls MUST wrap the body in `IDispatcherQueue.TryEnqueue(() => HandleCore(...))`. Always-TryEnqueue is the rule — NEVER use the `if (!HasThreadAccess) ... else ...` shortcut, because recursive `Send → Receive` chains on the UI thread execute synchronously inside the parent's stack frame and produce mid-update inconsistent state. **Exception:** mark a method `[ThreadSafeReceive("specific reason proving UI-thread-only")]` and supply a non-empty reason — `MessengerThreadingConventionTests` enforces both branches. Window subclasses are exempt from the body-scan rule (they are by-construction UI-thread-bound) but MUST still carry `[ThreadSafeReceive(reason)]` to document the exemption. **Cross-VM communication priority:** direct DI > singleton-service .NET event > `WeakReferenceMessenger`. Reason: D-13 hotfix lesson — `WeakReferenceMessenger` + `AddTransient` recipients silently GC-drop, breaking exactly-once flows like logout / save-on-close.
 
 ## Async Patterns
 
