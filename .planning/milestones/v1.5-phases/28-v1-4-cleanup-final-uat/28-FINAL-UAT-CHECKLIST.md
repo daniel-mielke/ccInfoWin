@@ -36,15 +36,16 @@ new filter.
 
 ### 25-1  Migration toast — first launch after upgrade
 
-- [ ] Simulate first launch: delete or set `sessionVisibilityMigrationShown: false` in
+- [x] Simulate first launch: delete or set `sessionVisibilityMigrationShown: false` in
       `%LOCALAPPDATA%\CCInfoWindows\settings.json`, then relaunch.
       **Expected:** An informational InfoBar appears at the top of MainView with title and
       message text (DE: "Sitzungssichtbarkeit" / EN: "Session Visibility") describing the
       new 30-day default window.
+      _Initially rendered blank — root cause: WinUI3Localizer multi-segment UID bug. Fixed post-UAT (commit 23f73c8). Re-verified PASS 2026-05-18._
 
 ### 25-2  Toast dismiss persistence (CD-02 crash-safe)
 
-- [ ] With the toast visible (see 25-1), click the X dismiss button.
+- [x] With the toast visible (see 25-1), click the X dismiss button.
       **Expected:** The InfoBar closes immediately. Open
       `%LOCALAPPDATA%\CCInfoWindows\settings.json` and verify
       `"sessionVisibilityMigrationShown": true` is written. Relaunch — toast must NOT
@@ -52,7 +53,7 @@ new filter.
 
 ### 25-3  Session ComboBox visibility window filter
 
-- [ ] Open Settings → General. Locate the "Sitzungssichtbarkeit" / "Session Visibility"
+- [x] Open Settings → General. Locate the "Sitzungssichtbarkeit" / "Session Visibility"
       ComboBox. Verify it shows 4 options (7 Tage / 30 Tage / 90 Tage / Unbegrenzt) with
       "30 Tage" selected by default.
       **Expected:** Changing the selection immediately re-filters the Active Session ComboBox
@@ -68,14 +69,15 @@ sessions and lets users manage names in bulk.
 
 ### 26-1  Pencil button opens rename dialog
 
-- [ ] Select a session in the Active Session ComboBox. Verify the pencil button (✏) appears
+- [x] Select a session in the Active Session ComboBox. Verify the pencil button (✏) appears
       to the right of the ComboBox. Click it.
       **Expected:** A ContentDialog opens titled "Sitzung umbenennen" / "Rename session" with
       the current name pre-filled, a text field, Save and Cancel buttons.
+      _Title/buttons initially rendered empty — WinUI3Localizer multi-segment UID bug. Fixed post-UAT (commit 23f73c8). Re-verified PASS 2026-05-18._
 
 ### 26-2  Save persists name, ComboBox updates without restart
 
-- [ ] In the rename dialog, clear the name and enter a custom name (e.g. "My Test Session").
+- [x] In the rename dialog, clear the name and enter a custom name (e.g. "My Test Session").
       Click Save.
       **Expected:** The Active Session ComboBox immediately shows "My Test Session". Kill and
       relaunch the app — the custom name must still be visible (persisted to
@@ -83,35 +85,36 @@ sessions and lets users manage names in bulk.
 
 ### 26-3  Reset button visible only when custom name exists
 
-- [ ] With a custom name set (see 26-2), open the rename dialog again.
+- [x] With a custom name set (see 26-2), open the rename dialog again.
       **Expected:** A "Reset" / "Zurücksetzen" button is visible. Click it — the name reverts
       to the auto-derived name. Reopen the dialog — the Reset button is now gone.
 
 ### 26-4  Settings Sessions tab visible (5th segment)
 
-- [ ] Open Settings. Verify the Segmented Control shows 5 tabs:
+- [x] Open Settings. Verify the Segmented Control shows 5 tabs:
       Allgemein / Aktualisierungen / Konto / Sitzungen / Info (or EN equivalents).
       **Expected:** All 5 tabs fit without truncation at the default window width (360px+).
 
 ### 26-5  5-tab Segmented Control fits at 360px width
 
-- [ ] Resize the Settings window to approximately 360px wide.
+- [x] Resize the Settings window to approximately 360px wide.
       **Expected:** All 5 tab labels remain legible and the Segmented Control does not
       overflow or clip. (Verify by eye — exact pixel measurement not required.)
 
 ### 26-6  Cross-tab live update: rename in MainView dialog, Settings tab updates
 
-- [ ] With the Settings page open on the Sessions tab, use the pencil button in MainView
+- [x] With the Settings page open on the Sessions tab, use the pencil button in MainView
       (visible behind Settings) to rename a session to "Live Update Test".
       **Expected:** The Sessions tab in Settings updates the row for that session to show
       "Live Update Test" without requiring a Settings page reload.
 
 ### 26-7  Orphan custom names display greyed with subtitle
 
-- [ ] Open Settings → Sessions tab. If any session in `session-names.json` no longer has a
+- [x] Open Settings → Sessions tab. If any session in `session-names.json` no longer has a
       matching JSONL file (orphan), its row should appear with reduced opacity and a
       subtitle such as "Sitzung nicht gefunden" / "Session not found".
       **Expected:** Orphan rows are visually distinct (greyed/faded) from active session rows.
+      _Header/empty-state/orphan-subtitle initially rendered blank — WinUI3Localizer multi-segment UID bug for `Settings.Sessions.*` keys. Fixed post-UAT (commit 49890d2). Re-verified PASS 2026-05-18._
 
 ---
 
@@ -122,69 +125,74 @@ users, pricing error surfacing, and L10N for relative-time text.
 
 ### 27-1  NextWindow label visible below 5h-countdown (live API)
 
-- [ ] With an active Claude Code session (live API), observe the 5-hour countdown in MainView.
+- [x] With an active Claude Code session (live API), observe the 5-hour countdown in MainView.
       **Expected:** Below the "Nächstes Fenster startet um HH:MM" / "Next window starts at HH:MM"
       label is visible when `ResetsAt` is non-null. The time is formatted per the current
       UI locale (DE: 24h / EN: 12h or system format).
+      _Label initially rendered blank — WinUI3Localizer multi-segment UID bug for `MainView.NextWindow.Label*`. Fixed post-UAT (commit 23f73c8). Re-verified PASS 2026-05-18._
 
 ### 27-2  NextWindow label hidden when no window data or auth banner shows
 
-- [ ] With no active session OR when the app shows the "Session expired" InfoBar:
+- [x] With no active session OR when the app shows the "Session expired" InfoBar:
       **Expected:** The next-window label is NOT visible (Visibility=Collapsed). It must not
       show a stale timestamp from a previous session.
 
 ### 27-3  L10N: LastFetchRelativeTime shows locale-correct text
 
-- [ ] Switch the app language between DE and EN (via Settings → Account or system locale).
+- [x] Switch the app language between DE and EN (via Settings → Account or system locale).
       **Expected:** The "Zuletzt aktualisiert vor X Minuten" / "Last updated X minutes ago"
       footer text renders in the active language. "Gerade eben" (DE) / "Just now" (EN) at t=0.
+      _All 5 LastFetchRelative.* keys initially returned empty — WinUI3Localizer multi-segment UID bug. Fixed post-UAT (commit 23f73c8). Re-verified PASS 2026-05-18._
 
 ### 27-4  PricingError InfoBar appears when pricing data fails
 
-- [ ] Simulate a pricing fetch failure: disconnect network, wait for the next pricing refresh
+- [x] Simulate a pricing fetch failure: disconnect network, wait for the next pricing refresh
       cycle (or restart with network off).
       **Expected:** A warning InfoBar appears in MainView: "Preisdaten nicht verfügbar" /
       "Pricing data unavailable" (or similar). The InfoBar uses the Warning severity style.
+      _Title/Message initially blank — WinUI3Localizer multi-segment UID bug for `MainView.PricingErrorInfoBar.*`. Fixed post-UAT (commit 49890d2). Re-verified PASS 2026-05-18._
 
 ### 27-5  PricingError InfoBar disappears on subsequent success
 
-- [ ] With the pricing error InfoBar visible (see 27-4), reconnect network and wait for the
+- [x] With the pricing error InfoBar visible (see 27-4), reconnect network and wait for the
       next refresh cycle.
       **Expected:** The pricing error InfoBar disappears automatically when pricing data loads
       successfully.
 
 ### 27-6  PricingError InfoBar suppressed when auth banner shows
 
-- [ ] Force a "session expired" state (let the session time out or clear cookies via
+- [x] Force a "session expired" state (let the session time out or clear cookies via
       WebView2 UDF). Verify the main auth InfoBar appears.
       **Expected:** The pricing error InfoBar is NOT visible simultaneously. Only the auth
       InfoBar shows (banner-stack priority: auth > pricing).
 
 ### 27-7  Re-detect button on Settings Account tab opens OrgPicker dialog
 
-- [ ] Open Settings → Konto / Account tab. Verify a "Organisation neu erkennen" /
+- [x] Open Settings → Konto / Account tab. Verify a "Organisation neu erkennen" /
       "Re-detect organization" button is visible below the Logout row.
       **Expected:** Clicking the button opens a ContentDialog listing available organizations
       with Name (bold) and UUID (secondary text).
+      _Two compound bugs: (1) ListView items rendered invisible because `ContainerContentChanging` set Content in Phase 0 with `e.Handled=true` — fixed by switching to declarative DataTemplate (commit 49890d2); (2) Dialog Title/Buttons rendered blank because `Dialog.OrgPicker.*` keys are 3-segment — fixed by single-segment renaming (commit 23f73c8). Re-verified PASS 2026-05-18._
 
 ### 27-8  OrgPicker: Switch triggers logout to LoginView
 
-- [ ] In the OrgPicker dialog (see 27-7), select an organization row and click
+- [x] In the OrgPicker dialog (see 27-7), select an organization row and click
       "Wechseln" / "Switch".
       **Expected:** The dialog closes, the app performs a full logout sequence, and the
       LoginView appears. The new org-id is stored in `%LOCALAPPDATA%\CCInfoWindows\claude-org`.
 
 ### 27-9  OrgMismatch InfoBar appears after 5 consecutive zero-utilization polls
 
-- [ ] With an active session where usage is genuinely 0% for an extended period (or mock by
+- [x] With an active session where usage is genuinely 0% for an extended period (or mock by
       forcing `FetchUsageAsync` to return 0-utilization 5 times), observe MainView.
       **Expected:** After 5 consecutive zero-utilization polls, an "Organisation möglicherweise
       falsch" / "Org ID may be wrong" InfoBar appears with a "Re-resolve" button and a
       "Don't show again this session" checkbox.
+      _Title/Message/Button/Checkbox initially blank — WinUI3Localizer multi-segment UID bug for `MainView.OrgMismatchInfoBar.*`. Fixed post-UAT (commit 49890d2). Re-verified PASS 2026-05-18._
 
 ### 27-10  "Don't show again" suppresses OrgMismatch InfoBar for current session only
 
-- [ ] With the OrgMismatch InfoBar visible (see 27-9), check the "Don't show again" checkbox.
+- [x] With the OrgMismatch InfoBar visible (see 27-9), check the "Don't show again" checkbox.
       **Expected:** The InfoBar disappears and does not reappear during this app session, even
       after more zero-utilization polls. After restarting the app, the suppression resets
       (InfoBar can appear again after 5 zero-polls).
@@ -210,15 +218,60 @@ Phase 28 changes are pure code cleanup with no visible UI impact. Automated veri
 | Section | Items | Status |
 |---------|-------|--------|
 | Phase 24 (automated) | 1 | [x] auto |
-| Phase 25 | 3 | [ ] pending |
-| Phase 26 | 7 | [ ] pending |
-| Phase 27 | 10 | [ ] pending |
+| Phase 25 | 3 | [x] visual PASS (post-fix) |
+| Phase 26 | 7 | [x] visual PASS (post-fix) |
+| Phase 27 | 10 | [x] visual PASS (post-fix) |
 | Phase 28 (automated) | 6 | [x] auto |
-| **Total** | **27** | **pending visual sign-off** |
+| **Total** | **27** | **all PASS — v1.5 ready to ship** |
 
-When all Phase 25-27 items are checked, milestone v1.5 is complete.
+Milestone v1.5 visual UAT complete 2026-05-18.
+
+---
+
+## Post-UAT findings: WinUI3Localizer multi-segment UID bug
+
+During visual UAT execution on 2026-05-18, test 25-1 surfaced a single empty InfoBar
+that traced back to a fundamental WinUI3Localizer 2.3.0 library quirk: the library
+splits resw keys at the FIRST `.` when building its internal dictionary
+(`LocalizerBuilder.cs:206`). Multi-segment UIDs in both `l:Uids.Uid` (XAML) and
+`GetLocalizedString()` (code-behind) silently return empty strings.
+
+This single bug class caused **9 latent UI rendering failures** across Phases 25/26/27
+that the original UAT walkthrough did not detect because the affected states were never
+visually verified — tests were marked PASS based on functional behavior (button works,
+dialog opens) without confirming the localized text content.
+
+**Fixed strings:**
+- Migration toast (25-1, 25-2)
+- PricingError InfoBar (27-4)
+- OrgMismatch InfoBar + sub-controls (27-9, 27-10)
+- Settings → Konto "Re-detect" button (27-7)
+- Settings → Sessions tab Header, Empty-state, Orphan-subtitle (26-7)
+- Rename dialog title + buttons (26-1)
+- NextWindow label (27-1)
+- LastFetchRelative.* family (5 keys, 27-3)
+
+**Additional fix:** OrgPicker ContentDialog used `ContainerContentChanging` with
+`e.Handled=true` in Phase 0 — items rendered as invisible clickable containers.
+Replaced with declarative `DataTemplate` in `Page.Resources` (matching the
+SessionRenameItems pattern that already worked correctly).
+
+**Permanent protection:** Two new scanners in `ResourceCoverageTests`:
+- `XamlUidValues_AreSingleSegment_ForLocalizerLookup`
+- `GetLocalizedStringCalls_UseSingleSegmentUids_ForLocalizerLookup`
+
+Both run on every build and block any future multi-segment UID introduction.
+
+**Lesson learned for future UAT:** Visual UAT must explicitly verify text content
+of each localized string, not just functional behavior. "Dialog opens" ≠ "Dialog
+shows correct localized text." Recommend extending future UAT templates to require
+screenshot evidence per item.
+
+Fix commits: `23f73c8` (UID renaming), `49890d2` (DataTemplate refactor), `e5238dc`
+(protection tests).
 
 ---
 
 _Generated: 2026-05-08_
 _Phase: 28-v1-4-cleanup-final-uat_
+_UAT completed: 2026-05-18 (with post-UAT library-bug fixes 23f73c8 / 49890d2 / e5238dc)_
