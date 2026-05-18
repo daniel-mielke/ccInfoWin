@@ -11,6 +11,25 @@
     mc:Ignorable="d"
     Unloaded="OnUnloaded">
 
+    <Page.Resources>
+        <!-- ORGID-01 visual-fix: declarative item template for the OrgPicker ContentDialog ListView.
+             Replaces the previous code-behind ContainerContentChanging pattern, which rendered items
+             invisibly because Content was set in Phase 0 with e.Handled=true — the layout pass ran
+             before the TextBlocks entered the visual tree. Declarative DataTemplate participates in
+             the normal item-realization lifecycle and inherits ThemeResources correctly inside the
+             ContentDialog popup subtree. -->
+        <DataTemplate x:Key="OrgPickerItemTemplate" x:DataType="models:OrganizationInfo">
+            <StackPanel Margin="4,8,4,8" Spacing="2">
+                <TextBlock Text="{x:Bind Name}"
+                           FontWeight="SemiBold"
+                           Foreground="{ThemeResource PrimaryTextBrush}" />
+                <TextBlock Text="{x:Bind Uuid}"
+                           FontSize="11"
+                           Foreground="{ThemeResource SecondaryTextBrush}" />
+            </StackPanel>
+        </DataTemplate>
+    </Page.Resources>
+
     <Grid x:Name="SettingsRootGrid" Background="{ThemeResource AppBackgroundBrush}" Padding="16,12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -395,7 +414,7 @@
                                     Margin="12,8,12,12">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon Glyph="&#xE8C8;" FontSize="14" />
-                                    <TextBlock l:Uids.Uid="Settings.Account.RedetectButton" />
+                                    <TextBlock l:Uids.Uid="SettingsAccountRedetectButton" />
                                 </StackPanel>
                             </Button>
 
@@ -407,13 +426,13 @@
                 <StackPanel Spacing="8"
                             Visibility="{x:Bind ViewModel.IsSessionsTabVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
 
-                    <TextBlock l:Uids.Uid="Settings.Sessions.Header"
+                    <TextBlock l:Uids.Uid="SettingsSessionsHeader"
                                FontSize="11" FontWeight="SemiBold"
                                Foreground="{ThemeResource SectionHeaderBrush}"
                                CharacterSpacing="50" Margin="0,0,0,8" />
 
                     <!-- Empty-state placeholder -->
-                    <TextBlock l:Uids.Uid="Settings.Sessions.NoSessions"
+                    <TextBlock l:Uids.Uid="SettingsSessionsNoSessions"
                                FontSize="13"
                                Foreground="{ThemeResource SecondaryTextBrush}"
                                HorizontalAlignment="Center"
@@ -448,7 +467,7 @@
 
                                         <!-- Orphan subtitle (visible only when IsOrphan == true) -->
                                         <TextBlock Grid.Column="0" Grid.Row="1"
-                                                   l:Uids.Uid="Settings.Sessions.OrphanLabel"
+                                                   l:Uids.Uid="SettingsSessionsOrphanLabel"
                                                    FontSize="11"
                                                    Foreground="{ThemeResource TertiaryTextBrush}"
                                                    Visibility="{x:Bind IsOrphan, Converter={StaticResource BoolToVisibilityConverter}}" />

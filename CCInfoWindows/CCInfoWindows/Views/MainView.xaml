@@ -83,9 +83,10 @@
 
             <!-- PRICING-01..03 / D-PR-02: pricing-service silent-failure InfoBar -->
             <!-- Banner-stack order: auth (highest) → API error → pricing → migration toast -->
+            <!-- UID must be single-segment: WinUI3Localizer 2.3.0 only resolves Foo.Property keys (Length==2 split). -->
             <InfoBar
                 x:Name="PricingErrorInfoBar"
-                l:Uids.Uid="MainView.PricingErrorInfoBar"
+                l:Uids.Uid="PricingErrorInfoBar"
                 Severity="Warning"
                 IsOpen="{x:Bind ViewModel.IsPricingErrorVisible, Mode=OneWay}"
                 Visibility="{x:Bind ViewModel.IsPricingErrorVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
@@ -94,9 +95,10 @@
 
             <!-- ORGID-03..04 / D-OG-04..06: org-mismatch soft-prompt InfoBar -->
             <!-- Banner-stack order: auth > api > pricing > org-mismatch > migration toast -->
+            <!-- UID must be single-segment: WinUI3Localizer 2.3.0 only resolves Foo.Property keys (Length==2 split). -->
             <InfoBar
                 x:Name="OrgMismatchInfoBar"
-                l:Uids.Uid="MainView.OrgMismatchInfoBar"
+                l:Uids.Uid="OrgMismatchInfoBar"
                 Severity="Warning"
                 IsOpen="{x:Bind ViewModel.IsOrgMismatchPromptVisible, Mode=TwoWay}"
                 Visibility="{x:Bind ViewModel.IsOrgMismatchPromptVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
@@ -104,20 +106,21 @@
                 Margin="0,0,0,12">
                 <InfoBar.ActionButton>
                     <Button Command="{x:Bind ViewModel.ResolveOrgMismatchCommand}">
-                        <TextBlock l:Uids.Uid="MainView.OrgMismatchInfoBar.ResolveButton" />
+                        <TextBlock l:Uids.Uid="OrgMismatchResolveButton" />
                     </Button>
                 </InfoBar.ActionButton>
                 <InfoBar.Content>
-                    <CheckBox l:Uids.Uid="MainView.OrgMismatchInfoBar.SuppressCheckbox"
+                    <CheckBox l:Uids.Uid="OrgMismatchSuppressCheckbox"
                               Command="{x:Bind ViewModel.SuppressOrgMismatchPromptCommand}"
                               Margin="48,4,0,4" />
                 </InfoBar.Content>
             </InfoBar>
 
             <!-- DROPDOWN-05 / D-04: Session visibility migration toast (one-time, dismissable) -->
+            <!-- UID must be single-segment: WinUI3Localizer 2.3.0 only resolves Foo.Property keys (Length==2 split). -->
             <InfoBar
                 x:Name="MigrationToastInfoBar"
-                l:Uids.Uid="Toast.SessionVisibilityMigration"
+                l:Uids.Uid="MigrationToastInfoBar"
                 Severity="Informational"
                 IsOpen="{x:Bind ViewModel.IsSessionVisibilityMigrationToastVisible, Mode=TwoWay}"
                 Visibility="{x:Bind ViewModel.IsSessionVisibilityMigrationToastVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
