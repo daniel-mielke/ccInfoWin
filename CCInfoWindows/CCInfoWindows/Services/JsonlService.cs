@@ -699,6 +699,18 @@ public sealed class JsonlService : IJsonlService, IDisposable
         {
             try
             {
+                // macOS parity (findActiveAgents / contentModificationDate): every tool-result
+                // write bumps NTFS LastWriteTime, so long tool-calls keep the agent visible
+                // even when the last assistant entry is older than the cutoff. UTC-only
+                // arithmetic — Kind=Utc guaranteed by GetLastWriteTimeUtc, explicit zero
+                // offset makes the requirement obvious at the comparison site.
+                var mtimeUtc = File.GetLastWriteTimeUtc(file);
+                var lastActivity = new DateTimeOffset(mtimeUtc, TimeSpan.Zero);
+
+                // Short-circuit BEFORE ReadTailLines: stale files are never opened.
+                if (lastActivity < cutoff)
+                    continue;
+
                 var lines = ReadTailLines(file);
                 // Subagent files have isSidechain=true on all entries by design —
                 // do not apply the sidechain filter here.
@@ -706,15 +718,13 @@ public sealed class JsonlService : IJsonlService, IDisposable
                     .Where(e => string.Equals(e.Type, "assistant", StringComparison.OrdinalIgnoreCase))
                     .ToList();
 
+                // Guard preserved: fresh mtime but no assistant entries yet
+                // (agent just started — only user / tool-result lines). Without an
+                // assistant entry we have no model + token data to display.
                 if (entries.Count == 0)
                     continue;
 
                 var lastEntry = entries[^1];
-                var lastActivity = lastEntry.Timestamp ?? DateTimeOffset.MinValue;
-
-                if (lastActivity < cutoff)
-                    continue;
-
                 var totalTokens = ComputeContextTokens(lastEntry);
                 var modelName = lastEntry.Message?.Model;
                 var maxTokens = ModelContextLimits.GetMaxContextTokens(modelName, sonnetContextSize);
