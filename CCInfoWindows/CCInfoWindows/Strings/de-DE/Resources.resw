@@ -333,10 +333,11 @@
   </data>
 
   <!-- Migration toast: session visibility window (Phase 25 DROPDOWN-05 / D-04) -->
-  <data name="Toast.SessionVisibilityMigration.Title" xml:space="preserve">
+  <!-- Key must be single-segment: WinUI3Localizer 2.3.0 only resolves Foo.Property keys. -->
+  <data name="MigrationToastInfoBar.Title" xml:space="preserve">
     <value>Sichtbarkeitsfenster aktiviert</value>
   </data>
-  <data name="Toast.SessionVisibilityMigration.Message" xml:space="preserve">
+  <data name="MigrationToastInfoBar.Message" xml:space="preserve">
     <value>Sitzungen älter als 30 Tage werden jetzt ausgeblendet — anpassbar in Einstellungen.</value>
   </data>
 
@@ -361,16 +362,16 @@
   </data>
 
   <!-- Phase 26 RENAME-01: Session rename dialog + pencil button tooltip -->
-  <data name="Dialog.RenameSession.Title" xml:space="preserve">
+  <data name="RenameSessionDialogTitle" xml:space="preserve">
     <value>Sitzung umbenennen</value>
   </data>
-  <data name="Dialog.RenameSession.SaveButton" xml:space="preserve">
+  <data name="RenameSessionDialogSaveButton" xml:space="preserve">
     <value>Speichern</value>
   </data>
-  <data name="Dialog.RenameSession.CancelButton" xml:space="preserve">
+  <data name="RenameSessionDialogCancelButton" xml:space="preserve">
     <value>Abbrechen</value>
   </data>
-  <data name="Dialog.RenameSession.ResetButton" xml:space="preserve">
+  <data name="RenameSessionDialogResetButton" xml:space="preserve">
     <value>Zurücksetzen</value>
   </data>
   <data name="MainViewRenameButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -378,27 +379,27 @@
   </data>
 
   <!-- Phase 27 L10N-01: localized last-fetch relative time on About tab -->
-  <data name="LastFetchRelative.JustNow" xml:space="preserve">
+  <data name="LastFetchJustNow" xml:space="preserve">
     <value>gerade eben</value>
   </data>
-  <data name="LastFetchRelative.MinutesAgo" xml:space="preserve">
+  <data name="LastFetchMinutesAgo" xml:space="preserve">
     <value>vor {0} Minuten</value>
   </data>
-  <data name="LastFetchRelative.HoursAgo" xml:space="preserve">
+  <data name="LastFetchHoursAgo" xml:space="preserve">
     <value>vor {0} Stunden</value>
   </data>
-  <data name="LastFetchRelative.DaysAgo" xml:space="preserve">
+  <data name="LastFetchDaysAgo" xml:space="preserve">
     <value>vor {0} Tagen</value>
   </data>
-  <data name="LastFetchRelative.Never" xml:space="preserve">
+  <data name="LastFetchNever" xml:space="preserve">
     <value>Nie</value>
   </data>
 
   <!-- Phase 27 NEXTWIN-01..03: absolute next-window start label format strings (D-NW-03 / CD-01) -->
-  <data name="MainView.NextWindow.LabelDe" xml:space="preserve">
+  <data name="NextWindowLabelDe" xml:space="preserve">
     <value>ddd d.M. HH:mm</value>
   </data>
-  <data name="MainView.NextWindow.LabelEn" xml:space="preserve">
+  <data name="NextWindowLabelEn" xml:space="preserve">
     <value>ddd HH:mm</value>
   </data>
 
@@ -406,13 +407,13 @@
   <data name="SettingsTabSessions" xml:space="preserve">
     <value>Sitzungen</value>
   </data>
-  <data name="Settings.Sessions.Header.Text" xml:space="preserve">
+  <data name="SettingsSessionsHeader.Text" xml:space="preserve">
     <value>EIGENE SITZUNGSNAMEN</value>
   </data>
-  <data name="Settings.Sessions.NoSessions.Text" xml:space="preserve">
+  <data name="SettingsSessionsNoSessions.Text" xml:space="preserve">
     <value>Keine Sitzungen verfügbar.</value>
   </data>
-  <data name="Settings.Sessions.OrphanLabel.Text" xml:space="preserve">
+  <data name="SettingsSessionsOrphanLabel.Text" xml:space="preserve">
     <value>Sitzung nicht gefunden</value>
   </data>
   <data name="Settings.Sessions.ClearButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -420,36 +421,38 @@
   </data>
 
   <!-- Phase 27 PRICING-01..03: pricing-service silent-failure surfacing (D-PR-02) -->
-  <data name="MainView.PricingErrorInfoBar.Title" xml:space="preserve">
+  <!-- Keys must be single-segment: WinUI3Localizer 2.3.0 only resolves Foo.Property keys. -->
+  <data name="PricingErrorInfoBar.Title" xml:space="preserve">
     <value>Preisdaten nicht verfügbar</value>
   </data>
-  <data name="MainView.PricingErrorInfoBar.Message" xml:space="preserve">
+  <data name="PricingErrorInfoBar.Message" xml:space="preserve">
     <value>Kostendaten können ungenau sein.</value>
   </data>
 
   <!-- Phase 27 ORGID-01..05 (D-OG-06): org-id picker localization -->
-  <data name="Settings.Account.RedetectButton" xml:space="preserve">
+  <data name="SettingsAccountRedetectButton.Text" xml:space="preserve">
     <value>Organisation neu erkennen</value>
   </data>
-  <data name="Dialog.OrgPicker.Title" xml:space="preserve">
+  <data name="OrgPickerDialogTitle" xml:space="preserve">
     <value>Organisation auswählen</value>
   </data>
-  <data name="Dialog.OrgPicker.SwitchButton" xml:space="preserve">
+  <data name="OrgPickerDialogSwitchButton" xml:space="preserve">
     <value>Wechseln</value>
   </data>
-  <data name="Dialog.OrgPicker.CancelButton" xml:space="preserve">
+  <data name="OrgPickerDialogCancelButton" xml:space="preserve">
     <value>Abbrechen</value>
   </data>
-  <data name="MainView.OrgMismatchInfoBar.Title" xml:space="preserve">
+  <!-- Keys must be single-segment and end with a valid DependencyProperty name (.Title, .Message, .Text, .Content). -->
+  <data name="OrgMismatchInfoBar.Title" xml:space="preserve">
     <value>Möglicher Organisations-Mismatch</value>
   </data>
-  <data name="MainView.OrgMismatchInfoBar.Message" xml:space="preserve">
+  <data name="OrgMismatchInfoBar.Message" xml:space="preserve">
     <value>5 Abfragen ergaben 0% Auslastung bei aktiver Sitzung. Organisation neu erkennen?</value>
   </data>
-  <data name="MainView.OrgMismatchInfoBar.ResolveButton" xml:space="preserve">
+  <data name="OrgMismatchResolveButton.Text" xml:space="preserve">
     <value>Neu erkennen</value>
   </data>
-  <data name="MainView.OrgMismatchInfoBar.SuppressCheckbox" xml:space="preserve">
+  <data name="OrgMismatchSuppressCheckbox.Content" xml:space="preserve">
     <value>Diese Sitzung nicht mehr anzeigen</value>
   </data>
 

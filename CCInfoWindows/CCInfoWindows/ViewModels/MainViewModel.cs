@@ -717,8 +717,8 @@ public partial class MainViewModel : ObservableObject,
 
         var culture = CultureInfo.CurrentUICulture;
         var formatKey = culture.Name.StartsWith("de", StringComparison.OrdinalIgnoreCase)
-            ? "MainView.NextWindow.LabelDe"
-            : "MainView.NextWindow.LabelEn";
+            ? "NextWindowLabelDe"
+            : "NextWindowLabelEn";
         var format = Localizer.Get().GetLocalizedString(formatKey);
 
         FiveHourNextWindowText = _fiveHourResetsAt.Value.LocalDateTime.ToString(format, culture);

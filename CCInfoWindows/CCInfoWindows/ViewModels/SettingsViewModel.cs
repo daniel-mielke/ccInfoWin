@@ -138,17 +138,17 @@ public partial class SettingsViewModel : ObservableObject,
         {
             var lastFetch = _pricingService.LastFetch;
             if (!lastFetch.HasValue)
-                return Localizer.Get().GetLocalizedString("LastFetchRelative.Never");
+                return Localizer.Get().GetLocalizedString("LastFetchNever");
 
             var elapsed = DateTimeOffset.Now - lastFetch.Value;
             if (elapsed.TotalSeconds < 30)
-                return Localizer.Get().GetLocalizedString("LastFetchRelative.JustNow");
+                return Localizer.Get().GetLocalizedString("LastFetchJustNow");
 
             if (elapsed.TotalMinutes < 60)
             {
                 var minutes = (int)Math.Max(0, elapsed.TotalMinutes);
                 return string.Format(
-                    Localizer.Get().GetLocalizedString("LastFetchRelative.MinutesAgo"),
+                    Localizer.Get().GetLocalizedString("LastFetchMinutesAgo"),
                     minutes);
             }
 
@@ -156,13 +156,13 @@ public partial class SettingsViewModel : ObservableObject,
             {
                 var hours = (int)Math.Max(0, elapsed.TotalHours);
                 return string.Format(
-                    Localizer.Get().GetLocalizedString("LastFetchRelative.HoursAgo"),
+                    Localizer.Get().GetLocalizedString("LastFetchHoursAgo"),
                     hours);
             }
 
             var days = (int)Math.Max(0, elapsed.TotalDays);
             return string.Format(
-                Localizer.Get().GetLocalizedString("LastFetchRelative.DaysAgo"),
+                Localizer.Get().GetLocalizedString("LastFetchDaysAgo"),
                 days);
         }
     }

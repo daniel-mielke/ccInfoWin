@@ -333,10 +333,11 @@
   </data>
 
   <!-- Migration toast: session visibility window (Phase 25 DROPDOWN-05 / D-04) -->
-  <data name="Toast.SessionVisibilityMigration.Title" xml:space="preserve">
+  <!-- Key must be single-segment: WinUI3Localizer 2.3.0 only resolves Foo.Property keys. -->
+  <data name="MigrationToastInfoBar.Title" xml:space="preserve">
     <value>Visibility window enabled</value>
   </data>
-  <data name="Toast.SessionVisibilityMigration.Message" xml:space="preserve">
+  <data name="MigrationToastInfoBar.Message" xml:space="preserve">
     <value>Sessions older than 30 days are now hidden — adjustable in Settings.</value>
   </data>
 
@@ -361,16 +362,16 @@
   </data>
 
   <!-- Phase 26 RENAME-01: Session rename dialog + pencil button tooltip -->
-  <data name="Dialog.RenameSession.Title" xml:space="preserve">
+  <data name="RenameSessionDialogTitle" xml:space="preserve">
     <value>Rename Session</value>
   </data>
-  <data name="Dialog.RenameSession.SaveButton" xml:space="preserve">
+  <data name="RenameSessionDialogSaveButton" xml:space="preserve">
     <value>Save</value>
   </data>
-  <data name="Dialog.RenameSession.CancelButton" xml:space="preserve">
+  <data name="RenameSessionDialogCancelButton" xml:space="preserve">
     <value>Cancel</value>
   </data>
-  <data name="Dialog.RenameSession.ResetButton" xml:space="preserve">
+  <data name="RenameSessionDialogResetButton" xml:space="preserve">
     <value>Reset</value>
   </data>
   <data name="MainViewRenameButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -378,27 +379,27 @@
   </data>
 
   <!-- Phase 27 L10N-01: localized last-fetch relative time on About tab -->
-  <data name="LastFetchRelative.JustNow" xml:space="preserve">
+  <data name="LastFetchJustNow" xml:space="preserve">
     <value>just now</value>
   </data>
-  <data name="LastFetchRelative.MinutesAgo" xml:space="preserve">
+  <data name="LastFetchMinutesAgo" xml:space="preserve">
     <value>{0} minutes ago</value>
   </data>
-  <data name="LastFetchRelative.HoursAgo" xml:space="preserve">
+  <data name="LastFetchHoursAgo" xml:space="preserve">
     <value>{0} hours ago</value>
   </data>
-  <data name="LastFetchRelative.DaysAgo" xml:space="preserve">
+  <data name="LastFetchDaysAgo" xml:space="preserve">
     <value>{0} days ago</value>
   </data>
-  <data name="LastFetchRelative.Never" xml:space="preserve">
+  <data name="LastFetchNever" xml:space="preserve">
     <value>Never</value>
   </data>
 
   <!-- Phase 27 NEXTWIN-01..03: absolute next-window start label format strings (D-NW-03 / CD-01) -->
-  <data name="MainView.NextWindow.LabelDe" xml:space="preserve">
+  <data name="NextWindowLabelDe" xml:space="preserve">
     <value>ddd d.M. HH:mm</value>
   </data>
-  <data name="MainView.NextWindow.LabelEn" xml:space="preserve">
+  <data name="NextWindowLabelEn" xml:space="preserve">
     <value>ddd HH:mm</value>
   </data>
 
@@ -406,13 +407,13 @@
   <data name="SettingsTabSessions" xml:space="preserve">
     <value>Sessions</value>
   </data>
-  <data name="Settings.Sessions.Header.Text" xml:space="preserve">
+  <data name="SettingsSessionsHeader.Text" xml:space="preserve">
     <value>CUSTOM SESSION NAMES</value>
   </data>
-  <data name="Settings.Sessions.NoSessions.Text" xml:space="preserve">
+  <data name="SettingsSessionsNoSessions.Text" xml:space="preserve">
     <value>No sessions available.</value>
   </data>
-  <data name="Settings.Sessions.OrphanLabel.Text" xml:space="preserve">
+  <data name="SettingsSessionsOrphanLabel.Text" xml:space="preserve">
     <value>Session not found</value>
   </data>
   <data name="Settings.Sessions.ClearButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -420,36 +421,38 @@
   </data>
 
   <!-- Phase 27 PRICING-01..03: pricing-service silent-failure surfacing (D-PR-02) -->
-  <data name="MainView.PricingErrorInfoBar.Title" xml:space="preserve">
+  <!-- Keys must be single-segment: WinUI3Localizer 2.3.0 only resolves Foo.Property keys. -->
+  <data name="PricingErrorInfoBar.Title" xml:space="preserve">
     <value>Pricing data unavailable</value>
   </data>
-  <data name="MainView.PricingErrorInfoBar.Message" xml:space="preserve">
+  <data name="PricingErrorInfoBar.Message" xml:space="preserve">
     <value>Cost figures may be inaccurate.</value>
   </data>
 
   <!-- Phase 27 ORGID-01..05 (D-OG-06): org-id picker localization -->
-  <data name="Settings.Account.RedetectButton" xml:space="preserve">
+  <data name="SettingsAccountRedetectButton.Text" xml:space="preserve">
     <value>Re-detect organization</value>
   </data>
-  <data name="Dialog.OrgPicker.Title" xml:space="preserve">
+  <data name="OrgPickerDialogTitle" xml:space="preserve">
     <value>Select organization</value>
   </data>
-  <data name="Dialog.OrgPicker.SwitchButton" xml:space="preserve">
+  <data name="OrgPickerDialogSwitchButton" xml:space="preserve">
     <value>Switch</value>
   </data>
-  <data name="Dialog.OrgPicker.CancelButton" xml:space="preserve">
+  <data name="OrgPickerDialogCancelButton" xml:space="preserve">
     <value>Cancel</value>
   </data>
-  <data name="MainView.OrgMismatchInfoBar.Title" xml:space="preserve">
+  <!-- Keys must be single-segment and end with a valid DependencyProperty name (.Title, .Message, .Text, .Content). -->
+  <data name="OrgMismatchInfoBar.Title" xml:space="preserve">
     <value>Possible organization mismatch</value>
   </data>
-  <data name="MainView.OrgMismatchInfoBar.Message" xml:space="preserve">
+  <data name="OrgMismatchInfoBar.Message" xml:space="preserve">
     <value>5 polls returned 0% utilization while a session is active. Re-resolve organization?</value>
   </data>
-  <data name="MainView.OrgMismatchInfoBar.ResolveButton" xml:space="preserve">
+  <data name="OrgMismatchResolveButton.Text" xml:space="preserve">
     <value>Re-resolve</value>
   </data>
-  <data name="MainView.OrgMismatchInfoBar.SuppressCheckbox" xml:space="preserve">
+  <data name="OrgMismatchSuppressCheckbox.Content" xml:space="preserve">
     <value>Don't show again this session</value>
   </data>
 

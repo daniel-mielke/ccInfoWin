@@ -242,11 +242,11 @@ public sealed partial class MainView : Page
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = Localizer.Get().GetLocalizedString("Dialog.RenameSession.Title"),
-            PrimaryButtonText = Localizer.Get().GetLocalizedString("Dialog.RenameSession.SaveButton"),
-            SecondaryButtonText = Localizer.Get().GetLocalizedString("Dialog.RenameSession.CancelButton"),
+            Title = Localizer.Get().GetLocalizedString("RenameSessionDialogTitle"),
+            PrimaryButtonText = Localizer.Get().GetLocalizedString("RenameSessionDialogSaveButton"),
+            SecondaryButtonText = Localizer.Get().GetLocalizedString("RenameSessionDialogCancelButton"),
             CloseButtonText = hasCustomName
-                ? Localizer.Get().GetLocalizedString("Dialog.RenameSession.ResetButton")
+                ? Localizer.Get().GetLocalizedString("RenameSessionDialogResetButton")
                 : string.Empty,
             DefaultButton = ContentDialogButton.Primary,
             Content = textBox
