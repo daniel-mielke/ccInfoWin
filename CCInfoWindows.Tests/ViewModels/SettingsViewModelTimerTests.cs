@@ -129,7 +129,7 @@ public class SettingsViewModelTimerTests
     [Fact]
     public void LastFetchRelativeTime_NullTimestamp_ReturnsNonNullString()
     {
-        // L10N-01: LastFetchRelativeTime now calls Localizer.Get().GetLocalizedString("LastFetchRelative.Never").
+        // L10N-01: LastFetchRelativeTime now calls Localizer.Get().GetLocalizedString("LastFetchNever").
         // In headless unit tests WinUI3Localizer has no host, so it returns the key name as fallback.
         // We assert the getter does not throw and returns a non-null string — the exact locale value
         // is validated by ResourceCoverageTests which reads the resw files directly.
@@ -145,7 +145,7 @@ public class SettingsViewModelTimerTests
     [Fact]
     public void LastFetchRelativeTime_FiveMinutesAgo_ReturnsNonNullString()
     {
-        // L10N-01: getter calls Localizer.Get().GetLocalizedString("LastFetchRelative.MinutesAgo")
+        // L10N-01: getter calls Localizer.Get().GetLocalizedString("LastFetchMinutesAgo")
         // and formats with string.Format. In headless tests the Localizer returns its key as fallback;
         // the numeric substitution still happens. We assert non-null output — exact string validated by ResourceCoverageTests.
         var pricingMock = new Mock<IPricingService>();

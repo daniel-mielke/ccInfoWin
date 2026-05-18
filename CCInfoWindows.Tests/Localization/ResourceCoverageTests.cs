@@ -11,10 +11,14 @@ namespace CCInfoWindows.Tests.Localization;
 /// cannot initialize the WinUI3Localizer host, so we read the resw files directly).
 ///
 /// Phase 27 extension policy:
-///   - Plan 27-01 (L10N) appends LastFetchRelative.{JustNow,MinutesAgo,HoursAgo,DaysAgo,Never}
-///   - Plan 27-02 (NEXTWIN) appends MainView.NextWindow.LabelDe / .LabelEn
-///   - Plan 27-03 (PRICING) appends MainView.PricingErrorInfoBar.Title / .Message
-///   - Plan 27-04 (ORGID) appends Settings.Account.RedetectButton + Dialog.OrgPicker.* + MainView.OrgMismatchInfoBar.*
+///   - Plan 27-01 (L10N) appends LastFetch{JustNow,MinutesAgo,HoursAgo,DaysAgo,Never}
+///   - Plan 27-02 (NEXTWIN) appends NextWindowLabelDe / NextWindowLabelEn
+///   - Plan 27-03 (PRICING) appends PricingErrorInfoBar.Title / .Message
+///   - Plan 27-04 (ORGID) appends SettingsAccountRedetectButton.Text + Dialog.OrgPicker.* + OrgMismatchInfoBar.* + OrgMismatchResolveButton.Text + OrgMismatchSuppressCheckbox.Content
+///
+/// IMPORTANT: WinUI3Localizer 2.3.0 only resolves Foo.Property keys (Length==2 split on '.').
+/// Three-segment keys like "MainView.Foo.Title" are silently dropped — controls render
+/// with null Title/Message. See LocalizerKeySegmentLimitTest below for enforcement.
 /// </summary>
 public class ResourceCoverageTests
 {
@@ -30,38 +34,38 @@ public class ResourceCoverageTests
         "LoginReloadButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip",
         "LoginReloadButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name",
         // Phase 26 RENAME-01: session rename dialog + pencil button tooltip
-        "Dialog.RenameSession.Title",
-        "Dialog.RenameSession.SaveButton",
-        "Dialog.RenameSession.CancelButton",
-        "Dialog.RenameSession.ResetButton",
+        "RenameSessionDialogTitle",
+        "RenameSessionDialogSaveButton",
+        "RenameSessionDialogCancelButton",
+        "RenameSessionDialogResetButton",
         "MainViewRenameButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip",
         // Phase 26 RENAME-02: Settings Sessions tab content (Plan 03)
         "SettingsTabSessions",
-        "Settings.Sessions.Header.Text",
-        "Settings.Sessions.NoSessions.Text",
-        "Settings.Sessions.OrphanLabel.Text",
+        "SettingsSessionsHeader.Text",
+        "SettingsSessionsNoSessions.Text",
+        "SettingsSessionsOrphanLabel.Text",
         "Settings.Sessions.ClearButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip",
         // Phase 27 L10N-01: localized last-fetch relative time on About tab
-        "LastFetchRelative.JustNow",
-        "LastFetchRelative.MinutesAgo",
-        "LastFetchRelative.HoursAgo",
-        "LastFetchRelative.DaysAgo",
-        "LastFetchRelative.Never",
+        "LastFetchJustNow",
+        "LastFetchMinutesAgo",
+        "LastFetchHoursAgo",
+        "LastFetchDaysAgo",
+        "LastFetchNever",
         // Phase 27 NEXTWIN-01..03: absolute next-window start label (D-NW-03 / CD-01)
-        "MainView.NextWindow.LabelDe",
-        "MainView.NextWindow.LabelEn",
+        "NextWindowLabelDe",
+        "NextWindowLabelEn",
         // Phase 27 PRICING-01..03: pricing-service silent-failure surfacing
-        "MainView.PricingErrorInfoBar.Title",
-        "MainView.PricingErrorInfoBar.Message",
+        "PricingErrorInfoBar.Title",
+        "PricingErrorInfoBar.Message",
         // Phase 27 ORGID-01..05 (D-OG-06): org-id picker localization
-        "Settings.Account.RedetectButton",
-        "Dialog.OrgPicker.Title",
-        "Dialog.OrgPicker.SwitchButton",
-        "Dialog.OrgPicker.CancelButton",
-        "MainView.OrgMismatchInfoBar.Title",
-        "MainView.OrgMismatchInfoBar.Message",
-        "MainView.OrgMismatchInfoBar.ResolveButton",
-        "MainView.OrgMismatchInfoBar.SuppressCheckbox",
+        "SettingsAccountRedetectButton.Text",
+        "OrgPickerDialogTitle",
+        "OrgPickerDialogSwitchButton",
+        "OrgPickerDialogCancelButton",
+        "OrgMismatchInfoBar.Title",
+        "OrgMismatchInfoBar.Message",
+        "OrgMismatchResolveButton.Text",
+        "OrgMismatchSuppressCheckbox.Content",
     ];
 
     private static readonly Dictionary<string, string> ExpectedEnUs = new()
@@ -72,38 +76,38 @@ public class ResourceCoverageTests
         ["InactiveSessionTooltip"] = "Inactive for > {0}min",
         ["LoginReloadButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Reload page",
         ["LoginReloadButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name"] = "Reload login page",
-        ["Dialog.RenameSession.Title"] = "Rename Session",
-        ["Dialog.RenameSession.SaveButton"] = "Save",
-        ["Dialog.RenameSession.CancelButton"] = "Cancel",
-        ["Dialog.RenameSession.ResetButton"] = "Reset",
+        ["RenameSessionDialogTitle"] = "Rename Session",
+        ["RenameSessionDialogSaveButton"] = "Save",
+        ["RenameSessionDialogCancelButton"] = "Cancel",
+        ["RenameSessionDialogResetButton"] = "Reset",
         ["MainViewRenameButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Rename session",
         // Phase 26 RENAME-02 Plan 03
         ["SettingsTabSessions"] = "Sessions",
-        ["Settings.Sessions.Header.Text"] = "CUSTOM SESSION NAMES",
-        ["Settings.Sessions.NoSessions.Text"] = "No sessions available.",
-        ["Settings.Sessions.OrphanLabel.Text"] = "Session not found",
+        ["SettingsSessionsHeader.Text"] = "CUSTOM SESSION NAMES",
+        ["SettingsSessionsNoSessions.Text"] = "No sessions available.",
+        ["SettingsSessionsOrphanLabel.Text"] = "Session not found",
         ["Settings.Sessions.ClearButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Remove custom name",
         // Phase 27 L10N-01
-        ["LastFetchRelative.JustNow"] = "just now",
-        ["LastFetchRelative.MinutesAgo"] = "{0} minutes ago",
-        ["LastFetchRelative.HoursAgo"] = "{0} hours ago",
-        ["LastFetchRelative.DaysAgo"] = "{0} days ago",
-        ["LastFetchRelative.Never"] = "Never",
+        ["LastFetchJustNow"] = "just now",
+        ["LastFetchMinutesAgo"] = "{0} minutes ago",
+        ["LastFetchHoursAgo"] = "{0} hours ago",
+        ["LastFetchDaysAgo"] = "{0} days ago",
+        ["LastFetchNever"] = "Never",
         // Phase 27 NEXTWIN-01..03: format patterns (same values in both locales — format strings, not human-readable)
-        ["MainView.NextWindow.LabelDe"] = "ddd d.M. HH:mm",
-        ["MainView.NextWindow.LabelEn"] = "ddd HH:mm",
+        ["NextWindowLabelDe"] = "ddd d.M. HH:mm",
+        ["NextWindowLabelEn"] = "ddd HH:mm",
         // Phase 27 PRICING-01..03: pricing-service silent-failure surfacing
-        ["MainView.PricingErrorInfoBar.Title"] = "Pricing data unavailable",
-        ["MainView.PricingErrorInfoBar.Message"] = "Cost figures may be inaccurate.",
+        ["PricingErrorInfoBar.Title"] = "Pricing data unavailable",
+        ["PricingErrorInfoBar.Message"] = "Cost figures may be inaccurate.",
         // Phase 27 ORGID-01..05 (D-OG-06): org-id picker localization
-        ["Settings.Account.RedetectButton"] = "Re-detect organization",
-        ["Dialog.OrgPicker.Title"] = "Select organization",
-        ["Dialog.OrgPicker.SwitchButton"] = "Switch",
-        ["Dialog.OrgPicker.CancelButton"] = "Cancel",
-        ["MainView.OrgMismatchInfoBar.Title"] = "Possible organization mismatch",
-        ["MainView.OrgMismatchInfoBar.Message"] = "5 polls returned 0% utilization while a session is active. Re-resolve organization?",
-        ["MainView.OrgMismatchInfoBar.ResolveButton"] = "Re-resolve",
-        ["MainView.OrgMismatchInfoBar.SuppressCheckbox"] = "Don't show again this session",
+        ["SettingsAccountRedetectButton.Text"] = "Re-detect organization",
+        ["OrgPickerDialogTitle"] = "Select organization",
+        ["OrgPickerDialogSwitchButton"] = "Switch",
+        ["OrgPickerDialogCancelButton"] = "Cancel",
+        ["OrgMismatchInfoBar.Title"] = "Possible organization mismatch",
+        ["OrgMismatchInfoBar.Message"] = "5 polls returned 0% utilization while a session is active. Re-resolve organization?",
+        ["OrgMismatchResolveButton.Text"] = "Re-resolve",
+        ["OrgMismatchSuppressCheckbox.Content"] = "Don't show again this session",
     };
 
     private static readonly Dictionary<string, string> ExpectedDeDe = new()
@@ -114,38 +118,38 @@ public class ResourceCoverageTests
         ["InactiveSessionTooltip"] = "Inaktiv seit > {0}min",
         ["LoginReloadButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Seite neu laden",
         ["LoginReloadButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name"] = "Login-Seite neu laden",
-        ["Dialog.RenameSession.Title"] = "Sitzung umbenennen",
-        ["Dialog.RenameSession.SaveButton"] = "Speichern",
-        ["Dialog.RenameSession.CancelButton"] = "Abbrechen",
-        ["Dialog.RenameSession.ResetButton"] = "Zurücksetzen",
+        ["RenameSessionDialogTitle"] = "Sitzung umbenennen",
+        ["RenameSessionDialogSaveButton"] = "Speichern",
+        ["RenameSessionDialogCancelButton"] = "Abbrechen",
+        ["RenameSessionDialogResetButton"] = "Zurücksetzen",
         ["MainViewRenameButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Sitzung umbenennen",
         // Phase 26 RENAME-02 Plan 03
         ["SettingsTabSessions"] = "Sitzungen",
-        ["Settings.Sessions.Header.Text"] = "EIGENE SITZUNGSNAMEN",
-        ["Settings.Sessions.NoSessions.Text"] = "Keine Sitzungen verfügbar.",
-        ["Settings.Sessions.OrphanLabel.Text"] = "Sitzung nicht gefunden",
+        ["SettingsSessionsHeader.Text"] = "EIGENE SITZUNGSNAMEN",
+        ["SettingsSessionsNoSessions.Text"] = "Keine Sitzungen verfügbar.",
+        ["SettingsSessionsOrphanLabel.Text"] = "Sitzung nicht gefunden",
         ["Settings.Sessions.ClearButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Eigenen Namen entfernen",
         // Phase 27 L10N-01
-        ["LastFetchRelative.JustNow"] = "gerade eben",
-        ["LastFetchRelative.MinutesAgo"] = "vor {0} Minuten",
-        ["LastFetchRelative.HoursAgo"] = "vor {0} Stunden",
-        ["LastFetchRelative.DaysAgo"] = "vor {0} Tagen",
-        ["LastFetchRelative.Never"] = "Nie",
+        ["LastFetchJustNow"] = "gerade eben",
+        ["LastFetchMinutesAgo"] = "vor {0} Minuten",
+        ["LastFetchHoursAgo"] = "vor {0} Stunden",
+        ["LastFetchDaysAgo"] = "vor {0} Tagen",
+        ["LastFetchNever"] = "Nie",
         // Phase 27 NEXTWIN-01..03: format patterns (same values in both locales — format strings, not human-readable)
-        ["MainView.NextWindow.LabelDe"] = "ddd d.M. HH:mm",
-        ["MainView.NextWindow.LabelEn"] = "ddd HH:mm",
+        ["NextWindowLabelDe"] = "ddd d.M. HH:mm",
+        ["NextWindowLabelEn"] = "ddd HH:mm",
         // Phase 27 PRICING-01..03: pricing-service silent-failure surfacing
-        ["MainView.PricingErrorInfoBar.Title"] = "Preisdaten nicht verfügbar",
-        ["MainView.PricingErrorInfoBar.Message"] = "Kostendaten können ungenau sein.",
+        ["PricingErrorInfoBar.Title"] = "Preisdaten nicht verfügbar",
+        ["PricingErrorInfoBar.Message"] = "Kostendaten können ungenau sein.",
         // Phase 27 ORGID-01..05 (D-OG-06): org-id picker localization
-        ["Settings.Account.RedetectButton"] = "Organisation neu erkennen",
-        ["Dialog.OrgPicker.Title"] = "Organisation auswählen",
-        ["Dialog.OrgPicker.SwitchButton"] = "Wechseln",
-        ["Dialog.OrgPicker.CancelButton"] = "Abbrechen",
-        ["MainView.OrgMismatchInfoBar.Title"] = "Möglicher Organisations-Mismatch",
-        ["MainView.OrgMismatchInfoBar.Message"] = "5 Abfragen ergaben 0% Auslastung bei aktiver Sitzung. Organisation neu erkennen?",
-        ["MainView.OrgMismatchInfoBar.ResolveButton"] = "Neu erkennen",
-        ["MainView.OrgMismatchInfoBar.SuppressCheckbox"] = "Diese Sitzung nicht mehr anzeigen",
+        ["SettingsAccountRedetectButton.Text"] = "Organisation neu erkennen",
+        ["OrgPickerDialogTitle"] = "Organisation auswählen",
+        ["OrgPickerDialogSwitchButton"] = "Wechseln",
+        ["OrgPickerDialogCancelButton"] = "Abbrechen",
+        ["OrgMismatchInfoBar.Title"] = "Möglicher Organisations-Mismatch",
+        ["OrgMismatchInfoBar.Message"] = "5 Abfragen ergaben 0% Auslastung bei aktiver Sitzung. Organisation neu erkennen?",
+        ["OrgMismatchResolveButton.Text"] = "Neu erkennen",
+        ["OrgMismatchSuppressCheckbox.Content"] = "Diese Sitzung nicht mehr anzeigen",
     };
 
     [Fact]
@@ -196,6 +200,127 @@ public class ResourceCoverageTests
         // and silent runtime resource lookup failures.
         AssertNoDuplicates(EnUsRelativePath, "en-US");
         AssertNoDuplicates(DeDeRelativePath, "de-DE");
+    }
+
+    [Fact]
+    public void XamlUidValues_AreSingleSegment_ForLocalizerLookup()
+    {
+        // WinUI3Localizer 2.3.0 only resolves XAML l:Uids.Uid values that split into exactly
+        // 2 segments on '.' (Library.cs:307: `if (uidSource.Split('.') is { Length: 2 } splitResult)`).
+        // Single-segment Uids like "FooInfoBar" succeed because the library then derives the
+        // property name from the resw key suffix (FooInfoBar.Title -> sets TitleProperty).
+        // Two-segment Uids like "Foo.Bar" make the library mis-parse "Foo" as the Uid and
+        // search for "BarProperty" on the target type — silently fails for InfoBar.Title etc.
+        //
+        // Exception: attached-property syntax "Foo.[using:NS]Class.Property" is library-handled.
+        //
+        // Regression guard for Phase 25 / 27: Toast.SessionVisibilityMigration,
+        // MainView.PricingErrorInfoBar, MainView.OrgMismatchInfoBar rendered with empty
+        // Title/Message because their UIDs had 2 segments before the suffix.
+        var xamlSourceDir = FindXamlSourceDir();
+        // Filter out MSBuild-generated copies in obj/ and bin/ — they are stale snapshots.
+        var xamlFiles = Directory
+            .EnumerateFiles(xamlSourceDir, "*.xaml", SearchOption.AllDirectories)
+            .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                     && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"));
+
+        var uidPattern = new System.Text.RegularExpressions.Regex(
+            @"l:Uids\.Uid\s*=\s*""([^""]+)""",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        var violations = new List<string>();
+        foreach (var xamlPath in xamlFiles)
+        {
+            var content = File.ReadAllText(xamlPath);
+            foreach (System.Text.RegularExpressions.Match m in uidPattern.Matches(content))
+            {
+                var uid = m.Groups[1].Value;
+                // Skip attached-property syntax — library handles "[using:...]" specially.
+                if (uid.Contains('[')) continue;
+                // Library splits on '.' and only accepts Length==2 — meaning the Uid value
+                // itself should NOT contain a '.' (the trailing .Property comes from the resw key).
+                if (uid.Contains('.'))
+                {
+                    violations.Add($"{Path.GetFileName(xamlPath)}: l:Uids.Uid=\"{uid}\" has '.' — library will mis-parse.");
+                }
+            }
+        }
+
+        Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void GetLocalizedStringCalls_UseSingleSegmentUids_ForLocalizerLookup()
+    {
+        // WinUI3Localizer 2.3.0 stores items keyed by the prefix BEFORE the first '.' in the resw
+        // key name (LocalizerBuilder.cs:206: name.IndexOf('.') splits Uid vs DependencyPropertyName).
+        // GetLocalizedString(uid) then looks up the full uid string against that prefix-keyed
+        // dictionary. Multi-segment uids like "Dialog.OrgPicker.Title" never match the internal
+        // dictionary key (which is just "Dialog") and silently return empty string.
+        //
+        // Regression guard for the entire OrgPicker / RenameSession / NextWindow / LastFetchRelative
+        // family of v1.5 bugs: all rendered with empty Title/Buttons/format strings because their
+        // GetLocalizedString uids had 2+ segments.
+        //
+        // Exception: PropertyName-suffixed uids (Foo.Bar where Bar is a DependencyProperty name)
+        // are technically allowed but unusual for direct API calls — we treat any '.' as suspicious.
+        var sourceDir = FindCSharpSourceDir();
+        var csFiles = Directory
+            .EnumerateFiles(sourceDir, "*.cs", SearchOption.AllDirectories)
+            .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                     && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"));
+
+        var callPattern = new System.Text.RegularExpressions.Regex(
+            @"GetLocalizedString\s*\(\s*""([^""]+)""\s*\)",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        var violations = new List<string>();
+        foreach (var csPath in csFiles)
+        {
+            var content = File.ReadAllText(csPath);
+            foreach (System.Text.RegularExpressions.Match m in callPattern.Matches(content))
+            {
+                var uid = m.Groups[1].Value;
+                if (uid.Contains('.'))
+                {
+                    violations.Add($"{Path.GetFileName(csPath)}: GetLocalizedString(\"{uid}\") has '.' — library returns empty.");
+                }
+            }
+        }
+
+        Assert.Empty(violations);
+    }
+
+    private static string FindCSharpSourceDir()
+    {
+        // Walk up from test output dir to find the main app's CCInfoWindows source root.
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(dir.FullName, "CCInfoWindows", "CCInfoWindows", "App.xaml.cs");
+            if (File.Exists(candidate))
+            {
+                return Path.Combine(dir.FullName, "CCInfoWindows", "CCInfoWindows");
+            }
+            dir = dir.Parent;
+        }
+        throw new InvalidOperationException("Could not locate CCInfoWindows C# source directory from test base.");
+    }
+
+    private static string FindXamlSourceDir()
+    {
+        // Walk up from test output dir until we find the Views folder containing MainView.xaml.
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(dir.FullName, "CCInfoWindows", "CCInfoWindows", "Views", "MainView.xaml");
+            if (File.Exists(candidate))
+            {
+                return Path.Combine(dir.FullName, "CCInfoWindows", "CCInfoWindows");
+            }
+            dir = dir.Parent;
+        }
+        throw new InvalidOperationException("Could not locate CCInfoWindows source directory from test base.");
     }
 
     private static Dictionary<string, string> LoadResw(string relativePath)
