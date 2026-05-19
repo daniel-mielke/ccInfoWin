@@ -84,7 +84,7 @@ public partial class SettingsViewModel : ObservableObject,
 
     public string AppVersionText =>
         System.Reflection.Assembly.GetExecutingAssembly()
-            .GetName().Version?.ToString(3) ?? "1.0.0";
+            .GetName().Version?.ToString(3) ?? "0.0.0";
 
     public bool IsTokenValid => _credentialService.HasValidToken();
 
