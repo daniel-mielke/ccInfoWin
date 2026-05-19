@@ -409,8 +409,8 @@ The public surface used by tests is `IJsonlService.GetContextWindow(string proje
   <done>BuildSubagentContext now filters on filesystem mtime; all 3 new tests pass; no regression in existing tests; old assistant-timestamp filter line fully removed.</done>
 </task>
 
-<task type="checkpoint:human-verify" gate="blocking">
-  <name>Task 3: Visual UAT — 4-parallel-subagent fixture in Release build</name>
+<task type="checkpoint:human-verify" gate="blocking" status="done" evidence="spec/v1.11.1-macOS/ccinfo-29-uat-4-subagents-postfix-v2.png" signed_off="2026-05-18">
+  <name>Task 3: Visual UAT — 4-parallel-subagent fixture in Release build (DONE — 4 of 4 rendered)</name>
   <what-built>
     Tasks 1 + 2 already landed: `BuildSubagentContext` now uses `File.GetLastWriteTimeUtc(file)` as the activity-cutoff source, matching macOS `findActiveAgents` semantics. Unit tests prove the filter shape is correct; this checkpoint confirms the fix actually resolves the visual UAT gap that triggered Phase 29 (4 agents in Claude CLI vs. 2 in ccInfo Windows pre-fix).
   </what-built>

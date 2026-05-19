@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: macOS v1.12.0 Feature Parity + Hardening
-status: milestone_archived
-stopped_at: v1.5 milestone archived; 34/34 reqs satisfied; 20-item interactive UAT pending
-last_updated: "2026-05-08T21:15:00.000Z"
-last_activity: 2026-05-08
+status: executing
+stopped_at: Phase 28 CLEANUP-01..04 + Final UAT Checklist complete. Milestone v1.5 all phases done.
+last_updated: "2026-05-18T19:44:59.322Z"
+last_activity: 2026-05-18 -- Phase 29 execution started
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 14
-  completed_plans: 14
-  percent: 100
+  total_phases: 6
+  completed_phases: 0
+  total_plans: 1
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-08)
 
 **Core value:** Developers can see their Claude usage limits (5-hour window, weekly quota, context window) at a glance in real-time, preventing unexpected throttling.
-**Current focus:** v1.5 milestone COMPLETE — ready for Final UAT sign-off (28-FINAL-UAT-CHECKLIST.md)
+**Current focus:** Phase 29 — Fix Subagent activity detection: switch from assistant-timestamp to filesystem mtime (macOS parity)
 
 ## Current Position
 
-Phase: 28 (v1.4 Cleanup & Final UAT) — COMPLETE
-Plan: 1 of 1 (executed directly from CONTEXT.md — no PLAN.md generated)
-Status: All 5 tasks complete; 28-SUMMARY.md committed; awaiting visual UAT sign-off
-Last activity: 2026-05-08
+Phase: 29 (Fix Subagent activity detection: switch from assistant-timestamp to filesystem mtime (macOS parity)) — EXECUTING
+Plan: 1 of 1
+Status: Executing Phase 29
+Last activity: 2026-05-18 -- Phase 29 execution started
 
 **v1.5 Phase Sequence (research-validated, do not reorder):**
 
@@ -110,6 +110,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 - D-OG-04: D-13 workaround — org-switch logout uses AuthStateChangedMessage(false) broadcast (MainViewModel is AddTransient)
 - D-OG-05: OrgMismatch InfoBar poll-counter threshold=5, in-memory suppression only (not persisted)
 
+### Roadmap Evolution
+
+- Phase 29 added (post-v1.5 archive): Fix Subagent activity detection: switch from assistant-timestamp to filesystem mtime (macOS parity). Driver: visual UAT discovered that during long tool-calls subagents fall out of the 30s `lastEntry.Timestamp` cutoff (`JsonlService.cs:712–716`); macOS original (`JSONLParser.swift:457–483, findActiveAgents`) uses `contentModificationDate` of the file instead, which captures every tool-result write — robust against silent assistant gaps. Evidence: `spec/v1.11.1-macOS/{claude-cli-4-agents-aktiv,ccinfo-nur-2-sub-agents}.png` show 4 active agents in CLI vs. 2 in ccInfo.
+
 ### Open Tech Debt (carried into v1.5)
 
 **v1.4 code-review findings (2026-05-07, scheduled in v1.5):**
@@ -141,4 +145,3 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 Last session: 2026-05-08T20:47:00Z
 Stopped at: Phase 28 CLEANUP-01..04 + Final UAT Checklist complete. Milestone v1.5 all phases done.
 Resume file: .planning/phases/28-v1-4-cleanup-final-uat/28-FINAL-UAT-CHECKLIST.md (visual UAT pending)
-
