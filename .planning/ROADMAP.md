@@ -7,7 +7,7 @@
 - ✅ **v1.2 macOS v1.8.3 Feature Parity** — Phases 12-15 (shipped 2026-04-12)
 - ✅ **v1.3 macOS v1.10.0 Feature Parity** — Phases 16-19 (shipped 2026-04-14)
 - ✅ **v1.4 macOS v1.11.1 Feature Parity** — Phases 20-23 (shipped 2026-05-07)
-- 🏁 **v1.5 macOS v1.12.0 Feature Parity + Hardening** — Phases 24-28 (code complete 2026-05-08; visual UAT pending)
+- 🏁 **v1.5 macOS v1.12.0 Feature Parity + Hardening** — Phases 24-29 (code complete 2026-05-08; visual UAT signed off 2026-05-18; mtime hotfix landed 2026-05-19)
 
 ## Phases
 
@@ -87,7 +87,7 @@ Audit: `.planning/milestones/v1.4-MILESTONE-AUDIT.md`
 </details>
 
 <details open>
-<summary>✅ v1.5 macOS v1.12.0 Feature Parity + Hardening (Phases 24-28) — SHIPPED 2026-05-08 (visual UAT pending)</summary>
+<summary>✅ v1.5 macOS v1.12.0 Feature Parity + Hardening (Phases 24-29) — SHIPPED 2026-05-19 (visual UAT signed off; mtime hotfix landed)</summary>
 
 **Milestone Goal:** Bring CCInfoWindows to upstream stefanlange/ccInfo v1.12.0 feature parity (next 5h-window start time label + persistent session renaming) while remediating six v1.4 code-review findings and fixing three reproducible cold-start / silent-failure bugs. Build order is research-validated (foundation → dependent UX → cleanup).
 
@@ -96,6 +96,7 @@ Audit: `.planning/milestones/v1.4-MILESTONE-AUDIT.md`
 - [x] **Phase 26: Persistent Session Renaming** — Pencil button + ContentDialog in MainView, new "Sessions" Settings tab (5th segment), `ISessionNameStore` JSON persistence following G-2 pattern
 - [x] **Phase 27: Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N** — A1 label below countdown, B2 multi-account org picker, B3 pricing-error InfoBar, M-2 `LastFetchRelativeTime` localization
 - [x] **Phase 28: v1.4 Cleanup & Final UAT** — Delete orphan `LogoutRequestedMessage`, restore real default for `_contextModelBadgeColor` (G-3 brushFactory seam), bundle 3 view nits, document G-3, generate v1.5 Final UAT checklist (17 visual items deferred from Ph25-27)
+- [x] **Phase 29: Subagent Activity Detection — mtime parity** — Replace `lastEntry.Timestamp` cutoff in `JsonlService.BuildSubagentContext` with `File.GetLastWriteTimeUtc(file)` matching macOS `findActiveAgents` / `contentModificationDate`; 3 new xUnit tests; visual UAT confirms 4-of-4 parallel subagents render where pre-fix only 2 did
 
 </details>
 
@@ -382,6 +383,7 @@ Plans:
 | 26. Persistent Session Renaming | v1.5 | 3/3 | Complete   | 2026-05-08 |
 | 27. Next-Window Label, Org-ID Picker, Pricing Surfacing & L10N | v1.5 | 4/4 | Complete   | 2026-05-08 |
 | 28. v1.4 Cleanup & Final UAT | v1.5 | 0/0 | Not started | - |
+| 29. Subagent Activity Detection (mtime parity) | v1.5 | 1/1 | Complete | 2026-05-19 |
 
 ### Phase 29: Fix Subagent activity detection: switch from assistant-timestamp to filesystem mtime (macOS parity)
 
@@ -396,4 +398,4 @@ Plans:
   5. No regression on existing `JsonlServiceTests` / `JsonlServiceColdStartTests` / `JsonlServiceWatcherTests` beyond the 15 documented pre-existing baseline failures
 **Plans**: 1 plan
 Plans:
-- [ ] 29-01-mtime-cutoff-PLAN.md — JsonlServiceSubagentTests (RED) + BuildSubagentContext mtime-cutoff patch (GREEN) + 4-subagent visual UAT checkpoint
+- [x] 29-01-mtime-cutoff-PLAN.md — JsonlServiceSubagentTests (RED) + BuildSubagentContext mtime-cutoff patch (GREEN) + 4-subagent visual UAT checkpoint (completed 2026-05-19)

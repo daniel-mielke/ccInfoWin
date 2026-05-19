@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.5
-milestone_name: macOS v1.12.0 Feature Parity + Hardening
-status: executing
+milestone_name: milestone
+status: completed
 stopped_at: Phase 28 CLEANUP-01..04 + Final UAT Checklist complete. Milestone v1.5 all phases done.
-last_updated: "2026-05-18T19:44:59.322Z"
-last_activity: 2026-05-18 -- Phase 29 execution started
+last_updated: "2026-05-19T09:13:53.293Z"
+last_activity: 2026-05-19 -- Phase 29 marked complete
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 1
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 100
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-08)
 
 ## Current Position
 
-Phase: 29 (Fix Subagent activity detection: switch from assistant-timestamp to filesystem mtime (macOS parity)) — EXECUTING
+Phase: 29 — COMPLETE
 Plan: 1 of 1
-Status: Executing Phase 29
-Last activity: 2026-05-18 -- Phase 29 execution started
+Status: Phase 29 complete
+Last activity: 2026-05-19 -- Phase 29 marked complete
 
 **v1.5 Phase Sequence (research-validated, do not reorder):**
 
