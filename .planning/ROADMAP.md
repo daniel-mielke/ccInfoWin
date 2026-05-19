@@ -7,7 +7,7 @@
 - ✅ **v1.2 macOS v1.8.3 Feature Parity** — Phases 12-15 (shipped 2026-04-12)
 - ✅ **v1.3 macOS v1.10.0 Feature Parity** — Phases 16-19 (shipped 2026-04-14)
 - ✅ **v1.4 macOS v1.11.1 Feature Parity** — Phases 20-23 (shipped 2026-05-07)
-- 🏁 **v1.5 macOS v1.12.0 Feature Parity + Hardening** — Phases 24-29 (code complete 2026-05-08; visual UAT signed off 2026-05-18; mtime hotfix landed 2026-05-19)
+- ✅ **v1.5 macOS v1.12.0 Feature Parity + Hardening** — Phases 24-29 (shipped 2026-05-19)
 
 ## Phases
 
@@ -102,9 +102,9 @@ Audit: `.planning/milestones/v1.4-MILESTONE-AUDIT.md`
 
 ## Active Phases
 
-**Next up: Phase 24 — Dispatcher Foundation & Marshaling Convention**
+**Milestone v1.5 complete (shipped 2026-05-19).** Audit: `.planning/milestones/v1.5-MILESTONE-AUDIT.md`
 
-Run `/gsd-plan-phase 24` to begin.
+Run `/gsd-new-milestone` to plan the next milestone (v1.6).
 
 <details>
 <summary>Phase details from completed milestones (collapsed)</summary>
@@ -385,17 +385,5 @@ Plans:
 | 28. v1.4 Cleanup & Final UAT | v1.5 | 0/0 | Not started | - |
 | 29. Subagent Activity Detection (mtime parity) | v1.5 | 1/1 | Complete | 2026-05-19 |
 
-### Phase 29: Fix Subagent activity detection: switch from assistant-timestamp to filesystem mtime (macOS parity)
-
-**Goal**: Subagents stay visible inside the 30-second activity window during long tool-calls — `BuildSubagentContext` filters on `File.GetLastWriteTimeUtc` (matching macOS `findActiveAgents` / `contentModificationDate`) instead of the last assistant entry timestamp; UAT confirms 4-of-4 parallel subagents render where pre-fix only 2 did
-**Requirements**: SUBAGENT-01, SUBAGENT-02, SUBAGENT-03, SUBAGENT-04, SUBAGENT-05
-**Depends on**: Phase 28
-**Success Criteria** (what must be TRUE):
-  1. `JsonlService.BuildSubagentContext` uses `File.GetLastWriteTimeUtc(file)` (converted via `new DateTimeOffset(mtimeUtc, TimeSpan.Zero)`) as the activity-cutoff source; the cutoff is applied BEFORE `ReadTailLines` so stale files are never opened
-  2. `SubagentContextData.LastActivity` reflects the mtime, NOT `lastEntry.Timestamp` (verified by unit test)
-  3. New `JsonlServiceSubagentTests` xUnit class covers stale-entry-fresh-mtime → visible, all-stale → filtered, and LastActivity-tracks-mtime semantics
-  4. Visual UAT with a 4-parallel-subagent fixture renders 4 of 4 subagents in the Kontextfenster panel (regression baseline: 2 of 4 pre-fix)
-  5. No regression on existing `JsonlServiceTests` / `JsonlServiceColdStartTests` / `JsonlServiceWatcherTests` beyond the 15 documented pre-existing baseline failures
-**Plans**: 1 plan
-Plans:
-- [x] 29-01-mtime-cutoff-PLAN.md — JsonlServiceSubagentTests (RED) + BuildSubagentContext mtime-cutoff patch (GREEN) + 4-subagent visual UAT checkpoint (completed 2026-05-19)
+**Phase 29 details archived** to `.planning/milestones/v1.5-phases/29-fix-subagent-activity-detection-switch-from-assistant-timest/`.
+Full audit: `.planning/milestones/v1.5-MILESTONE-AUDIT.md`
