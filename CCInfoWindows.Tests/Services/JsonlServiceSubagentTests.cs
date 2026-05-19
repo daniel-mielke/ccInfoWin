@@ -13,9 +13,11 @@ namespace CCInfoWindows.Tests.Services;
 /// </summary>
 public class JsonlServiceSubagentTests : IDisposable
 {
-    // Use an existing local directory name so JsonlService.IsValidProjectDirectory
-    // resolves it via DecodeProjectDirectory fallback (no cwd field in fixture).
-    private const string ProjectDirName = "D--myProjects-ccInfoWin";
+    // Synthetic project name — decodes via SessionNameHelper.DecodeProjectDirectory
+    // to "fixture" without depending on any real machine path. Hermetic for CI and
+    // any maintainer layout. Future-proof against IsValidProjectDirectory creep into
+    // GetContextWindow (Phase 25 backlog).
+    private const string ProjectDirName = "X--phase29-subagent-fixture";
 
     private readonly string _tempDir;
 
