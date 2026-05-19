@@ -58,7 +58,7 @@ public class JsonlServiceSubagentTests : IDisposable
         File.SetLastWriteTimeUtc(agentFile, freshMtime);
         AssertMtimeWasSet(agentFile, freshMtime);
 
-        var svc = new JsonlService(projectsDirectoryOverride: _tempDir);
+        using var svc = new JsonlService(projectsDirectoryOverride: _tempDir);
         await svc.InitializeAsync();
 
         // Act
@@ -68,8 +68,6 @@ public class JsonlServiceSubagentTests : IDisposable
         // Pre-fix: FAILS (old filter compares 5-min-old entry timestamp < cutoff).
         // Post-fix: PASSES (mtime is fresh).
         Assert.Contains(subagents, s => s.AgentId == "alpha");
-
-        svc.Stop();
     }
 
     // -------------------------------------------------------------------------
@@ -92,7 +90,7 @@ public class JsonlServiceSubagentTests : IDisposable
         File.SetLastWriteTimeUtc(agentFile, staleMtime);
         AssertMtimeWasSet(agentFile, staleMtime);
 
-        var svc = new JsonlService(projectsDirectoryOverride: _tempDir);
+        using var svc = new JsonlService(projectsDirectoryOverride: _tempDir);
         await svc.InitializeAsync();
 
         // Act
@@ -100,8 +98,6 @@ public class JsonlServiceSubagentTests : IDisposable
 
         // Assert: subagent must NOT appear — 30s cutoff still enforced.
         Assert.DoesNotContain(subagents, s => s.AgentId == "bravo");
-
-        svc.Stop();
     }
 
     // -------------------------------------------------------------------------
@@ -128,7 +124,7 @@ public class JsonlServiceSubagentTests : IDisposable
         File.SetLastWriteTimeUtc(agentFile, freshMtime);
         AssertMtimeWasSet(agentFile, freshMtime);
 
-        var svc = new JsonlService(projectsDirectoryOverride: _tempDir);
+        using var svc = new JsonlService(projectsDirectoryOverride: _tempDir);
         await svc.InitializeAsync();
 
         // Act
@@ -141,8 +137,6 @@ public class JsonlServiceSubagentTests : IDisposable
         Assert.True(
             deltaFromMtime < TimeSpan.FromSeconds(2),
             $"LastActivity should track mtime (delta={deltaFromMtime}), not assistant timestamp (delta={deltaFromAssistant}).");
-
-        svc.Stop();
     }
 
     // -------------------------------------------------------------------------
