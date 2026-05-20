@@ -2,14 +2,17 @@
 
 Real-time Claude Code usage monitoring for Windows. A Windows port of [ccInfo](https://github.com/stefanlange/ccInfo) (macOS).
 
+**Current version:** v1.5.0 — macOS v1.12.0 feature parity + hardening.
+
 ## Features
 
-- **5-Hour Usage Window** — Interactive area chart with color-coded zones (green/yellow/orange/red), reset countdown, and glow indicator
+- **5-Hour Usage Window** — Interactive area chart with color-coded zones (green/yellow/orange/red), reset countdown with absolute next-window start time, and glow indicator
 - **Weekly Quota** — Separate Sonnet and Opus progress bars with reset dates
-- **Context Window** — Real-time context utilization with model badge and autocompact warning
-- **Multi-Session Management** — Switch between active Claude Code sessions with project names
+- **Context Window** — Real-time context utilization with model badge, autocompact warning, and live list of parallel subagents with per-agent context %
+- **Multi-Session Management** — Switch between active Claude Code sessions with project names, configurable visibility window (7/30/90 days or unlimited), and pencil-button rename with persistent custom names
+- **Multi-Org Support** — Re-detect organization picker for users with multiple Anthropic accounts
 - **Token Statistics** — Input/output/cache tokens aggregated by session, today, week, month
-- **Cost Analytics** — Live pricing from LiteLLM, tiered pricing for 1M-context models, cost per time period
+- **Cost Analytics** — Live pricing from LiteLLM, tiered pricing for 1M-context models, cost per time period, in-app warning when pricing data is unavailable
 - **Chart Export** — Save 5-hour chart as PNG or copy to clipboard
 - **Auto-Update** — Hourly version check with in-app update banner
 - **Localization** — German and English (follows system language or manual selection)
