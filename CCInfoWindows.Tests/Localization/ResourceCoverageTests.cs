@@ -14,7 +14,7 @@ namespace CCInfoWindows.Tests.Localization;
 ///   - Plan 27-01 (L10N) appends LastFetch{JustNow,MinutesAgo,HoursAgo,DaysAgo,Never}
 ///   - Plan 27-02 (NEXTWIN) appends NextWindowLabelDe / NextWindowLabelEn
 ///   - Plan 27-03 (PRICING) appends PricingErrorInfoBar.Title / .Message
-///   - Plan 27-04 (ORGID) appends SettingsAccountRedetectButton.Text + Dialog.OrgPicker.* + OrgMismatchInfoBar.* + OrgMismatchResolveButton.Text + OrgMismatchSuppressCheckbox.Content
+///   - Plan 27-04 (ORGID) appends SettingsAccountRedetectButton.Text + Dialog.OrgPicker.*
 ///
 /// IMPORTANT: WinUI3Localizer 2.3.0 only resolves Foo.Property keys (Length==2 split on '.').
 /// Three-segment keys like "MainView.Foo.Title" are silently dropped — controls render
@@ -62,10 +62,6 @@ public class ResourceCoverageTests
         "OrgPickerDialogTitle",
         "OrgPickerDialogSwitchButton",
         "OrgPickerDialogCancelButton",
-        "OrgMismatchInfoBar.Title",
-        "OrgMismatchInfoBar.Message",
-        "OrgMismatchResolveButton.Text",
-        "OrgMismatchSuppressCheckbox.Content",
     ];
 
     private static readonly Dictionary<string, string> ExpectedEnUs = new()
@@ -104,10 +100,6 @@ public class ResourceCoverageTests
         ["OrgPickerDialogTitle"] = "Select organization",
         ["OrgPickerDialogSwitchButton"] = "Switch",
         ["OrgPickerDialogCancelButton"] = "Cancel",
-        ["OrgMismatchInfoBar.Title"] = "Possible organization mismatch",
-        ["OrgMismatchInfoBar.Message"] = "5 polls returned 0% utilization while a session is active. Re-resolve organization?",
-        ["OrgMismatchResolveButton.Text"] = "Re-resolve",
-        ["OrgMismatchSuppressCheckbox.Content"] = "Don't show again this session",
     };
 
     private static readonly Dictionary<string, string> ExpectedDeDe = new()
@@ -146,10 +138,6 @@ public class ResourceCoverageTests
         ["OrgPickerDialogTitle"] = "Organisation auswählen",
         ["OrgPickerDialogSwitchButton"] = "Wechseln",
         ["OrgPickerDialogCancelButton"] = "Abbrechen",
-        ["OrgMismatchInfoBar.Title"] = "Möglicher Organisations-Mismatch",
-        ["OrgMismatchInfoBar.Message"] = "5 Abfragen ergaben 0% Auslastung bei aktiver Sitzung. Organisation neu erkennen?",
-        ["OrgMismatchResolveButton.Text"] = "Neu erkennen",
-        ["OrgMismatchSuppressCheckbox.Content"] = "Diese Sitzung nicht mehr anzeigen",
     };
 
     [Fact]
@@ -214,9 +202,9 @@ public class ResourceCoverageTests
         //
         // Exception: attached-property syntax "Foo.[using:NS]Class.Property" is library-handled.
         //
-        // Regression guard for Phase 25 / 27: Toast.SessionVisibilityMigration,
-        // MainView.PricingErrorInfoBar, MainView.OrgMismatchInfoBar rendered with empty
-        // Title/Message because their UIDs had 2 segments before the suffix.
+        // Regression guard for Phase 25 / 27: Toast.SessionVisibilityMigration and
+        // MainView.PricingErrorInfoBar rendered with empty Title/Message because their
+        // UIDs had 2 segments before the suffix.
         var xamlSourceDir = FindXamlSourceDir();
         // Filter out MSBuild-generated copies in obj/ and bin/ — they are stale snapshots.
         var xamlFiles = Directory

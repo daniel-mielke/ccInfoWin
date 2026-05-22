@@ -442,18 +442,5 @@
   <data name="OrgPickerDialogCancelButton" xml:space="preserve">
     <value>Abbrechen</value>
   </data>
-  <!-- Keys must be single-segment and end with a valid DependencyProperty name (.Title, .Message, .Text, .Content). -->
-  <data name="OrgMismatchInfoBar.Title" xml:space="preserve">
-    <value>Möglicher Organisations-Mismatch</value>
-  </data>
-  <data name="OrgMismatchInfoBar.Message" xml:space="preserve">
-    <value>5 Abfragen ergaben 0% Auslastung bei aktiver Sitzung. Organisation neu erkennen?</value>
-  </data>
-  <data name="OrgMismatchResolveButton.Text" xml:space="preserve">
-    <value>Neu erkennen</value>
-  </data>
-  <data name="OrgMismatchSuppressCheckbox.Content" xml:space="preserve">
-    <value>Diese Sitzung nicht mehr anzeigen</value>
-  </data>
 
 </root>

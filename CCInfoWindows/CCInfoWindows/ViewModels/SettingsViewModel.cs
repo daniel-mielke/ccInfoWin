@@ -17,8 +17,7 @@ namespace CCInfoWindows.ViewModels;
 /// Settings page ViewModel with refresh interval selection, dark/light mode toggle, logout,
 /// and (Phase 26) session rename management via a dedicated Sessions tab.
 /// </summary>
-public partial class SettingsViewModel : ObservableObject,
-    IRecipient<OpenOrgPickerRequestedMessage>   // ORGID-03 / G-1
+public partial class SettingsViewModel : ObservableObject
 {
     private readonly ISettingsService _settingsService;
     private readonly ICredentialService _credentialService;
@@ -286,16 +285,6 @@ public partial class SettingsViewModel : ObservableObject,
     public void Deactivate()
     {
         _sessionNameStore.NameChanged -= OnStoreNameChanged;
-        WeakReferenceMessenger.Default.Unregister<OpenOrgPickerRequestedMessage>(this);
-    }
-
-    /// <summary>
-    /// ORGID-03 / G-1: receive open-picker requests dispatched from MainViewModel.
-    /// Body wraps in _dispatcherQueue.TryEnqueue per G-1 convention.
-    /// </summary>
-    public void Receive(OpenOrgPickerRequestedMessage message)
-    {
-        _dispatcherQueue.TryEnqueue(() => _ = OpenOrgPickerCommand.ExecuteAsync(null));
     }
 
     private void OnStoreNameChanged(object? sender, SessionNameChangedEventArgs args)
@@ -352,11 +341,6 @@ public partial class SettingsViewModel : ObservableObject,
         _jsonlService = jsonlService;
         _dispatcherQueue = dispatcherQueue;
         _apiService = apiService;
-
-        // ORGID-03 / G-1: receive open-picker requests from MainViewModel.ResolveOrgMismatchCommand
-        WeakReferenceMessenger.Default.Register<SettingsViewModel, OpenOrgPickerRequestedMessage>(
-            this,
-            (r, m) => r._dispatcherQueue.TryEnqueue(() => _ = r.OpenOrgPickerCommand.ExecuteAsync(null)));
     }
 
     private static readonly int[] ThresholdMinuteOptions = [15, 30, 60, 120];

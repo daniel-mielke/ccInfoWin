@@ -442,18 +442,5 @@
   <data name="OrgPickerDialogCancelButton" xml:space="preserve">
     <value>Cancel</value>
   </data>
-  <!-- Keys must be single-segment and end with a valid DependencyProperty name (.Title, .Message, .Text, .Content). -->
-  <data name="OrgMismatchInfoBar.Title" xml:space="preserve">
-    <value>Possible organization mismatch</value>
-  </data>
-  <data name="OrgMismatchInfoBar.Message" xml:space="preserve">
-    <value>5 polls returned 0% utilization while a session is active. Re-resolve organization?</value>
-  </data>
-  <data name="OrgMismatchResolveButton.Text" xml:space="preserve">
-    <value>Re-resolve</value>
-  </data>
-  <data name="OrgMismatchSuppressCheckbox.Content" xml:space="preserve">
-    <value>Don't show again this session</value>
-  </data>
 
 </root>
