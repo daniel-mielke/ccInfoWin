@@ -633,7 +633,15 @@ public partial class MainViewModel : ObservableObject,
 
         var now = DateTimeOffset.UtcNow;
         var windowDuration = TimeSpan.FromHours(5);
-        var cutoff = now - windowDuration;
+
+        // Cutoff is the start of the CURRENT 5h window (apiResetsAt - 5h), not now - 5h.
+        // Falls back to now - 5h only if the API never delivered a resetsAt. This prevents
+        // points from the prior window leaking in when IsWindowReset misses (e.g. on cold
+        // start where stored ResetsAt is null and the persisted history still holds samples
+        // from a window that ended minutes ago).
+        var cutoff = apiResetsAt.HasValue
+            ? apiResetsAt.Value - windowDuration
+            : now - windowDuration;
         history.Points.RemoveAll(p => p.Timestamp < cutoff);
 
         history.Points.Add(new UsageHistoryPoint
