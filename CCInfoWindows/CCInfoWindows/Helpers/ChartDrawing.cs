@@ -100,24 +100,23 @@ public static class ChartDrawing
             using var pathBuilder = new CanvasPathBuilder(resourceCreator);
             var firstX = offsetX + ChartRenderer.LeftMargin
                 + ChartRenderer.ToX(points[startIndex].Timestamp, windowStart, plotWidth);
-            pathBuilder.BeginFigure(firstX, baselineY);
+            var firstY = offsetY + ChartRenderer.ToY(points[startIndex].Utilization, plotHeight);
 
-            for (var i = startIndex; i <= endIndex; i++)
+            // Anchor at (windowStart, 0) and step-up to the first sample so the chart
+            // begins flat at the baseline instead of as an isolated vertical riser at firstX.
+            var windowStartX = offsetX + ChartRenderer.LeftMargin;
+            pathBuilder.BeginFigure(windowStartX, baselineY);
+            pathBuilder.AddLine(firstX, baselineY);
+            pathBuilder.AddLine(firstX, firstY);
+
+            for (var i = startIndex + 1; i <= endIndex; i++)
             {
                 var x = offsetX + ChartRenderer.LeftMargin
                     + ChartRenderer.ToX(points[i].Timestamp, windowStart, plotWidth);
                 var y = offsetY + ChartRenderer.ToY(points[i].Utilization, plotHeight);
-
-                if (i == startIndex)
-                {
-                    pathBuilder.AddLine(x, y);
-                }
-                else
-                {
-                    var prevY = offsetY + ChartRenderer.ToY(points[i - 1].Utilization, plotHeight);
-                    pathBuilder.AddLine(x, prevY);
-                    pathBuilder.AddLine(x, y);
-                }
+                var prevY = offsetY + ChartRenderer.ToY(points[i - 1].Utilization, plotHeight);
+                pathBuilder.AddLine(x, prevY);
+                pathBuilder.AddLine(x, y);
             }
 
             var lastY = offsetY + ChartRenderer.ToY(points[endIndex].Utilization, plotHeight);
@@ -170,7 +169,15 @@ public static class ChartDrawing
             var firstX = offsetX + ChartRenderer.LeftMargin
                 + ChartRenderer.ToX(points[startIndex].Timestamp, windowStart, plotWidth);
             var firstY = offsetY + ChartRenderer.ToY(points[startIndex].Utilization, plotHeight);
-            pathBuilder.BeginFigure(firstX, firstY);
+
+            // Anchor at (windowStart, 0): horizontal baseline run from windowStartX to firstX,
+            // then vertical step up to firstY — same step pattern as inter-point segments,
+            // keeps the top line aligned with the fill geometry.
+            var baselineY = offsetY + ChartRenderer.ToY(0.0, plotHeight);
+            var windowStartX = offsetX + ChartRenderer.LeftMargin;
+            pathBuilder.BeginFigure(windowStartX, baselineY);
+            pathBuilder.AddLine(firstX, baselineY);
+            pathBuilder.AddLine(firstX, firstY);
 
             for (var i = startIndex + 1; i <= endIndex; i++)
             {
