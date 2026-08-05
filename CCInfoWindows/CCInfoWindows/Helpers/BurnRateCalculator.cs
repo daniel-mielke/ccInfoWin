@@ -14,6 +14,9 @@ public static class BurnRateCalculator
     private const double MaxUtilization = 100.0;
     private const double NearZeroThreshold = 1e-10;
 
+    /// <summary>Upper bound for a usable ETA — one 5-hour window has already elapsed by then.</summary>
+    private const double MaxSecondsToLimit = 5 * 60 * 60;
+
     /// <summary>
     /// Predicts the burn rate based on recent usage history.
     /// Returns null when no warning should be shown.
@@ -73,6 +76,13 @@ public static class BurnRateCalculator
             return null;
 
         var secondsToLimit = (MaxUtilization - currentUtilization) / slope;
+
+        // A near-flat slope surviving the checks above (float noise on identical samples)
+        // yields an astronomic ETA that overflows AddSeconds. Beyond the window there is
+        // nothing to warn about anyway.
+        if (!double.IsFinite(secondsToLimit) || secondsToLimit > MaxSecondsToLimit)
+            return null;
+
         var hitsLimitAt = DateTimeOffset.UtcNow.AddSeconds(secondsToLimit);
 
         if (hitsLimitAt >= resetsAt.Value)
