@@ -127,10 +127,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent v1.4 additions:
 
 **Carried from earlier milestones / phase backlog (memory-tracked):**
 
-- Cold-start session scanning (`backlog_session_dropdown_recent_sessions.md`) → Phase 25 (DROPDOWN-01..06)
-- Multi-account org-id picker (`backlog_org_id_picker.md`) → Phase 27 (ORGID-01..05)
-- Pricing service silent failure (`backlog_pricing_never_loaded.md`) → Phase 27 (PRICING-01..03)
-- Next 5h-window start label (`backlog_next_window_start_label.md`) → Phase 27 (NEXTWIN-01..03)
+- Cold-start session scanning (`.planning/research/rootcause-session-dropdown.md`) → Phase 25 (DROPDOWN-01..06)
+- Multi-account org-id picker (`.planning/research/rootcause-org-id-picker.md`) → Phase 27 (ORGID-01..05)
+- Pricing service silent failure (`.planning/research/rootcause-pricing-never-loaded.md`) → Phase 27 (PRICING-01..03)
+- Next 5h-window start label (`.planning/research/rootcause-next-window-start-label.md`) → Phase 27 (NEXTWIN-01..03)
 - WeakReferenceMessenger + AddTransient ViewModels = recipient GC pitfall — codified as G-1 convention in Phase 24
 - 2 pre-existing `ClaudeApiServiceTests` failures (parameter naming mismatch, production unaffected — out of scope per REQUIREMENTS.md)
 - 13 pre-existing `JsonlServiceTests` failures (parameter naming mismatch, production unaffected — out of scope per REQUIREMENTS.md)
