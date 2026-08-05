@@ -525,8 +525,10 @@ public partial class MainViewModel : ObservableObject,
         catch (Exception ex)
         {
             HasApiError = true;
-            ApiErrorMessage = "API request failed. Please try again.";
-            Debug.WriteLine($"[MainViewModel] PollUsage: {ex.Message}");
+            // Surface ex.Message — the previous generic text made bridge/org-id failures
+            // indistinguishable from network errors outside a debugger.
+            ApiErrorMessage = $"API request failed: {ex.Message}";
+            Debug.WriteLine($"[MainViewModel] PollUsage: {ex}");
         }
     }
 

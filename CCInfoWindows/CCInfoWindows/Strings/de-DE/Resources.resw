@@ -442,5 +442,8 @@
   <data name="OrgPickerDialogCancelButton" xml:space="preserve">
     <value>Abbrechen</value>
   </data>
+  <data name="OrgPickerDialogNoOrgs" xml:space="preserve">
+    <value>Organisationen konnten nicht geladen werden. Die Verbindung zu claude.ai ist unterbrochen — starte die App neu oder melde dich erneut an.</value>
+  </data>
 
 </root>

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using CCInfoWindows.Messages;
 using CCInfoWindows.Models;
@@ -59,10 +60,10 @@ public class ClaudeApiService : IClaudeApiService
             }
         }
 
-        var encodedOrgId = Uri.EscapeDataString(orgId);
-        var url = $"{BaseUrl}/api/organizations/{encodedOrgId}/usage";
+        var url = $"{BaseUrl}/api/organizations/{Uri.EscapeDataString(orgId)}/usage";
 
         Exception? lastException = null;
+        var orgIdReresolved = false;
 
         for (int attempt = 1; attempt <= MaxAttempts; attempt++)
         {
@@ -87,6 +88,23 @@ public class ClaudeApiService : IClaudeApiService
             {
                 WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
                 return null;
+            }
+            catch (HttpFetchException ex) when (ex.StatusCode is 403 or 404 && !orgIdReresolved)
+            {
+                // A 403/404 on this endpoint almost always means the cached org id no longer
+                // belongs to the current session (e.g. re-login into a different account).
+                // Re-resolve once against /api/organizations and retry with the fresh id
+                // instead of failing every poll until the user logs out manually.
+                orgIdReresolved = true;
+                _credentialService.ClearOrganizationId();
+
+                var freshOrgId = await TryMigrateOrgIdAsync(ct);
+                if (freshOrgId is null || freshOrgId == orgId) throw;
+
+                Debug.WriteLine($"[ClaudeApiService] org id re-resolved after HTTP {ex.StatusCode}");
+                orgId = freshOrgId;
+                url = $"{BaseUrl}/api/organizations/{Uri.EscapeDataString(orgId)}/usage";
+                attempt--;  // this attempt probed a stale id — don't spend it
             }
             catch (HttpFetchException ex) when (ex.StatusCode is >= 400 and < 500)
             {
@@ -129,9 +147,16 @@ public class ClaudeApiService : IClaudeApiService
         {
             ct.ThrowIfCancellationRequested();
 
+            if (!_bridge.IsInitialized)
+            {
+                Debug.WriteLine("[ClaudeApiService] ListAvailableOrganizations: bridge not initialized");
+                return Array.Empty<OrganizationInfo>();
+            }
+
             var responseBody = await _bridge.FetchJsonAsync($"{BaseUrl}/api/organizations");
             if (responseBody is null)
             {
+                Debug.WriteLine("[ClaudeApiService] ListAvailableOrganizations: null response body");
                 return Array.Empty<OrganizationInfo>();
             }
 
@@ -140,6 +165,7 @@ public class ClaudeApiService : IClaudeApiService
 
             if (root.ValueKind != JsonValueKind.Array)
             {
+                Debug.WriteLine($"[ClaudeApiService] ListAvailableOrganizations: expected array, got {root.ValueKind}");
                 return Array.Empty<OrganizationInfo>();
             }
 
@@ -165,9 +191,10 @@ public class ClaudeApiService : IClaudeApiService
             WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
             return Array.Empty<OrganizationInfo>();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Defensive — caller renders "no orgs available" in the dialog
+            // Defensive — caller renders the empty-state in the dialog
+            Debug.WriteLine($"[ClaudeApiService] ListAvailableOrganizations failed: {ex.Message}");
             return Array.Empty<OrganizationInfo>();
         }
     }

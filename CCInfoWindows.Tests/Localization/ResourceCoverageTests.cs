@@ -62,6 +62,7 @@ public class ResourceCoverageTests
         "OrgPickerDialogTitle",
         "OrgPickerDialogSwitchButton",
         "OrgPickerDialogCancelButton",
+        "OrgPickerDialogNoOrgs",
     ];
 
     private static readonly Dictionary<string, string> ExpectedEnUs = new()
@@ -100,6 +101,7 @@ public class ResourceCoverageTests
         ["OrgPickerDialogTitle"] = "Select organization",
         ["OrgPickerDialogSwitchButton"] = "Switch",
         ["OrgPickerDialogCancelButton"] = "Cancel",
+        ["OrgPickerDialogNoOrgs"] = "Could not load organizations. The connection to claude.ai is broken — restart the app or sign in again.",
     };
 
     private static readonly Dictionary<string, string> ExpectedDeDe = new()
@@ -138,6 +140,7 @@ public class ResourceCoverageTests
         ["OrgPickerDialogTitle"] = "Organisation auswählen",
         ["OrgPickerDialogSwitchButton"] = "Wechseln",
         ["OrgPickerDialogCancelButton"] = "Abbrechen",
+        ["OrgPickerDialogNoOrgs"] = "Organisationen konnten nicht geladen werden. Die Verbindung zu claude.ai ist unterbrochen — starte die App neu oder melde dich erneut an.",
     };
 
     [Fact]

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CCInfoWindows.Models;
 using CCInfoWindows.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -66,38 +67,78 @@ public sealed partial class SettingsView : Page
     /// ListView items render via the declarative OrgPickerItemTemplate defined in Page.Resources
     /// (Name bold, Uuid small secondary text).
     /// </summary>
+    private bool _orgPickerDialogOpen;
+
     private async void OnRequestOpenOrgPickerDialog(object? sender, OrgPickerDialogRequest request)
     {
-        var listView = new ListView
+        // WinUI 3 allows only one open ContentDialog per XamlRoot; a second ShowAsync throws,
+        // and this method is async void — the exception would tear down the process.
+        if (_orgPickerDialogOpen)
         {
-            ItemsSource = ViewModel.AvailableOrganizations,
-            SelectionMode = ListViewSelectionMode.Single,
-            ItemTemplate = (DataTemplate)Resources["OrgPickerItemTemplate"],
-        };
+            request.CompletionSource.TrySetResult(ContentDialogResult.None);
+            return;
+        }
 
-        listView.SelectionChanged += (s, e) =>
-        {
-            if (listView.SelectedItem is OrganizationInfo selected)
-                ViewModel.SelectedOrgPickerItem = selected;
-        };
+        var localizer = Localizer.Get();
+        var hasOrgs = ViewModel.AvailableOrganizations.Count > 0;
 
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = Localizer.Get().GetLocalizedString("OrgPickerDialogTitle"),
-            PrimaryButtonText = Localizer.Get().GetLocalizedString("OrgPickerDialogSwitchButton"),
-            CloseButtonText = Localizer.Get().GetLocalizedString("OrgPickerDialogCancelButton"),
+            Title = localizer.GetLocalizedString("OrgPickerDialogTitle"),
+            PrimaryButtonText = localizer.GetLocalizedString("OrgPickerDialogSwitchButton"),
+            CloseButtonText = localizer.GetLocalizedString("OrgPickerDialogCancelButton"),
             DefaultButton = ContentDialogButton.Primary,
-            Content = new ScrollViewer
-            {
-                Width = 400,
-                MaxHeight = 300,
-                Content = listView,
-            },
+            IsPrimaryButtonEnabled = false,  // enabled once an org is selected
         };
 
-        var result = await dialog.ShowAsync();
-        request.CompletionSource.TrySetResult(result);
+        if (hasOrgs)
+        {
+            var listView = new ListView
+            {
+                ItemsSource = ViewModel.AvailableOrganizations,
+                SelectionMode = ListViewSelectionMode.Single,
+                ItemTemplate = (DataTemplate)Resources["OrgPickerItemTemplate"],
+            };
+
+            listView.SelectionChanged += (s, e) =>
+            {
+                if (listView.SelectedItem is OrganizationInfo selected)
+                {
+                    ViewModel.SelectedOrgPickerItem = selected;
+                    dialog.IsPrimaryButtonEnabled = true;
+                }
+            };
+
+            dialog.Content = new ScrollViewer { Width = 400, MaxHeight = 300, Content = listView };
+        }
+        else
+        {
+            // Empty list means the /api/organizations fetch failed (bridge down, expired
+            // session, Cloudflare challenge) — say so instead of showing a blank dialog.
+            dialog.Content = new TextBlock
+            {
+                Width = 400,
+                Text = localizer.GetLocalizedString("OrgPickerDialogNoOrgs"),
+                TextWrapping = TextWrapping.Wrap,
+            };
+        }
+
+        _orgPickerDialogOpen = true;
+        try
+        {
+            var result = await dialog.ShowAsync();
+            request.CompletionSource.TrySetResult(result);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[SettingsView] OrgPicker dialog failed: {ex.Message}");
+            request.CompletionSource.TrySetResult(ContentDialogResult.None);
+        }
+        finally
+        {
+            _orgPickerDialogOpen = false;
+        }
     }
 
     private void ApplyTabTooltips()

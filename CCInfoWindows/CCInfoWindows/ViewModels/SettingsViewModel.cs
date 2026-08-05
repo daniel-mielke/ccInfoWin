@@ -500,21 +500,26 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>
     /// ORGID-01..02 (D-OG-02..03): async command that loads the org list, fires
     /// RequestOpenOrgPickerDialog so the View shows the ContentDialog, awaits the user's
-    /// choice, and on Primary — persists the new org-id and triggers Logout via
-    /// AuthStateChangedMessage(false) broadcast (D-13 workaround: NOT direct MainViewModel call).
+    /// choice, and on Primary — persists the new org-id and clears the now-stale history.
+    /// The next poll picks up the new id; the session token stays valid across orgs.
     /// </summary>
     [RelayCommand]
     private async Task OpenOrgPickerAsync()
     {
-        AvailableOrganizations.Clear();
-        SelectedOrgPickerItem = null;
-
         var orgs = await _apiService.ListAvailableOrganizationsAsync();
 
+        // Populate BEFORE the dialog opens and await the dispatcher hop — an unawaited
+        // TryEnqueue let the ListView realize while still empty, which is what made the
+        // dialog render as just a title and two buttons.
+        var populated = new TaskCompletionSource();
         _dispatcherQueue.TryEnqueue(() =>
         {
+            AvailableOrganizations.Clear();
+            SelectedOrgPickerItem = null;
             foreach (var o in orgs) AvailableOrganizations.Add(o);
+            populated.TrySetResult();
         });
+        await populated.Task;
 
         var request = new OrgPickerDialogRequest();
         RequestOpenOrgPickerDialog?.Invoke(this, request);
@@ -523,12 +528,14 @@ public partial class SettingsViewModel : ObservableObject
         if (result != ContentDialogResult.Primary || SelectedOrgPickerItem is null)
             return;
 
-        // ORGID-02 / PITFALLS B2: persist new org-id and trigger logout via the verified
-        // AuthStateChangedMessage(false) broadcast (Phase 24 DISPATCH-04 handles cookie-jar
-        // reset + nav-to-LoginView). NOT a direct MainViewModel.LogoutCommand call —
-        // honors D-13 (AddTransient → wrong instance via DI resolution at call time).
+        // Persist the new org-id and drop the history — it belongs to the previous org and
+        // would splice two unrelated utilization curves together. The session token stays
+        // valid across orgs (only the request URL changes), so no logout is needed; the next
+        // poll picks up the new id via GetOrganizationId(). The former
+        // AuthStateChangedMessage(false) broadcast never arrived anyway — MainViewModel is
+        // AddTransient and gets GC'd as a WeakReferenceMessenger recipient (D-13).
         _credentialService.SaveOrganizationId(SelectedOrgPickerItem.Uuid);
-        WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
+        _historyService.ClearHistory();
     }
 
     /// <summary>
