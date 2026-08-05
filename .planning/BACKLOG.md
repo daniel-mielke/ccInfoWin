@@ -11,3 +11,4 @@ _(empty — v1.5 shipped 2026-05-19, v1.6 not started)_
 
 Root-cause research for shipped items: `.planning/research/rootcause-*.md`.
 Changelog: `.planning/MILESTONES.md`.
+
