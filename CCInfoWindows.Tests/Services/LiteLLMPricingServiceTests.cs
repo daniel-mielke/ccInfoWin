@@ -60,6 +60,19 @@ public class LiteLLMPricingServiceTests : IDisposable
     }
 
     [Fact]
+    public void Constructor_SeedsBundledFallback_SoGetPriceIsNeverEmpty()
+    {
+        // MainViewModel.InitializeAsync kicks off EnsurePricesLoadedAsync in a fire-and-forget
+        // Task.Run and calls RefreshSessionList on the next line. Context-window resolution reads
+        // GetPrice synchronously there, so an empty map on cold start would size every model to
+        // the 200K default.
+        var service = new LiteLLMPricingService(BuildHttpClient(""), _cacheDir);
+
+        Assert.NotNull(service.GetPrice("claude-opus-4-5"));
+        Assert.Null(service.LastFetch);   // seeding must not suppress the live fetch
+    }
+
+    [Fact]
     public async Task EnsurePricesLoadedAsync_SuccessfulFetch_SetsSourceToLive()
     {
         var json = BuildPricingJson("claude-sonnet-4-6-20260205");

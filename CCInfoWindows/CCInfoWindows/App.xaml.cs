@@ -155,8 +155,7 @@ public partial class App : Application
             new LiteLLMPricingService(sp.GetRequiredService<HttpClient>()));
         services.AddSingleton<IJsonlService>(sp =>
             new JsonlService(
-                pricingService: sp.GetRequiredService<IPricingService>(),
-                settingsService: sp.GetRequiredService<ISettingsService>()));
+                pricingService: sp.GetRequiredService<IPricingService>()));
         services.AddSingleton<IUpdateService>(sp =>
             new UpdateService(sp.GetRequiredService<HttpClient>(), sp.GetRequiredService<ISettingsService>()));
         services.AddSingleton<IBurnRateNotificationService, BurnRateNotificationService>();

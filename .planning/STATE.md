@@ -30,14 +30,25 @@ See: .planning/PROJECT.md (updated 2026-05-08)
 Workflow: ultracode / plan mode, **not GSD**. No PLAN.md/SUMMARY.md per phase;
 the roadmap is the single source of truth. Update the phase table below after each phase.
 
-Phase: 1 of 5 — NEXT
-Status: Phase 0 abgeschlossen 2026-08-05
-Last activity: 2026-08-05 -- Phase 0 committed, 345/345 Tests grün
+Phase: 2 of 5 — NEXT
+Status: Phasen 0 + 1 abgeschlossen 2026-08-05
+Last activity: 2026-08-05 -- Phase 1 committed, 366/366 Tests grün
+
+### Roadmap-Korrektur aus Phase 1 (wichtig für die Abnahme)
+
+Der Roadmap-Pseudocode zu Schritt 2 („`max_input_tokens > 200_000` → nur wenn
+Above-200k-Preisstufe existiert, sonst 200K") widerspricht der eigenen Prosa und der
+Abdeckungsmatrix. Gegen die echten Upstream-Daten geprüft: die Above-200k-Stufe ist ein
+**Veto**, kein Gate. Sie markiert ein Opt-in-Fenster, das einen Beta-Header braucht
+(`claude-sonnet-4-20250514`: 1M **mit** Stufe → effektiv 200K), während die nativen
+1M-Modelle (`sonnet-5`, `sonnet-4-6`, `opus-5`, `opus-4-6/4-7/4-8`, `fable-5`) **keine**
+Stufe haben und ihr volles Fenster behalten. Nur so entstehen die in der Matrix
+zugesagten Ergebnisse. Implementiert ist die Veto-Semantik.
 
 | Phase | Inhalt | Status |
 |-------|--------|--------|
 | 0 | Fundament: Tests in .sln, ResourceCoverageTests entschärfen, FakeDispatcherTimer verschieben, CLAUDE.md:44 | **fertig** |
-| 1 | Kontextfenster aus `max_input_tokens` (v1.14.2) + Upstream-Pricing-Datei | offen |
+| 1 | Kontextfenster aus `max_input_tokens` (v1.14.2) + Upstream-Pricing-Datei | **fertig** |
 | 2 | Sonnet-Context-Setting zurückbauen (v1.14.2) | offen |
 | 3 | Chart-Redesign: monotone-cubic, Fade-Fill, Glow, Insets (v1.13.0 + v1.14.0) | offen |
 | 4 | Notifications: 80/95-Thresholds + Window-Reset (v1.5.0 + v1.15.0/1/2) | offen |
@@ -49,8 +60,14 @@ Last activity: 2026-08-05 -- Phase 0 committed, 345/345 Tests grün
   `ClaudeApiServiceTests`-Fehler waren veraltete Tests (HttpClient-Ära), nicht ein
   Produktionsbug — sie wurden in Phase 0 auf den echten Vertrag
   (`ClaudeApiService.cs:75` `if (responseBody is null) return null;`) nachgezogen.
-- Screenshot-Geometrie für `windows-mcp` (125 % DPI, Fenster sonst rechts abgeschnitten):
+- Screenshot-Geometrie für `windows-mcp` (Fenster sonst rechts abgeschnitten):
   `window_management set_bounds x=60 y=20 width=625 height=1180`.
+- **Gesperrte Workstation blockiert Screenshots.** Läuft `LogonUI.exe`, komponiert DWM für
+  die Sitzung nicht mehr und `screenshot_control` liefert ein schwarzes Bild — die App läuft
+  dabei normal weiter. Prüfen mit `Get-Process LogonUI`. Ersatz: `mcp__windows-mcp__ui_find`
+  / `ui_read` lesen den UIA-Baum mit Live-Werten auch im gesperrten Zustand und sind für
+  Zahlen/Texte sogar präziser. Nur **pixelbezogene** Prüfungen (Phase 3: Glow-Clipping,
+  Kurven-Überschwingen, beide Themes, Export-PNG vs. Live) brauchen eine entsperrte Sitzung.
 
 **Reihenfolge:** 0 zuerst (blockiert Verify). Dann 1 → 2, 3 und 4 unabhängig, 5 zuletzt.
 **Einzige Konfliktdatei:** `App.xaml.cs` — Phase-1-Edit vor Phase-4-Edit.

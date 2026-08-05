@@ -1,3 +1,5 @@
+using CCInfoWindows.Models;
+
 namespace CCInfoWindows.Helpers;
 
 /// <summary>
@@ -39,18 +41,62 @@ public static class ModelContextLimits
     }
 
     /// <summary>
-    /// Returns the maximum context token count for the given model name.
-    /// Opus models return 1M. Sonnet models return sonnetContextSize (default 200K). All others return 200K.
+    /// Returns the maximum context token count for the given model, resolved from live data
+    /// rather than a hardcoded family map. Resolution order:
+    ///
+    ///   1. Session evidence — a transcript above 200K tokens proves a large window,
+    ///      whatever the pricing data claims. Applied first and unconditionally.
+    ///   2. Pricing data — <c>max_input_tokens</c> from LiteLLM, with the above-200k
+    ///      price tier acting as a veto (see <see cref="HasAbove200kPricingTier"/>).
+    ///   3. Fallback — 200K.
+    ///
+    /// <paramref name="pricingLookup"/> is a <c>Func</c> rather than an IPricingService so
+    /// Helpers stays free of a Services.Interfaces dependency. Production passes
+    /// <c>IPricingService.GetPrice</c> as a method group.
     /// </summary>
-    public static long GetMaxContextTokens(string? modelName, long sonnetContextSize = DefaultContextLimit)
+    public static long GetMaxContextTokens(
+        string? modelName,
+        Func<string, ModelPricing?>? pricingLookup = null,
+        long observedTokens = 0)
     {
-        return GetModelFamily(modelName) switch
+        // 1. Never assume a window smaller than the session has already demonstrated.
+        //    Strictly greater: exactly 200_000 is consistent with a 200K window.
+        if (observedTokens > DefaultContextLimit)
+            return ExtendedContextLimit;
+
+        // 2.
+        if (!string.IsNullOrEmpty(modelName) && pricingLookup is not null)
         {
-            ModelFamily.Opus => ExtendedContextLimit,
-            ModelFamily.Sonnet => sonnetContextSize,
-            _ => DefaultContextLimit
-        };
+            var pricing = pricingLookup(modelName);
+            var maxInput = pricing?.MaxInputTokens;
+
+            if (maxInput is > 0 and <= DefaultContextLimit)
+                return maxInput.Value;
+
+            if (maxInput > DefaultContextLimit)
+                return HasAbove200kPricingTier(pricing!) ? DefaultContextLimit : maxInput.Value;
+        }
+
+        // 3.
+        return DefaultContextLimit;
     }
+
+    /// <summary>
+    /// True when the model prices tokens beyond 200K separately.
+    ///
+    /// That surcharge is the marker of an *opt-in* extended context: the large window
+    /// exists but has to be requested with a beta header (Sonnet 4's 1M is the canonical
+    /// case). A normal Claude Code session does not send that header, so the window it
+    /// actually gets is 200K — reporting 1M there would hide a real limit.
+    ///
+    /// Models whose large window is native (Sonnet 5, Sonnet 4.6, Opus 4.6/4.7/4.8,
+    /// Opus 5, Fable 5) carry no above-200k tier and keep their full max_input_tokens.
+    /// </summary>
+    public static bool HasAbove200kPricingTier(ModelPricing pricing) =>
+        pricing.InputCostAbove200k is > 0
+        || pricing.OutputCostAbove200k is > 0
+        || pricing.CacheCreationCostAbove200k is > 0
+        || pricing.CacheReadCostAbove200k is > 0;
 
     /// <summary>
     /// Returns the effective max tokens after subtracting the flat 33K autocompact buffer.

@@ -82,7 +82,6 @@ public sealed class JsonlService : IJsonlService, IDisposable
     private readonly string _projectsDirectory;
     private readonly string _cacheDirectory;
     private readonly IPricingService _pricingService;
-    private readonly ISettingsService? _settingsService;
     private readonly Lock _sessionsLock = new();
     private readonly object _debounceLock = new();
     private readonly HashSet<string> _pendingChangedFiles = new(StringComparer.OrdinalIgnoreCase);
@@ -101,13 +100,11 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
     /// <param name="projectsDirectoryOverride">Override for test isolation. Defaults to %USERPROFILE%\.claude\projects.</param>
     /// <param name="cacheDirectoryOverride">Override for test isolation. Defaults to %LOCALAPPDATA%\CCInfoWindows.</param>
-    /// <param name="pricingService">Pricing service for cost calculation. Required for GetStatistics.</param>
-    /// <param name="settingsService">Settings service for reading user preferences. Optional; defaults to null (uses DefaultContextLimit).</param>
+    /// <param name="pricingService">Pricing service for cost calculation and context-window resolution.</param>
     public JsonlService(
         string? projectsDirectoryOverride = null,
         string? cacheDirectoryOverride = null,
-        IPricingService? pricingService = null,
-        ISettingsService? settingsService = null)
+        IPricingService? pricingService = null)
     {
         _projectsDirectory = projectsDirectoryOverride
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", "projects");
@@ -116,7 +113,6 @@ public sealed class JsonlService : IJsonlService, IDisposable
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CCInfoWindows");
 
         _pricingService = pricingService ?? new NullPricingService();
-        _settingsService = settingsService;
     }
 
     // -------------------------------------------------------------------------
@@ -152,11 +148,10 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
             var totalTokens = ComputeContextTokens(entry);
             var modelName = ResolveModelName(data.NewestSessionFile, entry);
-            var sonnetContextSize = _settingsService?.LoadSettings().SonnetContextSize
-                ?? ModelContextLimits.DefaultContextLimit;
-            var maxTokens = ModelContextLimits.GetMaxContextTokens(modelName, sonnetContextSize);
+            var maxTokens = ModelContextLimits.GetMaxContextTokens(
+                modelName, _pricingService.GetPrice, observedTokens: totalTokens);
             var subagentFiles = FindSubagentFilesForNewestSession(data);
-            var subagents = BuildSubagentContext(subagentFiles, sonnetContextSize);
+            var subagents = BuildSubagentContext(subagentFiles, _pricingService);
 
             return new ContextWindowData
             {
@@ -176,10 +171,8 @@ public sealed class JsonlService : IJsonlService, IDisposable
             if (!_projectData.TryGetValue(projectDirName, out var data))
                 return ContextWindowData.Empty;
 
-            var sonnetContextSize = _settingsService?.LoadSettings().SonnetContextSize
-                ?? ModelContextLimits.DefaultContextLimit;
             var subagentFiles = FindSubagentFilesForNewestSession(data);
-            var subagents = BuildSubagentContext(subagentFiles, sonnetContextSize);
+            var subagents = BuildSubagentContext(subagentFiles, _pricingService);
             var agent = subagents.FirstOrDefault(a => a.AgentId == agentId);
             if (agent is null)
                 return ContextWindowData.Empty;
@@ -690,7 +683,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
         return result;
     }
 
-    private static IReadOnlyList<SubagentContextData> BuildSubagentContext(List<string> subagentFiles, long sonnetContextSize)
+    private static IReadOnlyList<SubagentContextData> BuildSubagentContext(List<string> subagentFiles, IPricingService pricingService)
     {
         var result = new List<SubagentContextData>();
         var cutoff = DateTimeOffset.UtcNow.AddSeconds(-SubagentActivityWindowSeconds);
@@ -727,7 +720,8 @@ public sealed class JsonlService : IJsonlService, IDisposable
                 var lastEntry = entries[^1];
                 var totalTokens = ComputeContextTokens(lastEntry);
                 var modelName = lastEntry.Message?.Model;
-                var maxTokens = ModelContextLimits.GetMaxContextTokens(modelName, sonnetContextSize);
+                var maxTokens = ModelContextLimits.GetMaxContextTokens(
+                    modelName, pricingService.GetPrice, observedTokens: totalTokens);
                 var agentId = ExtractAgentId(file);
 
                 result.Add(new SubagentContextData

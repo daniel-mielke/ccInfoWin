@@ -38,6 +38,14 @@ public sealed class LiteLLMPricingService : IPricingService
         _httpClient = httpClient;
         _cacheDirectory = cacheDirectory
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CCInfoWindows");
+
+        // Seed from disk cache / bundled resource up front so GetPrice is never empty.
+        // EnsurePricesLoadedAsync runs fire-and-forget from MainViewModel.InitializeAsync while
+        // RefreshSessionList already resolves context windows on the next line; without this seed
+        // every model would briefly resolve to the 200K default on cold start. Both loaders are
+        // local reads and swallow their own exceptions. _lastFetch stays null, so the live fetch
+        // still happens on the first EnsurePricesLoadedAsync.
+        LoadFallback();
     }
 
     public async Task EnsurePricesLoadedAsync()
