@@ -3,6 +3,37 @@
 Modified Windows port of [stefanlange/ccInfo](https://github.com/stefanlange/ccInfo).
 Real-time Claude Code usage monitoring: 5-hour window, weekly quota, context window, token counts, cost analytics.
 
+## Workflows
+
+Two workflows coexist. Pick by task size:
+
+| Task | Use |
+|---|---|
+| New milestone, multi-phase feature | **GSD** — `/gsd-progress`, `/gsd-new-milestone` |
+| Single feature, refactor, multi-file change | **plan mode** (Shift+Tab) or `ultracode` |
+| One-line fix, typo, obvious bugfix | just edit; conventional-commit it |
+
+GSD is installed globally (`~/.claude/get-shit-done/`), not in this repo.
+`ultracode` is session-only — type it in a prompt or `/effort ultracode`.
+It cannot be persisted in settings.json.
+
+**Where docs live** (tracked in git):
+
+- `.planning/BACKLOG.md` — pending work, not yet in a milestone
+- `.planning/MILESTONES.md` — changelog (per-milestone, shipped)
+- `.planning/STATE.md` — GSD position; stale if last work was non-GSD
+- `.planning/milestones/` — archived per-phase PLAN/SUMMARY/VERIFICATION
+- `.planning/research/` — root-cause investigations
+- `spec/` — upstream macOS parity specs (gitignored, reference only)
+
+Plan-mode plans go to `~/.claude/plans/` (outside the repo, ephemeral).
+Promote anything worth keeping into `.planning/` by hand.
+
+**Global GSD hooks** fire in every session regardless of workflow. All
+edit/commit guards are opt-in via `.planning/config.json` `hooks.*` and are
+currently **off** — they advise, never block. Don't enable `hooks.community`
+or `hooks.workflow_guard` unless you want GSD enforcement everywhere.
+
 ## Stack
 
 - **Language:** C# 13 / .NET 9

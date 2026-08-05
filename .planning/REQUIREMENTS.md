@@ -2,7 +2,7 @@
 
 **Milestone:** v1.5 macOS v1.12.0 Feature Parity + Hardening
 **Created:** 2026-05-08
-**Source:** `.planning/PROJECT.md` (current milestone), `.planning/research/SUMMARY.md` (decisions), `C:\Users\DanielMielke\.claude\projects\D--myProjects-ccInfoWin\memory\backlog_*.md` (verified root causes)
+**Source:** `.planning/PROJECT.md` (current milestone), `.planning/research/SUMMARY.md` (decisions), `.planning/research/rootcause-*.md` (verified root causes)
 
 ## Goal
 

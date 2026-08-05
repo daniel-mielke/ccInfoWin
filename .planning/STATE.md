@@ -4,8 +4,8 @@ milestone: v1.5
 milestone_name: milestone
 status: completed
 stopped_at: Phase 28 CLEANUP-01..04 + Final UAT Checklist complete. Milestone v1.5 all phases done.
-last_updated: "2026-05-19T09:13:53.293Z"
-last_activity: 2026-05-19 -- Phase 29 marked complete
+last_updated: "2026-08-05T00:00:00.000Z"
+last_activity: 2026-08-05 -- 3 hotfixes committed directly (a2a6ad0, 2adafd0, ef320a6), no GSD phase
 progress:
   total_phases: 6
   completed_phases: 1
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-05-08)
 
 Phase: 29 — COMPLETE
 Plan: 1 of 1
-Status: Phase 29 complete
-Last activity: 2026-05-19 -- Phase 29 marked complete
+Status: v1.5 shipped; no active milestone. 3 post-ship hotfixes committed directly.
+Last activity: 2026-08-05 -- hotfixes a2a6ad0, 2adafd0, ef320a6 (outside GSD flow)
 
 **v1.5 Phase Sequence (research-validated, do not reorder):**
 
