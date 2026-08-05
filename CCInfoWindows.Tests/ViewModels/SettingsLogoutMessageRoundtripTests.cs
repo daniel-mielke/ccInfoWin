@@ -44,6 +44,7 @@ public class SettingsLogoutDirectCallTests
         var dispatcherQueue = new Mock<IDispatcherQueue>();
 
         var apiService = new Mock<IClaudeApiService>();
+        var usageNotifications = new Mock<IUsageNotificationService>();
 
         var vm = new SettingsViewModel(
             settingsService.Object,
@@ -54,7 +55,8 @@ public class SettingsLogoutDirectCallTests
             sessionNameStore.Object,
             jsonlService.Object,
             dispatcherQueue.Object,
-            apiService.Object);   // ORGID-01
+            apiService.Object,   // ORGID-01
+            usageNotifications.Object);
 
         return (vm, historyMock, credentialMock, navMock);
     }

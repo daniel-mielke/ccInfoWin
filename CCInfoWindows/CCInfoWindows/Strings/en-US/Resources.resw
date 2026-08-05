@@ -354,6 +354,24 @@
   <data name="BurnRateNotificationBody" xml:space="preserve">
     <value>At current pace, token limit reached in {0}.</value>
   </data>
+  <data name="WindowThresholdNotificationTitle" xml:space="preserve">
+    <value>Usage limit approaching</value>
+  </data>
+  <data name="FiveHourThresholdNotificationBody" xml:space="preserve">
+    <value>The 5-hour window is {0}% used.</value>
+  </data>
+  <data name="WeeklyThresholdNotificationBody" xml:space="preserve">
+    <value>The weekly limit is {0}% used.</value>
+  </data>
+  <data name="WindowResetNotificationTitle" xml:space="preserve">
+    <value>Usage window reset</value>
+  </data>
+  <data name="FiveHourResetNotificationBody" xml:space="preserve">
+    <value>The 5-hour window has reset — your full quota is available again.</value>
+  </data>
+  <data name="WeeklyResetNotificationBody" xml:space="preserve">
+    <value>The weekly limit has reset — your full quota is available again.</value>
+  </data>
 
   <!-- Phase 26 RENAME-01: Session rename dialog + pencil button tooltip -->
   <data name="RenameSessionDialogTitle" xml:space="preserve">

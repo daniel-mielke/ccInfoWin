@@ -42,7 +42,7 @@ public class MainViewModelRefreshTests
         updateService.Setup(s => s.CheckForUpdateAsync()).Returns(Task.CompletedTask);
 
         var bridge = new Mock<IWebViewBridge>();
-        var burnRateService = new Mock<IBurnRateNotificationService>();
+        var burnRateService = new Mock<IUsageNotificationService>();
         var sessionNameStore = new Mock<ISessionNameStore>();
         sessionNameStore.Setup(s => s.GetCustomName(It.IsAny<string>())).Returns((string?)null);
 
@@ -187,7 +187,7 @@ public class MainViewModelRefreshTests
         updateService.Setup(s => s.CheckForUpdateAsync()).Returns(Task.CompletedTask);
 
         var bridge = new Mock<IWebViewBridge>();
-        var burnRateService = new Mock<IBurnRateNotificationService>();
+        var burnRateService = new Mock<IUsageNotificationService>();
 
         return new MainViewModel(
             credentialService.Object,

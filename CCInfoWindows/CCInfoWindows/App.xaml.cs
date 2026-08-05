@@ -158,7 +158,9 @@ public partial class App : Application
                 pricingService: sp.GetRequiredService<IPricingService>()));
         services.AddSingleton<IUpdateService>(sp =>
             new UpdateService(sp.GetRequiredService<HttpClient>(), sp.GetRequiredService<ISettingsService>()));
-        services.AddSingleton<IBurnRateNotificationService, BurnRateNotificationService>();
+        services.AddSingleton<INotificationStateStore, NotificationStateStore>();
+        services.AddSingleton<IUsageNotificationService>(sp =>
+            new UsageNotificationService(sp.GetRequiredService<INotificationStateStore>()));
 
         // ViewModels
         services.AddTransient<LoginViewModel>();
@@ -172,7 +174,7 @@ public partial class App : Application
             sp.GetRequiredService<IPricingService>(),
             sp.GetRequiredService<IUpdateService>(),
             sp.GetRequiredService<IWebViewBridge>(),
-            sp.GetRequiredService<IBurnRateNotificationService>(),
+            sp.GetRequiredService<IUsageNotificationService>(),
             sp.GetRequiredService<IDispatcherQueue>(),
             sp.GetRequiredService<ISessionNameStore>()));   // Phase 26 / RENAME-07
         services.AddTransient<SettingsViewModel>(sp => new SettingsViewModel(
@@ -184,7 +186,8 @@ public partial class App : Application
             sp.GetRequiredService<ISessionNameStore>(),
             sp.GetRequiredService<IJsonlService>(),
             sp.GetRequiredService<IDispatcherQueue>(),
-            sp.GetRequiredService<IClaudeApiService>()));   // ORGID-01
+            sp.GetRequiredService<IClaudeApiService>(),     // ORGID-01
+            sp.GetRequiredService<IUsageNotificationService>()));
 
         return services.BuildServiceProvider();
     }

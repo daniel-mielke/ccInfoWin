@@ -70,6 +70,13 @@ public class ResourceCoverageTests
         "OrgPickerDialogSwitchButton",
         "OrgPickerDialogCancelButton",
         "OrgPickerDialogNoOrgs",
+        // v1.6 Phase 4: threshold + window-reset notifications (all single-segment)
+        "WindowThresholdNotificationTitle",
+        "FiveHourThresholdNotificationBody",
+        "WeeklyThresholdNotificationBody",
+        "WindowResetNotificationTitle",
+        "FiveHourResetNotificationBody",
+        "WeeklyResetNotificationBody",
     ];
 
     private static readonly Regex PlaceholderPattern = new(@"\{(\d+)\}", RegexOptions.Compiled);

@@ -35,7 +35,7 @@ public class MainViewModelInitialStateTests
         pricingService.Setup(s => s.EnsurePricesLoadedAsync()).Returns(Task.CompletedTask);
         var updateService = new Mock<IUpdateService>();
         var bridge = new Mock<IWebViewBridge>();
-        var burnRate = new Mock<IBurnRateNotificationService>();
+        var burnRate = new Mock<IUsageNotificationService>();
         var sessionNameStore = new Mock<ISessionNameStore>();
         sessionNameStore.Setup(s => s.GetCustomName(It.IsAny<string>())).Returns((string?)null);
 

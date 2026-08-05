@@ -60,7 +60,7 @@ public partial class MainViewModel : ObservableObject,
     private readonly IPricingService _pricingService;
     private readonly IUpdateService _updateService;
     private readonly IWebViewBridge _bridge;
-    private readonly IBurnRateNotificationService _burnRateNotificationService;
+    private readonly IUsageNotificationService _usageNotificationService;
     private readonly ISessionNameStore _sessionNameStore;   // RENAME-07 / Phase 26
 
     private DispatcherQueueTimer? _pollTimer;
@@ -313,7 +313,7 @@ public partial class MainViewModel : ObservableObject,
         IPricingService pricingService,
         IUpdateService updateService,
         IWebViewBridge bridge,
-        IBurnRateNotificationService burnRateNotificationService,
+        IUsageNotificationService usageNotificationService,
         IDispatcherQueue dispatcherQueue,
         ISessionNameStore sessionNameStore,   // Phase 26 / RENAME-07
         Func<string, SolidColorBrush>? brushFactory = null)   // G-3 / CLEANUP-02: testability seam; null = use ParseHexBrush
@@ -328,7 +328,7 @@ public partial class MainViewModel : ObservableObject,
         _pricingService = pricingService;
         _updateService = updateService;
         _bridge = bridge;
-        _burnRateNotificationService = burnRateNotificationService;
+        _usageNotificationService = usageNotificationService;
         _dispatcherQueue = dispatcherQueue;
         _sessionNameStore = sessionNameStore;
 
@@ -544,7 +544,7 @@ public partial class MainViewModel : ObservableObject,
             BurnRateWarningText = prediction != null
                 ? FormatBurnRateText(prediction.MinutesUntilLimit)
                 : string.Empty;
-            _burnRateNotificationService.CheckBurnRate(prediction);
+            _usageNotificationService.CheckBurnRate(prediction);
         }
         else
         {
@@ -556,7 +556,7 @@ public partial class MainViewModel : ObservableObject,
             RecomputeNextWindowLabel();   // NEXTWIN — clears label when API returns no FiveHour
             IsBurnRateWarningVisible = false;
             BurnRateWarningText = string.Empty;
-            _burnRateNotificationService.CheckBurnRate(null);
+            _usageNotificationService.CheckBurnRate(null);
         }
 
         // WOCHENLIMIT = SevenDayOpus (fallback to SevenDay)
@@ -570,6 +570,11 @@ public partial class MainViewModel : ObservableObject,
         ApplyWeeklyWindow(data.SevenDaySonnet,
             v => SonnetUtilization = v, v => SonnetPercentage = v, v => SonnetPercentageText = v,
             v => SonnetCountdown = v, v => SonnetResetDate = v, v => _sonnetResetsAt = v);
+
+        // Threshold + window-reset toasts. One call after both windows are applied rather than
+        // one per branch: a weekly rotation has to be evaluated even in a poll without FiveHour.
+        // SevenDaySonnet gets no notification (upstream scope: 5h + primary weekly window).
+        _usageNotificationService.CheckWindows(data.FiveHour, weeklyWindow);
     }
 
     private static string FormatBurnRateText(int minutesUntilLimit)
@@ -1089,6 +1094,12 @@ public partial class MainViewModel : ObservableObject,
         _historyService.ClearHistory();
         _credentialService.ClearCredentials();
         _bridge.Reset();
+        // Direct call, not a message: transient VMs plus WeakReferenceMessenger silently drop
+        // exactly-once flows (D-13). Deliberately NOT hooked to HandleAuthStateChangedCore,
+        // because ClaudeApiService broadcasts AuthStateChangedMessage(false) on every 401 and a
+        // transient 401 must not wipe notification state; and not to StopTimers(), which also
+        // runs on MainView.Unloaded when navigating into Settings.
+        _usageNotificationService.CancelAll();
         WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
         IsSessionExpired = false;
         _autoReauthAttempted = false;  // D-02: explicit reset on user-driven logout

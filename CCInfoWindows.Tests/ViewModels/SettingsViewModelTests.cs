@@ -40,6 +40,7 @@ public class SettingsViewModelTests
         var dispatcher = dispatcherQueue ?? new Mock<IDispatcherQueue>();
 
         var apiService = new Mock<IClaudeApiService>();
+        var usageNotifications = new Mock<IUsageNotificationService>();
 
         return new SettingsViewModel(
             settingsService.Object,
@@ -50,7 +51,8 @@ public class SettingsViewModelTests
             store.Object,
             jsonl.Object,
             dispatcher.Object,
-            apiService.Object);   // ORGID-01
+            apiService.Object,   // ORGID-01
+            usageNotifications.Object);
     }
 
     // ─── Existing tab visibility tests (indexes shifted: About is now 4) ──────────

@@ -354,6 +354,24 @@
   <data name="BurnRateNotificationBody" xml:space="preserve">
     <value>Bei aktuellem Tempo wird das Token-Limit in {0} erreicht.</value>
   </data>
+  <data name="WindowThresholdNotificationTitle" xml:space="preserve">
+    <value>Nutzungslimit fast erreicht</value>
+  </data>
+  <data name="FiveHourThresholdNotificationBody" xml:space="preserve">
+    <value>Das 5-Stunden-Fenster ist zu {0} % ausgelastet.</value>
+  </data>
+  <data name="WeeklyThresholdNotificationBody" xml:space="preserve">
+    <value>Das Wochenlimit ist zu {0} % ausgelastet.</value>
+  </data>
+  <data name="WindowResetNotificationTitle" xml:space="preserve">
+    <value>Nutzungsfenster zurückgesetzt</value>
+  </data>
+  <data name="FiveHourResetNotificationBody" xml:space="preserve">
+    <value>Das 5-Stunden-Fenster wurde zurückgesetzt — das volle Kontingent steht wieder bereit.</value>
+  </data>
+  <data name="WeeklyResetNotificationBody" xml:space="preserve">
+    <value>Das Wochenlimit wurde zurückgesetzt — das volle Kontingent steht wieder bereit.</value>
+  </data>
 
   <!-- Phase 26 RENAME-01: Session rename dialog + pencil button tooltip -->
   <data name="RenameSessionDialogTitle" xml:space="preserve">

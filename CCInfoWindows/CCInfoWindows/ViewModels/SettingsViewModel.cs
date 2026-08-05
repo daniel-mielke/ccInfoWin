@@ -30,6 +30,8 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IClaudeApiService _apiService;             // ORGID-01 / D-OG-01
 
     // D-09: 1-minute UI-thread-bound timer. Owned by SettingsViewModel; lifecycle driven by SettingsView code-behind (D-10).
+    private readonly IUsageNotificationService _usageNotificationService;
+
     private IDispatcherTimer? _aboutTimestampTimer;
 
     // Testability seam — overridden in unit tests to supply a fake IDispatcherTimer (avoids WinRT COM init).
@@ -326,7 +328,8 @@ public partial class SettingsViewModel : ObservableObject
         ISessionNameStore sessionNameStore,
         IJsonlService jsonlService,
         IDispatcherQueue dispatcherQueue,
-        IClaudeApiService apiService)   // ORGID-01 — new parameter
+        IClaudeApiService apiService,   // ORGID-01 — new parameter
+        IUsageNotificationService usageNotificationService)
     {
         _settingsService = settingsService;
         _credentialService = credentialService;
@@ -337,6 +340,7 @@ public partial class SettingsViewModel : ObservableObject
         _jsonlService = jsonlService;
         _dispatcherQueue = dispatcherQueue;
         _apiService = apiService;
+        _usageNotificationService = usageNotificationService;
     }
 
     private static readonly int[] ThresholdMinuteOptions = [15, 30, 60, 120];
@@ -470,6 +474,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         _historyService.ClearHistory();                                              // D-13 ordering trap mitigation — must come FIRST
         _credentialService.ClearCredentials();
+        _usageNotificationService.CancelAll();                                       // direct DI, not a message (D-13)
         WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
         _navigationService.NavigateTo<LoginView>();
     }

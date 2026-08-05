@@ -30,9 +30,26 @@ See: .planning/PROJECT.md (updated 2026-05-08)
 Workflow: ultracode / plan mode, **not GSD**. No PLAN.md/SUMMARY.md per phase;
 the roadmap is the single source of truth. Update the phase table below after each phase.
 
-Phase: 4 of 5 — NEXT
-Status: Phasen 0-3 abgeschlossen 2026-08-05
-Last activity: 2026-08-05 -- Phase 3 committed, 389/389 Tests grün
+Phase: 5 of 5 — NEXT
+Status: Phasen 0-4 abgeschlossen 2026-08-05
+Last activity: 2026-08-05 -- Phase 4 committed, 421/421 Tests grün
+
+### Laufzeitbeleg Phase 4 (aus `%LOCALAPPDATA%\CCInfoWindows\notification-state.json`)
+
+Der erste echte Poll nach dem Release-Build hat genau den v1.15.1-Fehlerfall und seine
+Behebung dokumentiert:
+
+```json
+"fiveHour": { "windowId": "2026-08-06T00:20:00.0000000+00:00",
+              "resetsAt": "2026-08-06T00:20:00.07056+00:00",  "peakUtilization": 48 }
+"weekly":   { "windowId": "2026-08-09T00:00:00.0000000+00:00",
+              "resetsAt": "2026-08-09T00:00:00.070581+00:00", "peakUtilization": 9 }
+```
+
+Sub-Sekunden-Rauschen in beiden `resetsAt` (`.07056` vs `.070581`) → ein `==`-Vergleich hätte
+zwischen zwei Polls nie gematcht. Die minuten-truncateten `windowId` sind stabil, alle Flags
+stehen bei 48 %/9 % korrekt auf `false`. Das Wochenfenster endet auf `00:00:00`, also an einer
+Kalendergrenze — der Grund für Countdown statt Kalendervergleich.
 
 ### Befund aus Phase 3: die GPU-Tests sind ein echter Prüfkanal
 
@@ -61,7 +78,7 @@ zugesagten Ergebnisse. Implementiert ist die Veto-Semantik.
 | 1 | Kontextfenster aus `max_input_tokens` (v1.14.2) + Upstream-Pricing-Datei | **fertig** |
 | 2 | Sonnet-Context-Setting zurückbauen (v1.14.2) | **fertig** (visuelle UAT offen) |
 | 3 | Chart-Redesign: monotone-cubic, Fade-Fill, Glow, Insets (v1.13.0 + v1.14.0) | **fertig** (visuelle UAT offen) |
-| 4 | Notifications: 80/95-Thresholds + Window-Reset (v1.5.0 + v1.15.0/1/2) | offen |
+| 4 | Notifications: 80/95-Thresholds + Window-Reset (v1.5.0 + v1.15.0/1/2) | **fertig** (Toast-Zustellung manuell offen) |
 | 5 | Restfixes: `.Distinct()`, Steilheitsfilter, Output-Tier, Re-Aggregate | offen |
 
 ### Verify-Umgebung (für Folgephasen)
