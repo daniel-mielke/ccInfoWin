@@ -48,16 +48,32 @@ public static class ChartColors
     }
 
     /// <summary>
+    /// Fraction of the green-to-yellow blend reached at the 25% anchor. The remaining 70% is
+    /// covered between 25% and 50%, so yellow arrives gradually instead of jumping in.
+    /// </summary>
+    private const double EasedRampMixAt25 = 0.30;
+
+    /// <summary>
     /// Builds a 101-element color array for the gradient lookup table.
-    /// Index i represents utilization i% (0 to 100), interpolated across 4 gradient stops.
+    /// Index i represents utilization i% (0 to 100), interpolated across 5 gradient stops.
     /// Values beyond 90% are clamped to the red stop color. Alpha is always 255.
+    ///
+    /// The 0.25 anchor is the eased ramp: with only 0.00 and 0.50 the green-to-yellow blend is
+    /// linear and yellow shows up early and abruptly. Pulling the 25% point down to a 30% mix
+    /// makes the low end a slow departure from green. The 0.75 and 0.90 anchors are unchanged,
+    /// and ColorThresholds.GetThresholdKey (discrete, drives the glow dot and the export header)
+    /// is untouched.
     /// </summary>
     public static Color[] BuildColorLookup(bool isDark)
     {
+        var green = GetColor("ProgressGreenBrush", isDark);
+        var yellow = GetColor("ProgressYellowBrush", isDark);
+
         var stops = new (double Position, Color Color)[]
         {
-            (0.00, GetColor("ProgressGreenBrush", isDark)),
-            (0.50, GetColor("ProgressYellowBrush", isDark)),
+            (0.00, green),
+            (0.25, LerpColor(green, yellow, EasedRampMixAt25)),
+            (0.50, yellow),
             (0.75, GetColor("ProgressOrangeBrush", isDark)),
             (0.90, GetColor("ProgressRedBrush", isDark)),
         };

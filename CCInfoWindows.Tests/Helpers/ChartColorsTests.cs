@@ -65,20 +65,41 @@ public class ChartColorsTests
     // --- Interpolation test ---
 
     [Fact]
-    public void BuildColorLookup_Index25Dark_IsInterpolatedBetweenGreenAndYellow()
+    public void BuildColorLookup_Index25Dark_IsThirtyPercentTowardsYellow_EasedRamp()
     {
         var lookup = ChartColors.BuildColorLookup(isDark: true);
         var green = Color.FromArgb(255, 0x30, 0xD1, 0x58);
         var yellow = Color.FromArgb(255, 0xFF, 0xD6, 0x0A);
 
-        // At index 25 (t=0.25), the position is halfway between green(0.0) and yellow(0.5)
-        // t within segment = (0.25 - 0.0) / (0.5 - 0.0) = 0.5
-        var expectedR = (byte)(green.R + (yellow.R - green.R) * 0.5);
-        var expectedG = (byte)(green.G + (yellow.G - green.G) * 0.5);
-        var expectedB = (byte)(green.B + (yellow.B - green.B) * 0.5);
+        // Eased ramp: 0.25 is now an explicit anchor at 30% of the green-to-yellow blend, not
+        // the 50% a plain 0.00/0.50 interpolation produced. The low end departs from green
+        // slowly and the remaining 70% is covered between 25% and 50%, so yellow arrives
+        // instead of jumping in.
+        const double MixAt25 = 0.30;
+        var expectedR = (byte)(green.R + (yellow.R - green.R) * MixAt25);
+        var expectedG = (byte)(green.G + (yellow.G - green.G) * MixAt25);
+        var expectedB = (byte)(green.B + (yellow.B - green.B) * MixAt25);
         var expected = Color.FromArgb(255, expectedR, expectedG, expectedB);
 
         Assert.Equal(expected, lookup[25]);
+    }
+
+    [Fact]
+    public void BuildColorLookup_EasedRamp_StaysBelowTheOldLinearBlendAcrossTheLowEnd()
+    {
+        // Property form of the same idea: every index between the green anchor and the yellow
+        // anchor must be at most as far toward yellow as plain linear interpolation was.
+        var lookup = ChartColors.BuildColorLookup(isDark: true);
+        var green = Color.FromArgb(255, 0x30, 0xD1, 0x58);
+        var yellow = Color.FromArgb(255, 0xFF, 0xD6, 0x0A);
+
+        for (var i = 1; i < 50; i++)
+        {
+            var linearMix = i / 50.0;
+            var linearR = green.R + ((yellow.R - green.R) * linearMix);
+            Assert.True(lookup[i].R <= linearR + 1,
+                $"index {i}: eased R {lookup[i].R} should not exceed linear {linearR:F1}");
+        }
     }
 
     // --- Light theme stop tests ---

@@ -30,9 +30,19 @@ See: .planning/PROJECT.md (updated 2026-05-08)
 Workflow: ultracode / plan mode, **not GSD**. No PLAN.md/SUMMARY.md per phase;
 the roadmap is the single source of truth. Update the phase table below after each phase.
 
-Phase: 3 of 5 — NEXT
-Status: Phasen 0, 1, 2 abgeschlossen 2026-08-05
-Last activity: 2026-08-05 -- Phase 2 committed, 366/366 Tests grün
+Phase: 4 of 5 — NEXT
+Status: Phasen 0-3 abgeschlossen 2026-08-05
+Last activity: 2026-08-05 -- Phase 3 committed, 389/389 Tests grün
+
+### Befund aus Phase 3: die GPU-Tests sind ein echter Prüfkanal
+
+`ExportHelperTests` mit `[Trait("Category","RequiresGPU")]` laufen auf dieser Maschine
+tatsächlich gegen ein reales Direct2D-Gerät (459 ms / 48 ms), sie werden **nicht**
+übersprungen. Damit ist empirisch belegt, dass `FillGeometry(geometry, brush, opacityBrush)`
+einen **Gradient** als Primärbrush akzeptiert — die alte D2D-1.0-Doku verlangt dort einen
+BitmapBrush, das gilt hier nicht mehr. Ein dritter Test mit bösartigem Input
+(Duplikat-Zeitstempel, Punkte hinter dem Fensterende, 600 Punkte) hält den NaN-Pfad zu.
+Bei künftigen Win2D-Änderungen: `dotnet test --filter "Category=RequiresGPU"`.
 
 ### Roadmap-Korrektur aus Phase 1 (wichtig für die Abnahme)
 
@@ -50,7 +60,7 @@ zugesagten Ergebnisse. Implementiert ist die Veto-Semantik.
 | 0 | Fundament: Tests in .sln, ResourceCoverageTests entschärfen, FakeDispatcherTimer verschieben, CLAUDE.md:44 | **fertig** |
 | 1 | Kontextfenster aus `max_input_tokens` (v1.14.2) + Upstream-Pricing-Datei | **fertig** |
 | 2 | Sonnet-Context-Setting zurückbauen (v1.14.2) | **fertig** (visuelle UAT offen) |
-| 3 | Chart-Redesign: monotone-cubic, Fade-Fill, Glow, Insets (v1.13.0 + v1.14.0) | offen |
+| 3 | Chart-Redesign: monotone-cubic, Fade-Fill, Glow, Insets (v1.13.0 + v1.14.0) | **fertig** (visuelle UAT offen) |
 | 4 | Notifications: 80/95-Thresholds + Window-Reset (v1.5.0 + v1.15.0/1/2) | offen |
 | 5 | Restfixes: `.Distinct()`, Steilheitsfilter, Output-Tier, Re-Aggregate | offen |
 

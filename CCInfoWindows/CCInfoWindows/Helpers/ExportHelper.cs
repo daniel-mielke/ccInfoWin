@@ -21,7 +21,7 @@ public static class ExportHelper
     public static class ExportConstants
     {
         public const float ExportWidth = 328f;
-        public const float ExportHeight = 240f;
+        public const float ExportHeight = 244f;
         public const float ExportDpi = 192f;
 
         public static readonly Color BackgroundColor = Color.FromArgb(255, 30, 30, 30);
@@ -34,7 +34,9 @@ public static class ExportHelper
         public const float HeaderTopMargin = 12f;
         public const float HeaderHorizontalPadding = 12f;
         public const float ChartTopMargin = 18f;
-        public const float ChartAreaHeight = 140f;
+        // 144 == the live canvas height (Border 160 minus 2x8 padding), so the export plot height
+        // matches the live one exactly instead of landing within 3.4% by accident.
+        public const float ChartAreaHeight = 144f;
         public const float ChartAreaHorizontalPadding = 8f;
         public const float WatermarkBottomMargin = 6f;
         public const float WatermarkRightMargin = 8f;
@@ -242,9 +244,7 @@ public static class ExportHelper
         var plotOffsetY = chartAreaTop;
 
         ChartDrawing.DrawAxesAndLabels(session, plotWidth, plotHeight, isDark: true, chartLeft, plotOffsetY);
-        ChartDrawing.DrawChartFills(session, resourceCreator, points, windowStart.Value, plotWidth, plotHeight, isDark: true, chartLeft, plotOffsetY);
-        ChartDrawing.DrawChartTopLine(session, resourceCreator, points, windowStart.Value, plotWidth, plotHeight, isDark: true, chartLeft, plotOffsetY, lineWidth: 2.5f);
-        ChartDrawing.DrawGlowIndicator(session, resourceCreator, points, windowStart.Value, plotWidth, plotHeight, isDark: true, chartLeft, plotOffsetY);
+        ChartDrawing.DrawChart(session, resourceCreator, points, windowStart.Value, plotWidth, plotHeight, isDark: true, chartLeft, plotOffsetY, lineWidth: 2.5f);
     }
 
     private static void DrawWatermark(CanvasDrawingSession session)

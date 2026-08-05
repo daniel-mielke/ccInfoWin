@@ -170,9 +170,7 @@ public sealed partial class MainView : Page
         var windowStart = ViewModel.FiveHourWindowStart;
         if (windowStart == null) return;
 
-        ChartDrawing.DrawChartFills(session, sender, points, windowStart.Value, plotWidth, plotHeight, isDark);
-        ChartDrawing.DrawChartTopLine(session, sender, points, windowStart.Value, plotWidth, plotHeight, isDark);
-        ChartDrawing.DrawGlowIndicator(session, sender, points, windowStart.Value, plotWidth, plotHeight, isDark);
+        ChartDrawing.DrawChart(session, sender, points, windowStart.Value, plotWidth, plotHeight, isDark);
     }
 
     private void OnUpdateInfoBarClosing(InfoBar sender, InfoBarClosingEventArgs args)
