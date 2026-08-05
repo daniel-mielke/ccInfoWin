@@ -1,30 +1,37 @@
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace CCInfoWindows.Tests.Localization;
 
 /// <summary>
-/// Phase 23 L10N-01 structural validation. Verifies that the six required resource
-/// keys (4 new in Phase 23 + 2 pre-existing from Phase 20) exist in both locales
-/// with non-empty, expected values.
+/// Structural validation of the two resw locales. Deliberately does NOT duplicate the
+/// translated values — that made every new key a double-edit in two dictionaries and
+/// threw KeyNotFoundException instead of a useful message when one was forgotten.
 ///
-/// Strategy: XDocument-based structural validation (per RESEARCH Pitfall 1 — xUnit
-/// cannot initialize the WinUI3Localizer host, so we read the resw files directly).
+/// What is asserted instead:
+///   - RequiredKeys (keys with a hard contract elsewhere in the code) exist in both locales
+///   - EN and DE expose the identical key set — a missing translation is a test failure
+///   - No value is empty
+///   - Placeholder arity per key is identical across locales ("vor {0} Minuten" vs "{0} minutes ago")
+///   - No duplicate &lt;data name&gt; entries
+///   - Every l:Uids.Uid and GetLocalizedString() argument is single-segment
 ///
-/// Phase 27 extension policy:
-///   - Plan 27-01 (L10N) appends LastFetch{JustNow,MinutesAgo,HoursAgo,DaysAgo,Never}
-///   - Plan 27-02 (NEXTWIN) appends NextWindowLabelDe / NextWindowLabelEn
-///   - Plan 27-03 (PRICING) appends PricingErrorInfoBar.Title / .Message
-///   - Plan 27-04 (ORGID) appends SettingsAccountRedetectButton.Text + Dialog.OrgPicker.*
+/// Strategy: XDocument-based (per RESEARCH Pitfall 1 — xUnit cannot initialize the
+/// WinUI3Localizer host, so we read the resw files directly).
 ///
 /// IMPORTANT: WinUI3Localizer 2.3.0 only resolves Foo.Property keys (Length==2 split on '.').
 /// Three-segment keys like "MainView.Foo.Title" are silently dropped — controls render
-/// with null Title/Message. See LocalizerKeySegmentLimitTest below for enforcement.
+/// with null Title/Message. See the two scanner tests below for enforcement.
 /// </summary>
 public class ResourceCoverageTests
 {
     private const string EnUsRelativePath = "Strings/en-US/Resources.resw";
     private const string DeDeRelativePath = "Strings/de-DE/Resources.resw";
 
+    /// <summary>
+    /// Keys that C# code or XAML looks up by name. A missing one is a silent empty string
+    /// at runtime, so presence is asserted explicitly rather than left to key-set symmetry.
+    /// </summary>
     private static readonly string[] RequiredKeys =
     [
         "NotSignedIn.Text",
@@ -65,108 +72,74 @@ public class ResourceCoverageTests
         "OrgPickerDialogNoOrgs",
     ];
 
-    private static readonly Dictionary<string, string> ExpectedEnUs = new()
-    {
-        ["NotSignedIn.Text"] = "Not signed in",
-        ["NoData.Text"] = "No data",
-        ["Loading.Text"] = "Loading",
-        ["InactiveSessionTooltip"] = "Inactive for > {0}min",
-        ["LoginReloadButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Reload page",
-        ["LoginReloadButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name"] = "Reload login page",
-        ["RenameSessionDialogTitle"] = "Rename Session",
-        ["RenameSessionDialogSaveButton"] = "Save",
-        ["RenameSessionDialogCancelButton"] = "Cancel",
-        ["RenameSessionDialogResetButton"] = "Reset",
-        ["MainViewRenameButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Rename session",
-        // Phase 26 RENAME-02 Plan 03
-        ["SettingsTabSessions"] = "Sessions",
-        ["SettingsSessionsHeader.Text"] = "CUSTOM SESSION NAMES",
-        ["SettingsSessionsNoSessions.Text"] = "No sessions available.",
-        ["SettingsSessionsOrphanLabel.Text"] = "Session not found",
-        ["Settings.Sessions.ClearButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Remove custom name",
-        // Phase 27 L10N-01
-        ["LastFetchJustNow"] = "just now",
-        ["LastFetchMinutesAgo"] = "{0} minutes ago",
-        ["LastFetchHoursAgo"] = "{0} hours ago",
-        ["LastFetchDaysAgo"] = "{0} days ago",
-        ["LastFetchNever"] = "Never",
-        // Phase 27 NEXTWIN-01..03: format patterns (same values in both locales — format strings, not human-readable)
-        ["NextWindowLabelDe"] = "ddd d.M. HH:mm",
-        ["NextWindowLabelEn"] = "ddd HH:mm",
-        // Phase 27 PRICING-01..03: pricing-service silent-failure surfacing
-        ["PricingErrorInfoBar.Title"] = "Pricing data unavailable",
-        ["PricingErrorInfoBar.Message"] = "Cost figures may be inaccurate.",
-        // Phase 27 ORGID-01..05 (D-OG-06): org-id picker localization
-        ["SettingsAccountRedetectButton.Text"] = "Re-detect organization",
-        ["OrgPickerDialogTitle"] = "Select organization",
-        ["OrgPickerDialogSwitchButton"] = "Switch",
-        ["OrgPickerDialogCancelButton"] = "Cancel",
-        ["OrgPickerDialogNoOrgs"] = "Could not load organizations. The connection to claude.ai is broken — restart the app or sign in again.",
-    };
-
-    private static readonly Dictionary<string, string> ExpectedDeDe = new()
-    {
-        ["NotSignedIn.Text"] = "Nicht angemeldet",
-        ["NoData.Text"] = "Keine Daten",
-        ["Loading.Text"] = "Wird geladen",
-        ["InactiveSessionTooltip"] = "Inaktiv seit > {0}min",
-        ["LoginReloadButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Seite neu laden",
-        ["LoginReloadButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name"] = "Login-Seite neu laden",
-        ["RenameSessionDialogTitle"] = "Sitzung umbenennen",
-        ["RenameSessionDialogSaveButton"] = "Speichern",
-        ["RenameSessionDialogCancelButton"] = "Abbrechen",
-        ["RenameSessionDialogResetButton"] = "Zurücksetzen",
-        ["MainViewRenameButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Sitzung umbenennen",
-        // Phase 26 RENAME-02 Plan 03
-        ["SettingsTabSessions"] = "Sitzungen",
-        ["SettingsSessionsHeader.Text"] = "EIGENE SITZUNGSNAMEN",
-        ["SettingsSessionsNoSessions.Text"] = "Keine Sitzungen verfügbar.",
-        ["SettingsSessionsOrphanLabel.Text"] = "Sitzung nicht gefunden",
-        ["Settings.Sessions.ClearButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"] = "Eigenen Namen entfernen",
-        // Phase 27 L10N-01
-        ["LastFetchJustNow"] = "gerade eben",
-        ["LastFetchMinutesAgo"] = "vor {0} Minuten",
-        ["LastFetchHoursAgo"] = "vor {0} Stunden",
-        ["LastFetchDaysAgo"] = "vor {0} Tagen",
-        ["LastFetchNever"] = "Nie",
-        // Phase 27 NEXTWIN-01..03: format patterns (same values in both locales — format strings, not human-readable)
-        ["NextWindowLabelDe"] = "ddd d.M. HH:mm",
-        ["NextWindowLabelEn"] = "ddd HH:mm",
-        // Phase 27 PRICING-01..03: pricing-service silent-failure surfacing
-        ["PricingErrorInfoBar.Title"] = "Preisdaten nicht verfügbar",
-        ["PricingErrorInfoBar.Message"] = "Kostendaten können ungenau sein.",
-        // Phase 27 ORGID-01..05 (D-OG-06): org-id picker localization
-        ["SettingsAccountRedetectButton.Text"] = "Organisation neu erkennen",
-        ["OrgPickerDialogTitle"] = "Organisation auswählen",
-        ["OrgPickerDialogSwitchButton"] = "Wechseln",
-        ["OrgPickerDialogCancelButton"] = "Abbrechen",
-        ["OrgPickerDialogNoOrgs"] = "Organisationen konnten nicht geladen werden. Die Verbindung zu claude.ai ist unterbrochen — starte die App neu oder melde dich erneut an.",
-    };
+    private static readonly Regex PlaceholderPattern = new(@"\{(\d+)\}", RegexOptions.Compiled);
 
     [Fact]
-    public void EnUs_AllSixL10N01Keys_ExistWithExpectedValues()
+    public void RequiredKeys_ExistInBothLocales_WithNonEmptyValues()
     {
-        var keyToValue = LoadResw(EnUsRelativePath);
-
-        foreach (var key in RequiredKeys)
+        foreach (var (locale, path) in Locales())
         {
-            Assert.True(keyToValue.ContainsKey(key), $"en-US Resources.resw is missing key '{key}'.");
-            Assert.False(string.IsNullOrWhiteSpace(keyToValue[key]), $"en-US key '{key}' has an empty value.");
-            Assert.Equal(ExpectedEnUs[key], keyToValue[key]);
+            var keyToValue = LoadResw(path);
+            foreach (var key in RequiredKeys)
+            {
+                Assert.True(keyToValue.ContainsKey(key), $"{locale} Resources.resw is missing key '{key}'.");
+                Assert.False(string.IsNullOrWhiteSpace(keyToValue[key]), $"{locale} key '{key}' has an empty value.");
+            }
         }
     }
 
     [Fact]
-    public void DeDe_AllSixL10N01Keys_ExistWithExpectedValues()
+    public void EnUs_And_DeDe_ExposeIdenticalKeySets()
     {
-        var keyToValue = LoadResw(DeDeRelativePath);
+        var enKeys = LoadResw(EnUsRelativePath).Keys.ToHashSet();
+        var deKeys = LoadResw(DeDeRelativePath).Keys.ToHashSet();
 
-        foreach (var key in RequiredKeys)
+        var missingInDe = enKeys.Except(deKeys).OrderBy(k => k).ToList();
+        var missingInEn = deKeys.Except(enKeys).OrderBy(k => k).ToList();
+
+        Assert.True(
+            missingInDe.Count == 0 && missingInEn.Count == 0,
+            $"Locale key sets diverge. Missing in de-DE: [{string.Join(", ", missingInDe)}]. " +
+            $"Missing in en-US: [{string.Join(", ", missingInEn)}].");
+    }
+
+    [Fact]
+    public void AllValues_AreNonEmpty()
+    {
+        foreach (var (locale, path) in Locales())
         {
-            Assert.True(keyToValue.ContainsKey(key), $"de-DE Resources.resw is missing key '{key}'.");
-            Assert.False(string.IsNullOrWhiteSpace(keyToValue[key]), $"de-DE key '{key}' has an empty value.");
-            Assert.Equal(ExpectedDeDe[key], keyToValue[key]);
+            var empty = LoadResw(path)
+                .Where(kv => string.IsNullOrWhiteSpace(kv.Value))
+                .Select(kv => kv.Key)
+                .OrderBy(k => k)
+                .ToList();
+
+            Assert.True(empty.Count == 0, $"{locale} has empty values for: [{string.Join(", ", empty)}].");
         }
+    }
+
+    [Fact]
+    public void PlaceholderArity_MatchesAcrossLocales()
+    {
+        // A translation that drops or invents a {0} makes string.Format throw or render wrong.
+        var en = LoadResw(EnUsRelativePath);
+        var de = LoadResw(DeDeRelativePath);
+
+        var mismatches = new List<string>();
+        foreach (var (key, enValue) in en)
+        {
+            if (!de.TryGetValue(key, out var deValue)) continue; // covered by the key-set test
+
+            var enSlots = PlaceholderIndices(enValue);
+            var deSlots = PlaceholderIndices(deValue);
+            if (!enSlots.SetEquals(deSlots))
+            {
+                mismatches.Add($"'{key}': en-US uses {{{string.Join(",", enSlots.Order())}}}, " +
+                               $"de-DE uses {{{string.Join(",", deSlots.Order())}}}");
+            }
+        }
+
+        Assert.True(mismatches.Count == 0, string.Join(Environment.NewLine, mismatches));
     }
 
     [Fact]
@@ -174,9 +147,9 @@ public class ResourceCoverageTests
     {
         // D-05: single {0} placeholder — Phase 22's string.Format substitutes the threshold integer.
         // D-07: no \n in the resw value — Phase 22 owns the multi-line composition (path + "\n" + threshold).
-        foreach (var (locale, expected) in new[] { ("en-US", ExpectedEnUs), ("de-DE", ExpectedDeDe) })
+        foreach (var (locale, path) in Locales())
         {
-            var template = expected["InactiveSessionTooltip"];
+            var template = LoadResw(path)["InactiveSessionTooltip"];
 
             Assert.Contains("{0}", template);
             Assert.DoesNotContain("{1}", template);
@@ -215,15 +188,13 @@ public class ResourceCoverageTests
             .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
                      && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"));
 
-        var uidPattern = new System.Text.RegularExpressions.Regex(
-            @"l:Uids\.Uid\s*=\s*""([^""]+)""",
-            System.Text.RegularExpressions.RegexOptions.Compiled);
+        var uidPattern = new Regex(@"l:Uids\.Uid\s*=\s*""([^""]+)""", RegexOptions.Compiled);
 
         var violations = new List<string>();
         foreach (var xamlPath in xamlFiles)
         {
             var content = File.ReadAllText(xamlPath);
-            foreach (System.Text.RegularExpressions.Match m in uidPattern.Matches(content))
+            foreach (Match m in uidPattern.Matches(content))
             {
                 var uid = m.Groups[1].Value;
                 // Skip attached-property syntax — library handles "[using:...]" specially.
@@ -261,15 +232,13 @@ public class ResourceCoverageTests
             .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
                      && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"));
 
-        var callPattern = new System.Text.RegularExpressions.Regex(
-            @"GetLocalizedString\s*\(\s*""([^""]+)""\s*\)",
-            System.Text.RegularExpressions.RegexOptions.Compiled);
+        var callPattern = new Regex(@"GetLocalizedString\s*\(\s*""([^""]+)""\s*\)", RegexOptions.Compiled);
 
         var violations = new List<string>();
         foreach (var csPath in csFiles)
         {
             var content = File.ReadAllText(csPath);
-            foreach (System.Text.RegularExpressions.Match m in callPattern.Matches(content))
+            foreach (Match m in callPattern.Matches(content))
             {
                 var uid = m.Groups[1].Value;
                 if (uid.Contains('.'))
@@ -281,6 +250,15 @@ public class ResourceCoverageTests
 
         Assert.Empty(violations);
     }
+
+    private static IEnumerable<(string Locale, string Path)> Locales()
+    {
+        yield return ("en-US", EnUsRelativePath);
+        yield return ("de-DE", DeDeRelativePath);
+    }
+
+    private static HashSet<int> PlaceholderIndices(string value) =>
+        PlaceholderPattern.Matches(value).Select(m => int.Parse(m.Groups[1].Value)).ToHashSet();
 
     private static string FindCSharpSourceDir()
     {
@@ -346,6 +324,6 @@ public class ResourceCoverageTests
             .ToList() ?? new List<string?>();
 
         var duplicates = names.GroupBy(n => n).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
-        Assert.Empty(duplicates);
+        Assert.True(duplicates.Count == 0, $"{locale} has duplicate keys: [{string.Join(", ", duplicates)}].");
     }
 }

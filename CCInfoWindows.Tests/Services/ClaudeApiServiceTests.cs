@@ -95,32 +95,12 @@ public class ClaudeApiServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task FetchUsageAsync_OnTransientNullResponse_RetriesAndSucceeds()
+    public async Task FetchUsageAsync_OnNullResponseBody_ReturnsNullWithoutRetrying()
     {
-        _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
-        _credentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
-
-        var callCount = 0;
-        _bridgeMock
-            .Setup(b => b.FetchJsonAsync(It.IsAny<string>()))
-            .ReturnsAsync(() =>
-            {
-                callCount++;
-                return callCount < 3 ? null : CreateUsageJson(0.75);
-            });
-
-        var service = CreateService();
-
-        var result = await service.FetchUsageAsync();
-
-        Assert.NotNull(result);
-        Assert.Equal(0.75, result!.FiveHour!.Utilization);
-        Assert.Equal(3, callCount);
-    }
-
-    [Fact]
-    public async Task FetchUsageAsync_OnPersistentNullResponse_ThrowsAfterRetries()
-    {
+        // Contract per ClaudeApiService.cs `if (responseBody is null) return null;` (commit 5999719):
+        // a null body means the bridge fetch produced nothing. That is not treated as a transient
+        // fault — the caller renders stale/no data and the 30s poll loop retries on its own.
+        // The retry loop is reserved for thrown exceptions (timeouts, 5xx).
         _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
         _credentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
 
@@ -130,8 +110,12 @@ public class ClaudeApiServiceTests : IDisposable
 
         var service = CreateService();
 
-        await Assert.ThrowsAsync<ArgumentNullException>(() => service.FetchUsageAsync());
+        var result = await service.FetchUsageAsync();
+
+        Assert.Null(result);
+        _bridgeMock.Verify(b => b.FetchJsonAsync(It.IsAny<string>()), Times.Once);
     }
+
 
     [Fact]
     public async Task CacheRoundTrip_SaveAndLoadReturnsEquivalentData()

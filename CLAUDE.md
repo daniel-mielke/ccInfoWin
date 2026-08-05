@@ -41,7 +41,7 @@ or `hooks.workflow_guard` unless you want GSD enforcement everywhere.
 - **MVVM:** CommunityToolkit.Mvvm 8.4 (source generators)
 - **DI:** Microsoft.Extensions.DependencyInjection
 - **Credentials:** AdysTech.CredentialManager 3.1 (Win32 Credential Manager / DPAPI)
-- **Charts:** Win2D (future phase)
+- **Charts:** Win2D 1.3.2 (`ChartDrawing`, `ChartRenderer`, `ChartColors`, `ExportHelper`, `MainView`)
 - **Web:** WebView2 (embedded in WinUI 3)
 
 ## MVVM Conventions

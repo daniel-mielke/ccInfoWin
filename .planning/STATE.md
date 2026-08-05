@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: macOS ccInfo v1.15.2 Feature Parity
-status: planned
+status: in_progress
 workflow: ultracode / plan-mode (NOT GSD -- see CLAUDE.md "Workflows")
 roadmap: .planning/milestones/v1.6-ROADMAP.md
-stopped_at: Roadmap approved 2026-08-05. Phase 0 not started.
-last_updated: "2026-08-05T20:15:00.000Z"
-last_activity: 2026-08-05 -- v1.6 roadmap created (plan mode + ultracode research)
+stopped_at: Phase 0 complete (tests in .sln, structural resw tests, FakeDispatcherTimer moved, CLAUDE.md fixed). Phase 1 next.
+last_updated: "2026-08-05T20:55:00.000Z"
+last_activity: 2026-08-05 -- Phase 0 done, 345/345 tests green
 progress:
   total_phases: 6
-  completed_phases: 0
-  percent: 0
+  completed_phases: 1
+  percent: 17
 ---
 
 # Project State
@@ -30,18 +30,27 @@ See: .planning/PROJECT.md (updated 2026-05-08)
 Workflow: ultracode / plan mode, **not GSD**. No PLAN.md/SUMMARY.md per phase;
 the roadmap is the single source of truth. Update the phase table below after each phase.
 
-Phase: 0 of 5 — NOT STARTED
-Status: roadmap approved 2026-08-05, implementation pending
-Last activity: 2026-08-05 -- roadmap created (upstream diff + codebase mapping + 2 design agents)
+Phase: 1 of 5 — NEXT
+Status: Phase 0 abgeschlossen 2026-08-05
+Last activity: 2026-08-05 -- Phase 0 committed, 345/345 Tests grün
 
 | Phase | Inhalt | Status |
 |-------|--------|--------|
-| 0 | Fundament: Tests in .sln, ResourceCoverageTests entschärfen, FakeDispatcherTimer verschieben, CLAUDE.md:44 | offen |
+| 0 | Fundament: Tests in .sln, ResourceCoverageTests entschärfen, FakeDispatcherTimer verschieben, CLAUDE.md:44 | **fertig** |
 | 1 | Kontextfenster aus `max_input_tokens` (v1.14.2) + Upstream-Pricing-Datei | offen |
 | 2 | Sonnet-Context-Setting zurückbauen (v1.14.2) | offen |
 | 3 | Chart-Redesign: monotone-cubic, Fade-Fill, Glow, Insets (v1.13.0 + v1.14.0) | offen |
 | 4 | Notifications: 80/95-Thresholds + Window-Reset (v1.5.0 + v1.15.0/1/2) | offen |
 | 5 | Restfixes: `.Distinct()`, Steilheitsfilter, Output-Tier, Re-Aggregate | offen |
+
+### Verify-Umgebung (für Folgephasen)
+
+- Testbaseline **345/345 grün**. Die zwei früher als „pre-existing" geführten
+  `ClaudeApiServiceTests`-Fehler waren veraltete Tests (HttpClient-Ära), nicht ein
+  Produktionsbug — sie wurden in Phase 0 auf den echten Vertrag
+  (`ClaudeApiService.cs:75` `if (responseBody is null) return null;`) nachgezogen.
+- Screenshot-Geometrie für `windows-mcp` (125 % DPI, Fenster sonst rechts abgeschnitten):
+  `window_management set_bounds x=60 y=20 width=625 height=1180`.
 
 **Reihenfolge:** 0 zuerst (blockiert Verify). Dann 1 → 2, 3 und 4 unabhängig, 5 zuletzt.
 **Einzige Konfliktdatei:** `App.xaml.cs` — Phase-1-Edit vor Phase-4-Edit.
