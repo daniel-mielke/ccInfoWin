@@ -25,6 +25,13 @@ public class WebViewBridge : IWebViewBridge
     /// </summary>
     public void Initialize(CoreWebView2 coreWebView, DispatcherQueue dispatcherQueue)
     {
+        // Re-binding (e.g. MainView taking over after login) must detach the previous
+        // WebView first, otherwise the handler leaks onto a dead CoreWebView2.
+        if (!ReferenceEquals(_coreWebView, coreWebView))
+        {
+            Reset();
+        }
+
         _coreWebView = coreWebView;
         _dispatcherQueue = dispatcherQueue;
         _coreWebView.WebMessageReceived += OnWebMessageReceived;
@@ -37,7 +44,10 @@ public class WebViewBridge : IWebViewBridge
     {
         if (_coreWebView is not null)
         {
-            _coreWebView.WebMessageReceived -= OnWebMessageReceived;
+            // The previous CoreWebView2 may already be disposed (navigated-away View),
+            // in which case detaching throws — we only care that we stop listening.
+            try { _coreWebView.WebMessageReceived -= OnWebMessageReceived; }
+            catch (Exception) { }
         }
         _coreWebView = null;
         _dispatcherQueue = null;

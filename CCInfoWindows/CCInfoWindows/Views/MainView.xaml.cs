@@ -87,11 +87,12 @@ public sealed partial class MainView : Page
                 ((MainView)r).UsageChart.Invalidate();
             });
 
+            // Always re-bind the bridge to MainView's own long-lived ApiBridgeWebView.
+            // After a re-login the bridge still points at LoginView's CoreWebView2, which is
+            // destroyed on navigation — IsInitialized stays true (null-check only) while every
+            // fetch() times out, surfacing as "API request failed" + an empty org picker.
             var bridge = App.Services.GetRequiredService<IWebViewBridge>();
-            if (!bridge.IsInitialized)
-            {
-                await InitializeBridgeAsync(bridge);
-            }
+            await InitializeBridgeAsync(bridge);
 
             await ViewModel.InitializeAsync();
         }
@@ -119,23 +120,37 @@ public sealed partial class MainView : Page
         var udfPath = Helpers.AppPaths.WebView2UserDataFolder;
         Directory.CreateDirectory(udfPath);
 
-        var env = await CoreWebView2Environment.CreateWithOptionsAsync(
-            browserExecutableFolder: null,
-            userDataFolder: udfPath,
-            options: null);
-        await ApiBridgeWebView.EnsureCoreWebView2Async(env);
-
-        var tcs = new TaskCompletionSource();
-        void handler(object s, object args)
+        // Idempotent: on a re-login OnLoaded runs again on the same MainView instance, so
+        // CoreWebView2 already exists and is already on claude.ai. Re-navigating would leave
+        // us awaiting a NavigationCompleted that never fires.
+        var alreadyLive = ApiBridgeWebView.CoreWebView2 is not null;
+        if (!alreadyLive)
         {
-            tcs.TrySetResult();
-            ApiBridgeWebView.NavigationCompleted -= handler;
-        }
-        ApiBridgeWebView.NavigationCompleted += handler;
-        ApiBridgeWebView.CoreWebView2.Navigate("https://claude.ai");
-        await tcs.Task;
+            var env = await CoreWebView2Environment.CreateWithOptionsAsync(
+                browserExecutableFolder: null,
+                userDataFolder: udfPath,
+                options: null);
+            await ApiBridgeWebView.EnsureCoreWebView2Async(env);
 
-        bridge.Initialize(ApiBridgeWebView.CoreWebView2, DispatcherQueue.GetForCurrentThread());
+            var tcs = new TaskCompletionSource();
+            void handler(object s, object args)
+            {
+                tcs.TrySetResult();
+                ApiBridgeWebView.NavigationCompleted -= handler;
+            }
+            ApiBridgeWebView.NavigationCompleted += handler;
+            ApiBridgeWebView.CoreWebView2!.Navigate("https://claude.ai");
+            await tcs.Task;
+        }
+
+        var coreWebView = ApiBridgeWebView.CoreWebView2;
+        if (coreWebView is null)
+        {
+            Debug.WriteLine("[MainView] bridge init failed: CoreWebView2 unavailable");
+            return;
+        }
+
+        bridge.Initialize(coreWebView, DispatcherQueue.GetForCurrentThread());
     }
 
     private void UsageChart_Draw(CanvasControl sender, CanvasDrawEventArgs args)

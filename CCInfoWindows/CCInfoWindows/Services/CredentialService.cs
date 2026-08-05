@@ -28,18 +28,17 @@ public class CredentialService : ICredentialService
 
     public void ClearCredentials()
     {
-        try
-        {
-            CredentialManager.RemoveCredentials(CredentialTarget);
-        }
-        catch (Exception)
-        {
-            // Credential may not exist -- safe to ignore
-        }
+        Remove(CredentialTarget);
+        Remove(OrgCredentialTarget);
+    }
 
+    public void ClearOrganizationId() => Remove(OrgCredentialTarget);
+
+    private static void Remove(string target)
+    {
         try
         {
-            CredentialManager.RemoveCredentials(OrgCredentialTarget);
+            CredentialManager.RemoveCredentials(target);
         }
         catch (Exception)
         {

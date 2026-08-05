@@ -193,12 +193,19 @@ public partial class LoginViewModel : ObservableObject
             _credentialService.SaveSessionToken(sessionCookie.Value);
 
             // Extract lastActiveOrg cookie for API URL construction.
-            // If missing, org ID will be fetched via /api/organizations on first poll.
             var orgCookie = cookies.FirstOrDefault(c =>
                 string.Equals(c.Name, "lastActiveOrg", StringComparison.Ordinal));
             if (orgCookie is not null)
             {
                 _credentialService.SaveOrganizationId(orgCookie.Value);
+            }
+            else
+            {
+                // The cookie is often not set yet at this point (the SPA resolves the org after
+                // the first redirect). Dropping the stale id forces re-resolution via
+                // /api/organizations on the first poll — keeping the previous account's org id
+                // here is what made re-login fail with "API request failed".
+                _credentialService.ClearOrganizationId();
             }
 
             // Initialize WebView2 bridge for API calls — Chromium context has
