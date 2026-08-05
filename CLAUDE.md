@@ -1,6 +1,6 @@
 # CCInfoWindows
 
-Modified Windows port of [stefanlange/ccInfo](https://github.com/stefanlange/ccInfo) (macOS v1.10.0).
+Modified Windows port of [stefanlange/ccInfo](https://github.com/stefanlange/ccInfo).
 Real-time Claude Code usage monitoring: 5-hour window, weekly quota, context window, token counts, cost analytics.
 
 ## Stack
@@ -69,15 +69,6 @@ dotnet build CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj -c Release -o CCIn
 - **Always use `dotnet build -c Release`** instead of `dotnet publish` -- produces a working exe without trimming issues.
 - **Always pass `-o`** to target the correct output directory -- without `-o`, the build outputs to a `win-x64/` subdirectory that differs from the expected launch path.
 - **Release exe location:** `CCInfoWindows/CCInfoWindows/bin/x64/Release/net9.0-windows10.0.19041.0/CCInfoWindows.exe`
-
-## Bash Permission Rules (STRICT -- zero exceptions)
-
-- **NEVER chain commands** with `;`, `&&`, `||`, or `|` in a single Bash call -- this is the #1 cause of unnecessary permission prompts
-- **Every command gets its own Bash tool call** -- no exceptions, no shortcuts
-- Use **parallel Bash calls** for independent commands (e.g., `taskkill` and `dotnet build` as two parallel calls)
-- Use **sequential Bash calls** when one depends on the other's result
-- **No subshells or inline pipelines** -- if you need `tail`, `grep`, or `wc` on output, do it in a separate call or use the dedicated tool
-- Example: to kill the app and rebuild, use two separate Bash calls: `taskkill //F //IM CCInfoWindows.exe` then `dotnet build ...`
 
 ## Security Rules
 
