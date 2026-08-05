@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: macOS ccInfo v1.15.2 Feature Parity
-status: in_progress
+status: code_complete
 workflow: ultracode / plan-mode (NOT GSD -- see CLAUDE.md "Workflows")
 roadmap: .planning/milestones/v1.6-ROADMAP.md
-stopped_at: Phase 0 complete (tests in .sln, structural resw tests, FakeDispatcherTimer moved, CLAUDE.md fixed). Phase 1 next.
-last_updated: "2026-08-05T20:55:00.000Z"
-last_activity: 2026-08-05 -- Phase 0 done, 345/345 tests green
+stopped_at: All 6 phases (0-5) implemented and committed. Visual UAT outstanding -- workstation stayed locked for the whole run.
+last_updated: "2026-08-05T21:55:00.000Z"
+last_activity: 2026-08-05 -- Phase 5 committed, 431/431 tests green
 progress:
   total_phases: 6
-  completed_phases: 1
-  percent: 17
+  completed_phases: 6
+  percent: 100
 ---
 
 # Project State
@@ -30,9 +30,11 @@ See: .planning/PROJECT.md (updated 2026-05-08)
 Workflow: ultracode / plan mode, **not GSD**. No PLAN.md/SUMMARY.md per phase;
 the roadmap is the single source of truth. Update the phase table below after each phase.
 
-Phase: 5 of 5 — NEXT
-Status: Phasen 0-4 abgeschlossen 2026-08-05
-Last activity: 2026-08-05 -- Phase 4 committed, 421/421 Tests grün
+Phase: alle 6 (0-5) abgeschlossen — **Code komplett, visuelle UAT offen**
+Status: implementiert und committet 2026-08-05
+Last activity: 2026-08-05 -- Phase 5 committed, 431/431 Tests grün
+
+**Nächster Schritt:** die visuelle UAT unten abarbeiten (Sitzung entsperren), dann Ship-Tag.
 
 ### Laufzeitbeleg Phase 4 (aus `%LOCALAPPDATA%\CCInfoWindows\notification-state.json`)
 
@@ -79,7 +81,7 @@ zugesagten Ergebnisse. Implementiert ist die Veto-Semantik.
 | 2 | Sonnet-Context-Setting zurückbauen (v1.14.2) | **fertig** (visuelle UAT offen) |
 | 3 | Chart-Redesign: monotone-cubic, Fade-Fill, Glow, Insets (v1.13.0 + v1.14.0) | **fertig** (visuelle UAT offen) |
 | 4 | Notifications: 80/95-Thresholds + Window-Reset (v1.5.0 + v1.15.0/1/2) | **fertig** (Toast-Zustellung manuell offen) |
-| 5 | Restfixes: `.Distinct()`, Steilheitsfilter, Output-Tier, Re-Aggregate | offen |
+| 5 | Restfixes: `.Distinct()`, Steilheitsfilter, Output-Tier, Re-Aggregate | **fertig** |
 
 ### Verify-Umgebung (für Folgephasen)
 
@@ -102,7 +104,14 @@ zugesagten Ergebnisse. Implementiert ist die Veto-Semantik.
 | Phase | Zu prüfen |
 |---|---|
 | 2 | Settings → Allgemein: Sonnet-Zeile weg, Divider-Abstände intakt (6 Zeilen statt 7) |
-| 3 | Glow an allen vier Rändern nicht abgeschnitten (0 % und 100 %), Kurve ohne Überschwingen über 100 %, beide Themes, Export-PNG gegen Live-Chart |
+| 3 | Glow an allen vier Rändern nicht abgeschnitten (0 % und 100 %), Kurve ohne Überschwingen über 100 %, beide Themes, Export-PNG gegen Live-Chart, Chart-Höhe 160 im 480px-Fenster |
+| 4 | Manueller Rauchtest: erscheint unter `WindowsPackageType=None` überhaupt ein Toast? (headless nicht prüfbar, Präzedenz „Manual-Only" im Repo etabliert) |
+
+Was **nicht** offen ist: alle Zahlen-/Text-Prüfungen wurden per UIA-Baum belegt —
+Kontextfenster 31 % bei 309.951 Tokens (Opus 5, 1M-Fenster; bei 200 K wäre auf 100 % geklemmt
+worden), Statistik-Zeile „Haiku 4.5, Opus 4.7, Opus 4.8, Opus 5" (dedupliziert und sortiert,
+vorher „…, Opus 5, Opus 4.7, Opus 4.8"), und `notification-state.json` mit korrekt
+truncateten Window-IDs.
 
 **Reihenfolge:** 0 zuerst (blockiert Verify). Dann 1 → 2, 3 und 4 unabhängig, 5 zuletzt.
 **Einzige Konfliktdatei:** `App.xaml.cs` — Phase-1-Edit vor Phase-4-Edit.

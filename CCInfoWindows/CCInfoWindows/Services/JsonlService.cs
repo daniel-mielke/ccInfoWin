@@ -374,7 +374,12 @@ public sealed class JsonlService : IJsonlService, IDisposable
         var inputPrice = useExtended && pricing.InputCostAbove200k.HasValue
             ? pricing.InputCostAbove200k.Value
             : pricing.InputCostPerToken;
-        var outputPrice = pricing.OutputCostPerToken;
+        // Output was the one tier that stayed on the base price even though the above-200k value
+        // is parsed. For Opus that is a 33% surcharge (7.5e-05 -> 1e-04), and output dominates in
+        // long sessions, so cost above 200k input was systematically understated.
+        var outputPrice = useExtended && pricing.OutputCostAbove200k.HasValue
+            ? pricing.OutputCostAbove200k.Value
+            : pricing.OutputCostPerToken;
         var cacheCreatePrice = useExtended && pricing.CacheCreationCostAbove200k.HasValue
             ? pricing.CacheCreationCostAbove200k.Value
             : pricing.CacheCreationCost ?? 0.0;

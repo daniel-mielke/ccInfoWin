@@ -1,5 +1,54 @@
 # Milestones
 
+## v1.6 macOS v1.15.2 Feature Parity (Code complete: 2026-08-05)
+
+**Phases completed:** 6 phases (0-5), 5 commits, no GSD (ultracode / plan mode)
+**Changes:** 45 files, +3,399/-705 lines
+**Tests:** 345 → 431 GREEN (+86); baseline made truly green in phase 0
+
+**Key accomplishments:**
+
+- Context window resolved from live pricing data instead of a hardcoded family map. The old map
+  was wrong in both directions: Sonnet at 500K tokens showed 250% and warned permanently, Opus
+  4.5 at 300K showed 30% and never warned at all — the app was hiding a real limit. Resolution is
+  session evidence (a transcript above 200K proves the window) → `max_input_tokens` → 200K.
+- **Roadmap correction:** the above-200k price tier is a VETO, not a gate. The roadmap pseudocode
+  said "take the >200K value only if the tier exists", which contradicted its own prose and
+  coverage matrix. Verified against real upstream data: the surcharge marks an *opt-in* window
+  needing a beta header (Sonnet 4: 1M with tier → effectively 200K), while native 1M models
+  (Sonnet 5/4.6, Opus 4.6/4.7/4.8, Opus 5, Fable 5) carry no tier and keep their full window.
+- Bundled price table replaced with upstream's, reduced to its 33 anthropic entries — 34 KB
+  instead of 234 KB, behaviour-identical because `ParseAndStore` filters on provider anyway.
+  `LiteLLMPricingService` now seeds the fallback in its constructor, closing a cold-start race
+  that Phase 1 would otherwise have introduced (pricing loads fire-and-forget while
+  `RefreshSessionList` already resolves context windows).
+- Sonnet context-size setting removed end to end; no migration needed because
+  `System.Text.Json` drops the now-unknown property (verified against the live settings.json).
+- Chart redesign: Fritsch-Carlson monotone curve (no overshoot above 100%), fill fading to the
+  baseline via a two-gradient `FillGeometry`, glow with a white core, an 11px inset on all four
+  sides so the glow is never clipped, eased green→yellow ramp, centred axis labels, and one
+  shared geometry for fill+line built once per frame. Height 120 → 160; export chart area now
+  matches the live canvas exactly rather than within 3.4%.
+- Threshold (80/95%) and window-reset notifications — an upstream gap since v1.5.0 that the port
+  never had. Implements the end state of v1.15.0/1/2 rather than reproducing three bugs:
+  minute-truncated window identity persisted as a string, flags re-armed only by an identity
+  change, an `_armedWindowIds` guard so 30-second polls do not restart the countdown forever, and
+  `PeakUtilization` instead of last-value so a window reported as 0% during rotation still
+  reports. Verified live: both `resets_at` in the first real poll carried sub-second noise
+  (`.07056` / `.070581`), exactly the condition that broke upstream.
+- Restfixes: `.Distinct()` + ordering on the statistics model row, above-200k *output* price
+  applied (a 33% Opus surcharge that was silently dropped), statistics re-aggregated after the
+  first successful pricing load, and a steepness filter in `BurnRateCalculator` so a single bogus
+  sample cannot fire a false "exhausted in 2 minutes" alarm — `Predict` now has both
+  plausibility bounds where upstream has only the upper one.
+
+**Outstanding:** visual UAT (chart glow clipping, curve overshoot, both themes, export PNG vs
+live, Settings divider spacing) and a manual toast-delivery smoke test. The workstation was
+locked for the whole run, so DWM returned black frames and UIA Invoke did not fire commands.
+Tracked in STATE.md.
+
+---
+
 ## v1.4 macOS v1.11.1 Feature Parity (Shipped: 2026-05-07)
 
 **Phases completed:** 4 phases (20-23), 13 plans (10 base + 3 gap-closure), 51 commits

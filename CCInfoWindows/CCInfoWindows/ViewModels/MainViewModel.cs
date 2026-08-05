@@ -422,7 +422,15 @@ public partial class MainViewModel : ObservableObject,
             try
             {
                 await _pricingService.EnsurePricesLoadedAsync();
-                _dispatcherQueue.TryEnqueue(() => IsPricingError = false);
+                _dispatcherQueue.TryEnqueue(() =>
+                {
+                    IsPricingError = false;
+                    // Statistics rendered before prices arrived were priced with whatever was
+                    // seeded from the bundled table; recompute once the live data lands. Much
+                    // smaller than upstream's generation/invalidation machinery because there is
+                    // no parse cache here — CalculateEntryCost calls GetPrice fresh every time.
+                    RecomputeStatisticsForCurrentTab();
+                });
             }
             catch (Exception ex)
             {
@@ -989,7 +997,13 @@ public partial class MainViewModel : ObservableObject,
             .Where(m => !string.Equals(m, "<synthetic>", StringComparison.OrdinalIgnoreCase)
                      && !string.Equals(m, "synthetic", StringComparison.OrdinalIgnoreCase)
                      && !string.Equals(m, "unknown", StringComparison.OrdinalIgnoreCase))
-            .Select(m => ModelContextLimits.GetDisplayName(m))
+            .Select(ModelContextLimits.GetDisplayName)
+            // Distinct: several raw ids collapse onto one display name (claude-opus-5-2026xxxx
+            // and claude-opus-5 both render "Opus 5"), which showed up as "Opus 5, Opus 5".
+            // Ordered because JsonlService returns a HashSet.ToList() — otherwise the row
+            // reshuffles between polls for no reason.
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(m => m, StringComparer.CurrentCulture)
             .ToList();
         StatisticsModels = displayModels.Count > 0
             ? string.Join(", ", displayModels)
@@ -1029,17 +1043,24 @@ public partial class MainViewModel : ObservableObject,
             });
         }
 
+        RecomputeStatisticsForCurrentTab();
+    }
+
+    /// <summary>
+    /// Recomputes the statistics panel for whichever tab is active, without the loading spinner.
+    /// </summary>
+    private void RecomputeStatisticsForCurrentTab()
+    {
         if (SelectedTabIndex == (int)TimePeriod.Session)
         {
             UpdateStatisticsFromSession();
+            return;
         }
-        else
-        {
-            _statisticsCts?.Cancel();
-            var cts = new CancellationTokenSource();
-            _statisticsCts = cts;
-            _ = AggregateStatisticsAsync((TimePeriod)SelectedTabIndex, cts.Token, showLoading: false);
-        }
+
+        _statisticsCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _statisticsCts = cts;
+        _ = AggregateStatisticsAsync((TimePeriod)SelectedTabIndex, cts.Token, showLoading: false);
     }
 
     private static SolidColorBrush ParseHexBrush(string hex)

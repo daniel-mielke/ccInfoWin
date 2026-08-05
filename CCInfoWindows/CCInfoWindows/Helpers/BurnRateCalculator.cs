@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CCInfoWindows.Models;
 
 namespace CCInfoWindows.Helpers;
@@ -16,6 +17,18 @@ public static class BurnRateCalculator
 
     /// <summary>Upper bound for a usable ETA — one 5-hour window has already elapsed by then.</summary>
     private const double MaxSecondsToLimit = 5 * 60 * 60;
+
+    /// <summary>
+    /// Steepest utilization change treated as real, in percentage points per second.
+    /// 0.5 means 15 points inside one 30-second poll — far above anything sustained usage
+    /// produces (typically well under 0.1 points/s), so only genuine jumps are rejected.
+    ///
+    /// Upstream calls its own limit "a first guess" and so is this: it is a plausibility bound,
+    /// not a measured constant. Tune it here if real sessions start tripping it.
+    /// </summary>
+    public const double MaxPlausiblePointsPerSecond = 0.5;
+
+    private const double RateComparisonEpsilon = 1e-9;
 
     /// <summary>
     /// Predicts the burn rate based on recent usage history.
@@ -39,10 +52,10 @@ public static class BurnRateCalculator
             return null;
 
         var lookbackCutoff = DateTimeOffset.UtcNow - TimeSpan.FromMinutes(LookbackWindowMinutes);
-        var recentPoints = history
+        var recentPoints = FilterImplausibleJumps(history
             .Where(p => p.Timestamp >= lookbackCutoff)
             .OrderBy(p => p.Timestamp)
-            .ToList();
+            .ToList());
 
         if (recentPoints.Count < MinimumDataPoints)
             return null;
@@ -95,5 +108,57 @@ public static class BurnRateCalculator
             HitsLimitAt = hitsLimitAt,
             MinutesUntilLimit = minutesUntilLimit,
         };
+    }
+
+    /// <summary>
+    /// Drops regression points whose change since the last accepted point is too steep to be
+    /// real usage. A single bogus jump drags the slope up and produces a false
+    /// "exhausted in 2 minutes" alarm.
+    ///
+    /// Complementary to the near-flat guard further down, not a duplicate of it: that one
+    /// protects against slope -> 0 (ETA -> infinity, overflow), this one against slope ->
+    /// infinity. Together Predict now has both plausibility bounds, where upstream only has the
+    /// upper one.
+    ///
+    /// Points are compared against the last ACCEPTED point, so a rejected outlier cannot become
+    /// the baseline that makes the following (normal) point look like a jump in the other
+    /// direction.
+    /// </summary>
+    public static List<UsageHistoryPoint> FilterImplausibleJumps(IReadOnlyList<UsageHistoryPoint> ordered)
+    {
+        var accepted = new List<UsageHistoryPoint>(ordered.Count);
+        if (ordered.Count == 0) return accepted;
+
+        accepted.Add(ordered[0]);
+
+        for (var i = 1; i < ordered.Count; i++)
+        {
+            var previous = accepted[^1];
+            var current = ordered[i];
+
+            var elapsedSeconds = (current.Timestamp - previous.Timestamp).TotalSeconds;
+            if (elapsedSeconds <= 0.0)
+            {
+                Debug.WriteLine($"[BurnRateCalculator] rejected point at {current.Timestamp:O}: non-advancing timestamp");
+                continue;
+            }
+
+            var pointsPerSecond = Math.Abs((current.Utilization - previous.Utilization) * 100.0) / elapsedSeconds;
+
+            // Epsilon because the bound is a round number that real data hits exactly: 15 points
+            // over 30s computes to 0.5000000000000001 and would otherwise be rejected by noise.
+            if (pointsPerSecond > MaxPlausiblePointsPerSecond + RateComparisonEpsilon)
+            {
+                Debug.WriteLine(
+                    $"[BurnRateCalculator] rejected point at {current.Timestamp:O}: " +
+                    $"{pointsPerSecond:F3} points/s exceeds {MaxPlausiblePointsPerSecond} " +
+                    $"({previous.Utilization * 100:F1}% -> {current.Utilization * 100:F1}% in {elapsedSeconds:F0}s)");
+                continue;
+            }
+
+            accepted.Add(current);
+        }
+
+        return accepted;
     }
 }
