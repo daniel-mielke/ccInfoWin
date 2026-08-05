@@ -250,28 +250,7 @@
 
                             <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
 
-                            <!-- Row 6: Sonnet Context -->
-                            <Grid Height="40" Padding="12,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock l:Uids.Uid="SettingsSonnetContextLabel"
-                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                                           VerticalAlignment="Center" />
-                                <ComboBox Grid.Column="1"
-                                          l:Uids.Uid="SonnetContextComboBox"
-                                          Width="120"
-                                          SelectedIndex="{x:Bind ViewModel.SelectedSonnetContextIndex, Mode=TwoWay}"
-                                          VerticalAlignment="Center">
-                                    <ComboBoxItem Content="200K" />
-                                    <ComboBoxItem Content="1M" />
-                                </ComboBox>
-                            </Grid>
-
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
-
-                            <!-- Row 7: Reset Window Size -->
+                            <!-- Row 6: Reset Window Size -->
                             <Grid Height="40" Padding="12,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />

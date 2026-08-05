@@ -103,13 +103,9 @@ public partial class SettingsViewModel : ObservableObject
     private int _selectedLanguageIndex;
 
     [ObservableProperty]
-    private int _selectedSonnetContextIndex;
-
-    [ObservableProperty]
     private int _selectedVisibilityWindowIndex;
 
     private static readonly string[] LanguageCodes = ["de-DE", "en-US"];
-    private static readonly int[] SonnetContextSizes = [200_000, 1_000_000];
 
     // DROPDOWN-04 / D-03: visibility window options. 0 == unlimited.
     private static readonly int[] VisibilityWindowDayOptions = [7, 30, 90, 0];
@@ -358,7 +354,6 @@ public partial class SettingsViewModel : ObservableObject
         _selectedThresholdIndex = MapMinutesToThresholdIndex(settings.SessionActivityThresholdMinutes);
         _isAutostart = RegistryHelper.GetAutostart();
         _selectedLanguageIndex = settings.Language == "en-US" ? 1 : 0;
-        _selectedSonnetContextIndex = settings.SonnetContextSize == 1_000_000 ? 1 : 0;
         _selectedVisibilityWindowIndex = MapVisibilityDaysToIndex(settings.SessionVisibilityWindowDays);
 
         OnPropertyChanged(nameof(SelectedRefreshOption));
@@ -366,7 +361,6 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedThresholdIndex));
         OnPropertyChanged(nameof(IsAutostart));
         OnPropertyChanged(nameof(SelectedLanguageIndex));
-        OnPropertyChanged(nameof(SelectedSonnetContextIndex));
         OnPropertyChanged(nameof(SelectedVisibilityWindowIndex));
     }
 
@@ -409,17 +403,6 @@ public partial class SettingsViewModel : ObservableObject
             var settings = _settingsService.LoadSettings();
             settings.Language = code;
             _settingsService.SaveSettings(settings);
-        }
-    }
-
-    partial void OnSelectedSonnetContextIndexChanged(int value)
-    {
-        if (value >= 0 && value < SonnetContextSizes.Length)
-        {
-            var settings = _settingsService.LoadSettings();
-            settings.SonnetContextSize = SonnetContextSizes[value];
-            _settingsService.SaveSettings(settings);
-            WeakReferenceMessenger.Default.Send(new SonnetContextChangedMessage(SonnetContextSizes[value]));
         }
     }
 

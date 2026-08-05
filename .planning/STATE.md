@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-05-08)
 Workflow: ultracode / plan mode, **not GSD**. No PLAN.md/SUMMARY.md per phase;
 the roadmap is the single source of truth. Update the phase table below after each phase.
 
-Phase: 2 of 5 — NEXT
-Status: Phasen 0 + 1 abgeschlossen 2026-08-05
-Last activity: 2026-08-05 -- Phase 1 committed, 366/366 Tests grün
+Phase: 3 of 5 — NEXT
+Status: Phasen 0, 1, 2 abgeschlossen 2026-08-05
+Last activity: 2026-08-05 -- Phase 2 committed, 366/366 Tests grün
 
 ### Roadmap-Korrektur aus Phase 1 (wichtig für die Abnahme)
 
@@ -49,7 +49,7 @@ zugesagten Ergebnisse. Implementiert ist die Veto-Semantik.
 |-------|--------|--------|
 | 0 | Fundament: Tests in .sln, ResourceCoverageTests entschärfen, FakeDispatcherTimer verschieben, CLAUDE.md:44 | **fertig** |
 | 1 | Kontextfenster aus `max_input_tokens` (v1.14.2) + Upstream-Pricing-Datei | **fertig** |
-| 2 | Sonnet-Context-Setting zurückbauen (v1.14.2) | offen |
+| 2 | Sonnet-Context-Setting zurückbauen (v1.14.2) | **fertig** (visuelle UAT offen) |
 | 3 | Chart-Redesign: monotone-cubic, Fade-Fill, Glow, Insets (v1.13.0 + v1.14.0) | offen |
 | 4 | Notifications: 80/95-Thresholds + Window-Reset (v1.5.0 + v1.15.0/1/2) | offen |
 | 5 | Restfixes: `.Distinct()`, Steilheitsfilter, Output-Tier, Re-Aggregate | offen |
@@ -66,8 +66,16 @@ zugesagten Ergebnisse. Implementiert ist die Veto-Semantik.
   die Sitzung nicht mehr und `screenshot_control` liefert ein schwarzes Bild — die App läuft
   dabei normal weiter. Prüfen mit `Get-Process LogonUI`. Ersatz: `mcp__windows-mcp__ui_find`
   / `ui_read` lesen den UIA-Baum mit Live-Werten auch im gesperrten Zustand und sind für
-  Zahlen/Texte sogar präziser. Nur **pixelbezogene** Prüfungen (Phase 3: Glow-Clipping,
-  Kurven-Überschwingen, beide Themes, Export-PNG vs. Live) brauchen eine entsperrte Sitzung.
+  Zahlen/Texte sogar präziser. Nur **pixelbezogene** Prüfungen brauchen eine entsperrte
+  Sitzung. Zusatzbefund: bei gesperrter Sitzung feuert auch `ui_click` (UIA-Invoke) keine
+  Commands — Navigation in Unterseiten ist damit ebenfalls blockiert.
+
+### Offene visuelle UAT (nachholen, sobald die Sitzung entsperrt ist)
+
+| Phase | Zu prüfen |
+|---|---|
+| 2 | Settings → Allgemein: Sonnet-Zeile weg, Divider-Abstände intakt (6 Zeilen statt 7) |
+| 3 | Glow an allen vier Rändern nicht abgeschnitten (0 % und 100 %), Kurve ohne Überschwingen über 100 %, beide Themes, Export-PNG gegen Live-Chart |
 
 **Reihenfolge:** 0 zuerst (blockiert Verify). Dann 1 → 2, 3 und 4 unabhängig, 5 zuletzt.
 **Einzige Konfliktdatei:** `App.xaml.cs` — Phase-1-Edit vor Phase-4-Edit.

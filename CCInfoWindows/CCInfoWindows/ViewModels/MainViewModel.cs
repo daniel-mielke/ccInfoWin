@@ -373,17 +373,6 @@ public partial class MainViewModel : ObservableObject,
             vm._dispatcherQueue.TryEnqueue(() => vm.UpdateRefreshInterval(m.Value));
         });
 
-        // Subscribe to Sonnet context size changes from Settings — refresh context display immediately
-        WeakReferenceMessenger.Default.Register<SonnetContextChangedMessage>(this, (r, m) =>
-        {
-            var vm = (MainViewModel)r;
-            vm._dispatcherQueue.TryEnqueue(() =>
-            {
-                if (vm.SelectedSession != null)
-                    vm.UpdateSessionData(vm.SelectedSession.Session);
-            });
-        });
-
         // RENAME-04 / D-06 / L-02: subscribe via .NET event (NOT WeakReferenceMessenger — D-13 lesson).
         // Symmetric -= cleanup happens in StopTimers (CD-05).
         _sessionNameStore.NameChanged += OnSessionNameChanged;
