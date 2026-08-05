@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.5
-milestone_name: milestone
-status: completed
-stopped_at: Phase 28 CLEANUP-01..04 + Final UAT Checklist complete. Milestone v1.5 all phases done.
-last_updated: "2026-08-05T00:00:00.000Z"
-last_activity: 2026-08-05 -- 3 hotfixes committed directly (a2a6ad0, 2adafd0, ef320a6), no GSD phase
+milestone: v1.6
+milestone_name: macOS ccInfo v1.15.2 Feature Parity
+status: planned
+workflow: ultracode / plan-mode (NOT GSD -- see CLAUDE.md "Workflows")
+roadmap: .planning/milestones/v1.6-ROADMAP.md
+stopped_at: Roadmap approved 2026-08-05. Phase 0 not started.
+last_updated: "2026-08-05T20:15:00.000Z"
+last_activity: 2026-08-05 -- v1.6 roadmap created (plan mode + ultracode research)
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
-  percent: 100
+  completed_phases: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,14 +21,48 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-08)
 
 **Core value:** Developers can see their Claude usage limits (5-hour window, weekly quota, context window) at a glance in real-time, preventing unexpected throttling.
-**Current focus:** Phase 29 — Fix Subagent activity detection: switch from assistant-timestamp to filesystem mtime (macOS parity)
+**Current focus:** v1.6 — feature parity with macOS ccInfo v1.15.2 (gap: v1.13.0 … v1.15.2)
 
 ## Current Position
 
-Phase: 29 — COMPLETE
-Plan: 1 of 1
-Status: v1.5 shipped; no active milestone. 3 post-ship hotfixes committed directly.
-Last activity: 2026-08-05 -- hotfixes a2a6ad0, 2adafd0, ef320a6 (outside GSD flow)
+**Milestone: v1.6 — macOS ccInfo v1.15.2 Feature Parity**
+**Roadmap: `.planning/milestones/v1.6-ROADMAP.md` — read this first.**
+Workflow: ultracode / plan mode, **not GSD**. No PLAN.md/SUMMARY.md per phase;
+the roadmap is the single source of truth. Update the phase table below after each phase.
+
+Phase: 0 of 5 — NOT STARTED
+Status: roadmap approved 2026-08-05, implementation pending
+Last activity: 2026-08-05 -- roadmap created (upstream diff + codebase mapping + 2 design agents)
+
+| Phase | Inhalt | Status |
+|-------|--------|--------|
+| 0 | Fundament: Tests in .sln, ResourceCoverageTests entschärfen, FakeDispatcherTimer verschieben, CLAUDE.md:44 | offen |
+| 1 | Kontextfenster aus `max_input_tokens` (v1.14.2) + Upstream-Pricing-Datei | offen |
+| 2 | Sonnet-Context-Setting zurückbauen (v1.14.2) | offen |
+| 3 | Chart-Redesign: monotone-cubic, Fade-Fill, Glow, Insets (v1.13.0 + v1.14.0) | offen |
+| 4 | Notifications: 80/95-Thresholds + Window-Reset (v1.5.0 + v1.15.0/1/2) | offen |
+| 5 | Restfixes: `.Distinct()`, Steilheitsfilter, Output-Tier, Re-Aggregate | offen |
+
+**Reihenfolge:** 0 zuerst (blockiert Verify). Dann 1 → 2, 3 und 4 unabhängig, 5 zuletzt.
+**Einzige Konfliktdatei:** `App.xaml.cs` — Phase-1-Edit vor Phase-4-Edit.
+
+### Entschieden (nicht neu aufrollen)
+
+1. **Notification-Scheduling:** In-Process-`IDispatcherTimer`, keine neue Abhängigkeit.
+   Dokumentierte Abweichung: Reset-Toast nur bei laufender App (unpackaged →
+   `AppNotificationManager` kann nicht terminieren).
+2. **Pricing-Fallback:** Upstream-`claude-pricing-fallback.json` 1:1 übernehmen.
+3. **Verify pro Phase:** App beenden → `dotnet test` → `dotnet build -c Release` →
+   App starten + Screenshot per `windows-mcp` → Bugfix-Runde bei Fund.
+
+### Nicht anfassen
+
+- Die 5 im Roadmap-Abschnitt „Bereits erfüllt" gelisteten Punkte — sie sind verifiziert
+  schon erledigt (orange Sonnet-Badges, DE-Übersetzungen, 2 Dezimalstellen bei Kosten,
+  `?? 0`-Immunität, teilweise Long-Context-Preisstufen).
+- `MainViewModel.cs:627` und `:666` (`IsWindowReset`) — die Notifications brauchen einen
+  eigenen Trigger, Begründung in Roadmap Phase 4.
+- `MainViewModel`-Split (1235 Zeilen) — im Backlog, nicht in diesem Milestone.
 
 **v1.5 Phase Sequence (research-validated, do not reorder):**
 
