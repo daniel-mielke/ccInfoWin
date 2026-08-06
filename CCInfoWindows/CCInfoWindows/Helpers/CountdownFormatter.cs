@@ -1,10 +1,9 @@
 using System.Globalization;
-using WinUI3Localizer;
 
 namespace CCInfoWindows.Helpers;
 
 /// <summary>
-/// Formats countdown timers and reset dates for display in the monitoring dashboard.
+/// Formats countdown timers and locale-patterned timestamps for the monitoring dashboard.
 /// </summary>
 public static class CountdownFormatter
 {
@@ -17,6 +16,7 @@ public static class CountdownFormatter
 
     private const string NoValue = "--";
     private const int HoursPerDay = 24;
+    private const string LogSource = nameof(CountdownFormatter);
 
     /// <summary>
     /// Formats the remaining time until reset as "Xd Yh", "Xh Ymin", or "Ymin".
@@ -59,16 +59,30 @@ public static class CountdownFormatter
     public static string FormatResetDate(DateTimeOffset? resetsAt) =>
         resetsAt is null
             ? NoValue
-            : FormatResetDate(resetsAt.Value, ResolvePattern(), CultureInfo.CurrentUICulture);
+            : FormatWithLocalePattern(resetsAt.Value, ResetDatePatternUid, CultureInfo.CurrentUICulture);
 
     /// <summary>
-    /// Pattern-and-culture overload, internal so the formatting can be asserted without a
-    /// WinUI3Localizer host (mirrors BurnRateFormatter.ParseTime). A missing or malformed pattern
-    /// degrades to <see cref="CultureDefaultPattern"/> instead of throwing into the caller's UI update.
+    /// Renders <paramref name="value"/> in local time using the pattern the active language stores
+    /// under <paramref name="patternUid"/>. Shared by every label whose field order is a translated
+    /// resource rather than a literal — the weekly reset date and the 5-hour next-window label.
     /// </summary>
-    internal static string FormatResetDate(DateTimeOffset resetsAt, string? pattern, CultureInfo culture)
+    internal static string FormatWithLocalePattern(DateTimeOffset value, string patternUid, CultureInfo culture)
+        => FormatWithPattern(value, LocalizedText.ResolveOrNull(patternUid, LogSource), patternUid, culture);
+
+    /// <summary>
+    /// Pattern-and-culture seam, internal so the formatting can be asserted without a WinUI3Localizer
+    /// host (mirrors BurnRateFormatter.ParseTime). A missing or malformed pattern degrades to
+    /// <see cref="CultureDefaultPattern"/> instead of throwing into the caller's UI update.
+    /// <paramref name="patternUid"/> names the offending resw entry in the log — it is the only part
+    /// of the message a maintainer can act on.
+    /// </summary>
+    internal static string FormatWithPattern(
+        DateTimeOffset value,
+        string? pattern,
+        string patternUid,
+        CultureInfo culture)
     {
-        var localTime = resetsAt.ToLocalTime();
+        var localTime = value.ToLocalTime();
 
         if (!string.IsNullOrWhiteSpace(pattern))
         {
@@ -79,9 +93,9 @@ public static class CountdownFormatter
             catch (FormatException ex)
             {
                 AppLog.Write(
-                    nameof(CountdownFormatter),
+                    LogSource,
                     ex,
-                    $"'{ResetDatePatternUid}' = \"{pattern}\" is not a valid custom date format string.");
+                    $"'{patternUid}' = \"{pattern}\" is not a valid custom date format string.");
             }
         }
 
@@ -94,25 +108,4 @@ public static class CountdownFormatter
     /// </summary>
     internal static string CultureDefaultPattern(CultureInfo culture) =>
         $"ddd, {culture.DateTimeFormat.MonthDayPattern}, {culture.DateTimeFormat.ShortTimePattern}";
-
-    /// <summary>
-    /// Reads the pattern of the active language, or null when the answer cannot be trusted: an
-    /// unbuilt localizer (NullLocalizer) echoes the uid back and a built one returns an empty
-    /// string for an unknown uid, and "WeeklyResetDatePattern" fed to ToString renders as a date.
-    /// </summary>
-    private static string? ResolvePattern()
-    {
-        try
-        {
-            var pattern = Localizer.Get().GetLocalizedString(ResetDatePatternUid);
-            return string.IsNullOrWhiteSpace(pattern) || pattern == ResetDatePatternUid
-                ? null
-                : pattern;
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write(nameof(CountdownFormatter), ex, $"could not read '{ResetDatePatternUid}'.");
-            return null;
-        }
-    }
 }

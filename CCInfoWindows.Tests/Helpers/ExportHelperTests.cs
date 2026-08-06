@@ -142,40 +142,27 @@ public class ExportHelperTests
     }
 
     [Fact]
-    public void Caption_UsesTheLocalizedText()
+    public void ExportCaptions_ResolveThroughTheSharedFallbackRule()
     {
-        var german = ExportHelper.Caption(
-            _ => "5-STUNDEN-FENSTER",
-            ExportHelper.ExportConstants.SectionLabelUid,
-            ExportHelper.ExportConstants.SectionLabelFallback);
+        // ExportHelper used to carry its own copy of "blank or echoed uid means no translation"
+        // (Caption), one of the four that finding 30 collapsed. The rule itself is asserted in
+        // LocalizedTextTests; what matters here is that the export's own uid/fallback pairs still
+        // survive a dictionary that cannot answer.
+        Assert.Equal(
+            ExportHelper.ExportConstants.SectionLabelFallback,
+            LocalizedText.Resolve(
+                uid => uid,
+                ExportHelper.ExportConstants.SectionLabelUid,
+                ExportHelper.ExportConstants.SectionLabelFallback,
+                nameof(ExportHelper)));
 
-        Assert.Equal("5-STUNDEN-FENSTER", german);
-    }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void Caption_FallsBackWhenTheDictionaryHasNoValue(string localizerResult)
-    {
-        var caption = ExportHelper.Caption(
-            _ => localizerResult,
-            ExportHelper.ExportConstants.SectionLabelUid,
-            ExportHelper.ExportConstants.SectionLabelFallback);
-
-        Assert.Equal(ExportHelper.ExportConstants.SectionLabelFallback, caption);
-    }
-
-    [Fact]
-    public void Caption_FallsBackWhenTheLocalizerEchoesTheUid()
-    {
-        // WinUI3Localizer's NullLocalizer (the instance before Build()) returns the uid it was asked
-        // for, which would paint "SectionHeaderFiveHour" onto the exported PNG.
-        var caption = ExportHelper.Caption(
-            uid => uid,
-            ExportHelper.ExportConstants.SectionLabelUid,
-            ExportHelper.ExportConstants.SectionLabelFallback);
-
-        Assert.Equal(ExportHelper.ExportConstants.SectionLabelFallback, caption);
+        Assert.Equal(
+            ExportHelper.ExportConstants.ResetInFallback,
+            LocalizedText.Resolve(
+                _ => string.Empty,
+                ExportHelper.ExportConstants.ResetInLabelUid,
+                ExportHelper.ExportConstants.ResetInFallback,
+                nameof(ExportHelper)));
     }
 
     [Fact]

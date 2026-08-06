@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using CCInfoWindows.Models;
 
 namespace CCInfoWindows.Helpers;
@@ -29,6 +28,24 @@ public static class BurnRateCalculator
     public const double MaxPlausiblePointsPerSecond = 0.5;
 
     private const double RateComparisonEpsilon = 1e-9;
+
+    private const string LogSource = nameof(BurnRateCalculator);
+
+    /// <summary>
+    /// Appended to both rejection entries, because a maintainer reading a single line would otherwise
+    /// conclude the condition occurred exactly once.
+    /// </summary>
+    private const string RepeatsSuppressed =
+        " Further occurrences in this process are not reported.";
+
+    // One entry per condition per process. Predict re-filters the whole 15-minute lookback on every
+    // 30-second poll, so one implausible sample would be re-rejected ~30 times before it ages out and
+    // a permanently duplicated timestamp would be re-rejected for as long as the app runs. That is
+    // enough volume to push every other entry out of a 1 MiB app.log — and the repeats carry no
+    // information the first one did not. The bound on MaxPlausiblePointsPerSecond is documented as "a
+    // first guess", so whether it ever trips in the field is exactly what has to survive in Release.
+    private static int _nonAdvancingTimestampReported;
+    private static int _implausibleRateReported;
 
     /// <summary>
     /// Predicts the burn rate based on recent usage history.
@@ -139,7 +156,14 @@ public static class BurnRateCalculator
             var elapsedSeconds = (current.Timestamp - previous.Timestamp).TotalSeconds;
             if (elapsedSeconds <= 0.0)
             {
-                Debug.WriteLine($"[BurnRateCalculator] rejected point at {current.Timestamp:O}: non-advancing timestamp");
+                if (TryClaimFirstReport(ref _nonAdvancingTimestampReported))
+                {
+                    AppLog.Write(
+                        LogSource,
+                        $"rejected the sample at {current.Timestamp:O}: its timestamp does not advance "
+                        + $"past the last accepted one ({previous.Timestamp:O})." + RepeatsSuppressed);
+                }
+
                 continue;
             }
 
@@ -149,10 +173,16 @@ public static class BurnRateCalculator
             // over 30s computes to 0.5000000000000001 and would otherwise be rejected by noise.
             if (pointsPerSecond > MaxPlausiblePointsPerSecond + RateComparisonEpsilon)
             {
-                Debug.WriteLine(
-                    $"[BurnRateCalculator] rejected point at {current.Timestamp:O}: " +
-                    $"{pointsPerSecond:F3} points/s exceeds {MaxPlausiblePointsPerSecond} " +
-                    $"({previous.Utilization * 100:F1}% -> {current.Utilization * 100:F1}% in {elapsedSeconds:F0}s)");
+                if (TryClaimFirstReport(ref _implausibleRateReported))
+                {
+                    AppLog.Write(
+                        LogSource,
+                        $"rejected the sample at {current.Timestamp:O}: {pointsPerSecond:F3} points/s "
+                        + $"exceeds the plausibility bound of {MaxPlausiblePointsPerSecond} "
+                        + $"({previous.Utilization * 100:F1}% -> {current.Utilization * 100:F1}% "
+                        + $"in {elapsedSeconds:F0}s)." + RepeatsSuppressed);
+                }
+
                 continue;
             }
 
@@ -161,4 +191,11 @@ public static class BurnRateCalculator
 
         return accepted;
     }
+
+    /// <summary>
+    /// True on the first call for a given latch and false forever after. A parameter rather than a
+    /// captured field so the once-only rule is deterministic under xUnit, where process-wide state
+    /// would make the outcome depend on which test ran first.
+    /// </summary>
+    internal static bool TryClaimFirstReport(ref int latch) => Interlocked.Exchange(ref latch, 1) == 0;
 }

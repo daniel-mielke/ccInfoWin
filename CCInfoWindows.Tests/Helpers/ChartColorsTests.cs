@@ -159,9 +159,10 @@ public class ChartColorsTests
     [InlineData(false, "Light")]
     public void ProgressBrushes_MatchAppThemeXaml(bool isDark, string themeKey)
     {
-        // PercentageToColorConverter resolves the three progress bars through ChartColors instead of
-        // Application.Current.Resources (which followed the OS theme, not the app's element theme).
-        // That only stays correct while the two palettes agree, so this reads the actual XAML.
+        // MainViewModel's ContextUtilizationBrush / WeeklyUtilizationBrush / SonnetUtilizationBrush
+        // resolve the three progress bars through ChartColors instead of Application.Current.Resources
+        // (which followed the OS theme, not the app's element theme). That only stays correct while
+        // the two palettes agree, so this reads the actual XAML.
         var declared = LoadThemeBrushes(themeKey);
 
         foreach (var brushKey in ProgressBrushKeys)
@@ -221,19 +222,9 @@ public class ChartColorsTests
 
     private static string FindAppThemePath()
     {
-        // Walk up from the test output directory to the app's Resources folder, as the localization
-        // coverage tests do for the .resw files.
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            var candidate = Path.Combine(
-                dir.FullName, "CCInfoWindows", "CCInfoWindows", "Resources", "AppTheme.xaml");
-            if (File.Exists(candidate))
-                return candidate;
+        var path = Path.Combine(ProductionSourceFiles.Root, "Resources", "AppTheme.xaml");
 
-            dir = dir.Parent;
-        }
-
-        throw new InvalidOperationException("Could not locate Resources/AppTheme.xaml from the test base directory.");
+        Assert.True(File.Exists(path), $"Resources/AppTheme.xaml not found at {path}.");
+        return path;
     }
 }

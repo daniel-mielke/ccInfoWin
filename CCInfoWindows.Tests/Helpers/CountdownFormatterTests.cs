@@ -96,9 +96,9 @@ public class CountdownFormatterTests
     }
 
     [Fact]
-    public void FormatResetDate_German_KeepsTheDayMonthOrder()
+    public void FormatWithPattern_German_KeepsTheDayMonthOrder()
     {
-        var result = CountdownFormatter.FormatResetDate(LocalTenOnFeb27(), GermanPattern, German);
+        var result = FormatResetDateWith(GermanPattern, German);
 
         Assert.StartsWith("Fr", result);
         Assert.Contains("27.02.", result);
@@ -106,10 +106,10 @@ public class CountdownFormatterTests
     }
 
     [Fact]
-    public void FormatResetDate_English_DoesNotRenderTheGermanDayMonthOrder()
+    public void FormatWithPattern_English_DoesNotRenderTheGermanDayMonthOrder()
     {
         // Finding 21: the formatter hardcoded de-DE, so an English user read "06.08." as June 8th.
-        var result = CountdownFormatter.FormatResetDate(LocalTenOnFeb27(), EnglishPattern, English);
+        var result = FormatResetDateWith(EnglishPattern, English);
 
         Assert.StartsWith("Fri", result);
         Assert.Contains("Feb 27", result);
@@ -121,31 +121,51 @@ public class CountdownFormatterTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void FormatResetDate_WithoutAPattern_FallsBackToTheCultureDefault(string? pattern)
+    public void FormatWithPattern_WithoutAPattern_FallsBackToTheCultureDefault(string? pattern)
     {
         // The resource lookup returns nothing before the localizer is built; rendering the raw uid
         // as if it were a date, or throwing into the caller's UI update, are both worse than this.
-        var resetsAt = LocalTenOnFeb27();
-
-        var result = CountdownFormatter.FormatResetDate(resetsAt, pattern, German);
-
-        var expected = resetsAt.ToLocalTime().ToString(
-            CountdownFormatter.CultureDefaultPattern(German), German);
-        Assert.Equal(expected, result);
+        Assert.Equal(CultureDefaultRendering(German), FormatResetDateWith(pattern, German));
     }
 
     [Fact]
-    public void FormatResetDate_WithAMalformedPattern_FallsBackInsteadOfThrowing()
+    public void FormatWithPattern_WithAMalformedPattern_FallsBackInsteadOfThrowing()
     {
         // An unterminated quoted literal is the realistic translator error, and FormatException out
         // of here would abort the whole usage-data update, not just this one label.
-        var resetsAt = LocalTenOnFeb27();
+        Assert.Equal(CultureDefaultRendering(German), FormatResetDateWith("ddd 'unterminated", German));
+    }
 
-        var result = CountdownFormatter.FormatResetDate(resetsAt, "ddd 'unterminated", German);
+    [Fact]
+    public void FormatWithPattern_UsesThePatternUidOnlyForTheLogEntry_NotTheOutput()
+    {
+        // The uid names the offending resw entry in app.log. It must never reach ToString, or an
+        // unresolved pattern would render as a plausible-looking wrong date.
+        var rendered = CountdownFormatter.FormatWithPattern(
+            LocalTenOnFeb27(), pattern: null, patternUid: "ddd", culture: German);
 
-        var expected = resetsAt.ToLocalTime().ToString(
-            CountdownFormatter.CultureDefaultPattern(German), German);
-        Assert.Equal(expected, result);
+        Assert.Equal(CultureDefaultRendering(German), rendered);
+    }
+
+    [Fact]
+    public void FormatWithLocalePattern_WithoutALocalizerHost_FallsBackToTheCultureDefault()
+    {
+        // The production entry point: xUnit can never build a WinUI3Localizer host, so the pattern
+        // lookup always fails here — and the label still has to be a date.
+        var rendered = CountdownFormatter.FormatWithLocalePattern(
+            LocalTenOnFeb27(), CountdownFormatter.ResetDatePatternUid, German);
+
+        Assert.Equal(CultureDefaultRendering(German), rendered);
+    }
+
+    [Fact]
+    public void FormatResetDate_WithoutALocalizerHost_StillRendersADate()
+    {
+        // Same degradation reached through the public nullable entry point, so the "--" branch cannot
+        // start swallowing a present value.
+        var rendered = CountdownFormatter.FormatResetDate(LocalTenOnFeb27());
+
+        Assert.Equal(CultureDefaultRendering(CultureInfo.CurrentUICulture), rendered);
     }
 
     [Fact]
@@ -162,6 +182,14 @@ public class CountdownFormatterTests
             Assert.Contains("27", rendered);
         }
     }
+
+    private static string FormatResetDateWith(string? pattern, CultureInfo culture) =>
+        CountdownFormatter.FormatWithPattern(
+            LocalTenOnFeb27(), pattern, CountdownFormatter.ResetDatePatternUid, culture);
+
+    private static string CultureDefaultRendering(CultureInfo culture) =>
+        LocalTenOnFeb27().ToLocalTime().ToString(
+            CountdownFormatter.CultureDefaultPattern(culture), culture);
 
     /// <summary>
     /// Friday, 27 Feb 2026, 10:00 in the machine's own time zone, so ToLocalTime() is a no-op and the

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using CCInfoWindows.Helpers;
+using CCInfoWindows.Tests.Helpers;
 using CCInfoWindows.ViewModels;
 
 namespace CCInfoWindows.Tests.Localization;
@@ -217,10 +218,9 @@ public class ResourceCoverageTests
         // Regression guard for Phase 25 / 27: Toast.SessionVisibilityMigration and
         // MainView.PricingErrorInfoBar rendered with empty Title/Message because their
         // UIDs had 2 segments before the suffix.
-        var xamlSourceDir = FindXamlSourceDir();
         // Filter out MSBuild-generated copies in obj/ and bin/ — they are stale snapshots.
         var xamlFiles = Directory
-            .EnumerateFiles(xamlSourceDir, "*.xaml", SearchOption.AllDirectories)
+            .EnumerateFiles(ProductionSourceFiles.Root, "*.xaml", SearchOption.AllDirectories)
             .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
                      && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"));
 
@@ -262,24 +262,17 @@ public class ResourceCoverageTests
         //
         // Exception: PropertyName-suffixed uids (Foo.Bar where Bar is a DependencyProperty name)
         // are technically allowed but unusual for direct API calls — we treat any '.' as suspicious.
-        var sourceDir = FindCSharpSourceDir();
-        var csFiles = Directory
-            .EnumerateFiles(sourceDir, "*.cs", SearchOption.AllDirectories)
-            .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                     && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"));
-
         var callPattern = new Regex(@"GetLocalizedString\s*\(\s*""([^""]+)""\s*\)", RegexOptions.Compiled);
 
         var violations = new List<string>();
-        foreach (var csPath in csFiles)
+        foreach (var source in ProductionSourceFiles.All())
         {
-            var content = File.ReadAllText(csPath);
-            foreach (Match m in callPattern.Matches(content))
+            foreach (Match m in callPattern.Matches(source.Text))
             {
                 var uid = m.Groups[1].Value;
                 if (uid.Contains('.'))
                 {
-                    violations.Add($"{Path.GetFileName(csPath)}: GetLocalizedString(\"{uid}\") has '.' — library returns empty.");
+                    violations.Add($"{source.Name}: GetLocalizedString(\"{uid}\") has '.' — library returns empty.");
                 }
             }
         }
@@ -393,38 +386,6 @@ public class ResourceCoverageTests
 
     private static HashSet<int> PlaceholderIndices(string value) =>
         PlaceholderPattern.Matches(value).Select(m => int.Parse(m.Groups[1].Value)).ToHashSet();
-
-    private static string FindCSharpSourceDir()
-    {
-        // Walk up from test output dir to find the main app's CCInfoWindows source root.
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null)
-        {
-            var candidate = Path.Combine(dir.FullName, "CCInfoWindows", "CCInfoWindows", "App.xaml.cs");
-            if (File.Exists(candidate))
-            {
-                return Path.Combine(dir.FullName, "CCInfoWindows", "CCInfoWindows");
-            }
-            dir = dir.Parent;
-        }
-        throw new InvalidOperationException("Could not locate CCInfoWindows C# source directory from test base.");
-    }
-
-    private static string FindXamlSourceDir()
-    {
-        // Walk up from test output dir until we find the Views folder containing MainView.xaml.
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null)
-        {
-            var candidate = Path.Combine(dir.FullName, "CCInfoWindows", "CCInfoWindows", "Views", "MainView.xaml");
-            if (File.Exists(candidate))
-            {
-                return Path.Combine(dir.FullName, "CCInfoWindows", "CCInfoWindows");
-            }
-            dir = dir.Parent;
-        }
-        throw new InvalidOperationException("Could not locate CCInfoWindows source directory from test base.");
-    }
 
     private static Dictionary<string, string> LoadResw(string relativePath)
     {

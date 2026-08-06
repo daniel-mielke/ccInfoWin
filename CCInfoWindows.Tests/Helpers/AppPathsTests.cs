@@ -26,10 +26,11 @@ public class AppPathsTests
     private static readonly string[] LocalAppDataApis = [LocalAppDataFolderApi, LocalAppDataEnvironmentApi];
 
     /// <summary>
-    /// JsonlService is routed by finding 28's lane of the same review wave. Until that lands it is
-    /// the one known remaining site; nothing else may join this list.
+    /// AppPaths and nothing else. JsonlService held a temporary exemption while its cache-directory
+    /// default still rebuilt the root by hand; it now takes AppPaths.DataDirectory, so the list is
+    /// closed — a file joining it is the defect, not the exemption.
     /// </summary>
-    private static readonly string[] AllowedToDeriveTheRoot = [AppPathsFileName, "JsonlService.cs"];
+    private static readonly string[] AllowedToDeriveTheRoot = [AppPathsFileName];
 
     private static string LocalAppData =>
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -111,6 +112,12 @@ internal static class ProductionSourceFiles
 
     internal static IReadOnlyList<SourceFile> All() => LazyFiles.Value;
 
+    /// <summary>
+    /// The app project's source root, for scans that read something other than C# — the XAML uid
+    /// scanner and the AppTheme.xaml palette mirror both walk up to the same directory.
+    /// </summary>
+    internal static string Root => LazySourceRoot.Value;
+
     /// <summary>Text of the one production file with this name, wherever it sits in the tree.</summary>
     internal static string Read(string fileName)
     {
@@ -142,9 +149,8 @@ internal static class ProductionSourceFiles
         || path.Contains(@"\bin\", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Walks up from the test output directory to the app's source root. Mirrors the locators in
-    /// ResourceCoverageTests, AppHostConventionTests and ChartColorsTests — the compiled assembly
-    /// carries no source, and those three predate this helper.
+    /// Walks up from the test output directory to the app's source root — the compiled assembly
+    /// carries no source. AppHostConventionTests still keeps its own copy of this walk.
     /// </summary>
     private static string LocateSourceRoot()
     {

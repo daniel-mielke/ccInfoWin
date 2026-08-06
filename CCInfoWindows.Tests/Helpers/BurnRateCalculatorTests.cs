@@ -182,4 +182,48 @@ public class BurnRateCalculatorTests
 
         Assert.Null(result);
     }
+
+    [Fact]
+    public void TryClaimFirstReport_IsTrueOnceAndFalseAfterwards()
+    {
+        // Finding 34 replaced two Debug.WriteLine calls (erased from Release) with AppLog entries.
+        // Predict re-filters its whole lookback on every poll, so an unbounded entry per rejection
+        // would flood a 1 MiB app.log and evict the failures worth keeping. This latch is what keeps
+        // it to one entry per condition per process.
+        var latch = 0;
+
+        Assert.True(BurnRateCalculator.TryClaimFirstReport(ref latch));
+        Assert.False(BurnRateCalculator.TryClaimFirstReport(ref latch));
+        Assert.False(BurnRateCalculator.TryClaimFirstReport(ref latch));
+    }
+
+    [Fact]
+    public void TryClaimFirstReport_ClaimsExactlyOnce_UnderConcurrentCallers()
+    {
+        // The filter runs on a poll callback, so two overlapping polls can reach the same latch.
+        var latch = 0;
+        var claims = 0;
+
+        Parallel.For(0, 64, _ =>
+        {
+            if (BurnRateCalculator.TryClaimFirstReport(ref latch))
+            {
+                Interlocked.Increment(ref claims);
+            }
+        });
+
+        Assert.Equal(1, claims);
+    }
+
+    [Fact]
+    public void TryClaimFirstReport_TracksEachConditionSeparately()
+    {
+        // Two independent latches, so a rejected timestamp does not consume the steepness bound's
+        // one and only entry.
+        var first = 0;
+        var second = 0;
+
+        Assert.True(BurnRateCalculator.TryClaimFirstReport(ref first));
+        Assert.True(BurnRateCalculator.TryClaimFirstReport(ref second));
+    }
 }

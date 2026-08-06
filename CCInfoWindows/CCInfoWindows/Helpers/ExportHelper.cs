@@ -6,7 +6,6 @@ using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Streams;
 using Windows.UI;
-using WinUI3Localizer;
 
 namespace CCInfoWindows.Helpers;
 
@@ -17,6 +16,7 @@ namespace CCInfoWindows.Helpers;
 public static class ExportHelper
 {
     private const string PngExtension = ".png";
+    private const string LogSource = nameof(ExportHelper);
 
     /// <summary>Picker filter label. Deliberately not localized — it names a file format.</summary>
     private const string PngFileTypeLabel = "PNG Image";
@@ -97,38 +97,12 @@ public static class ExportHelper
         DrawBackground(session);
 
         var chartAreaTop = DrawHeader(
-            session, percentageText, countdownText, utilization, localize ?? ResolveFromLocalizer);
+            session, percentageText, countdownText, utilization, localize ?? LocalizedText.LocalizerLookup);
         DrawChartArea(session, device, points, windowStart, chartAreaTop);
 
         DrawWatermark(session);
 
         return renderTarget;
-    }
-
-    /// <summary>
-    /// Resolves a caption for the language the UI is currently showing, falling back to
-    /// <paramref name="fallback"/> when the dictionary has no usable answer. Internal for testing.
-    /// </summary>
-    internal static string Caption(Func<string, string> localize, string uid, string fallback)
-    {
-        var text = localize(uid);
-
-        // A built localizer returns "" for an unknown uid and NullLocalizer echoes the uid back;
-        // either would paint a resource key onto the exported PNG.
-        return string.IsNullOrWhiteSpace(text) || text == uid ? fallback : text;
-    }
-
-    private static string ResolveFromLocalizer(string uid)
-    {
-        try
-        {
-            return Localizer.Get().GetLocalizedString(uid);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write(nameof(ExportHelper), ex, $"could not read caption '{uid}'.");
-            return string.Empty;
-        }
     }
 
     /// <summary>
@@ -172,7 +146,7 @@ public static class ExportHelper
         }
         catch (Exception ex)
         {
-            AppLog.Write(nameof(ExportHelper), ex, "saving the chart as PNG failed");
+            AppLog.Write(LogSource, ex, "saving the chart as PNG failed");
             return false;
         }
     }
@@ -208,7 +182,7 @@ public static class ExportHelper
         }
         catch (Exception ex)
         {
-            AppLog.Write(nameof(ExportHelper), ex, "rendering the chart for the clipboard failed");
+            AppLog.Write(LogSource, ex, "rendering the chart for the clipboard failed");
             return false;
         }
     }
@@ -224,7 +198,7 @@ public static class ExportHelper
 
         if (!dispatcherQueue.TryEnqueue(() => completion.TrySetResult(TrySetClipboardContent(dataPackage))))
         {
-            AppLog.Write(nameof(ExportHelper), "the UI thread queue refused the clipboard write");
+            AppLog.Write(LogSource, "the UI thread queue refused the clipboard write");
             return false;
         }
 
@@ -246,7 +220,7 @@ public static class ExportHelper
         }
         catch (Exception ex)
         {
-            AppLog.Write(nameof(ExportHelper), ex, "writing the chart to the clipboard failed");
+            AppLog.Write(LogSource, ex, "writing the chart to the clipboard failed");
             return false;
         }
     }
@@ -301,8 +275,8 @@ public static class ExportHelper
             VerticalAlignment = CanvasVerticalAlignment.Top,
             WordWrapping = CanvasWordWrapping.NoWrap
         };
-        var resetInCaption = Caption(
-            localize, ExportConstants.ResetInLabelUid, ExportConstants.ResetInFallback);
+        var resetInCaption = LocalizedText.Resolve(
+            localize, ExportConstants.ResetInLabelUid, ExportConstants.ResetInFallback, LogSource);
         session.DrawText(resetInCaption, rightX, currentY, ExportConstants.LabelColor, resetLabelFormat);
 
         // Row 2 right: countdown value in white
@@ -329,8 +303,8 @@ public static class ExportHelper
             VerticalAlignment = CanvasVerticalAlignment.Top,
             WordWrapping = CanvasWordWrapping.NoWrap
         };
-        var sectionCaption = Caption(
-            localize, ExportConstants.SectionLabelUid, ExportConstants.SectionLabelFallback);
+        var sectionCaption = LocalizedText.Resolve(
+            localize, ExportConstants.SectionLabelUid, ExportConstants.SectionLabelFallback, LogSource);
         session.DrawText(sectionCaption, leftX, sectionLabelTop, ExportConstants.SectionLabelColor, sectionLabelFormat);
 
         var chartAreaTop = sectionLabelTop + ExportConstants.SectionLabelFontSize + ExportConstants.ChartTopMargin;
