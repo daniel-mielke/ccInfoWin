@@ -159,7 +159,7 @@ License: MIT
 - **No secrets in repository** — Zero hardcoded API keys, tokens, passwords, or credentials in source code
 - **Comprehensive .gitignore from day one** — Excludes: `bin/`, `obj/`, `.vs/`, `*.user`, `launchSettings.json`, any local config with paths or tokens
 - **No telemetry** — Zero data collection, zero tracking
-- **Network allowlist** — App communicates exclusively with `claude.ai`, `raw.githubusercontent.com`, and `api.github.com` (HTTPS only)
+- **Network allowlist** — App communicates exclusively with `claude.ai` (usage API + the login page inside WebView2, which additionally loads whatever subresources that page references), `raw.githubusercontent.com` (price list), `api.github.com` (update check) and `github.com` (release page and upstream credits link, handed to the default browser via `Process.Start`) — HTTPS only. *(Corrected 2026-08-06, review finding 39: `github.com` was a real fourth egress host that this list omitted. The `claude.ai` checks are host-equality now, not `StartsWith` on a prefix that also accepted `claude.ai.evil.example` — see `Services/ClaudeAiUrlPolicy.cs`.)*
 - **Local data in %LOCALAPPDATA%** — Settings, caches, and usage history stored in user-scoped directory
 
 ## Key Decisions
@@ -181,7 +181,7 @@ License: MIT
 | _stopOnComplete flag for refresh animation (v1.1) | WinUI 3 Storyboard must complete current rotation before Stop() — no built-in API | ✓ Good — smooth completion without snap |
 | Footer into ScrollViewer (v1.1) | Fixed footer created dead space; macOS reference scrolls footer with content | ✓ Good — matches macOS behavior |
 | ModelFamily enum over token heuristic (v1.2) | Token-count guessing was fragile; model name is authoritative | ✓ Good — clean switch, future-proof |
-| Flat 20K autocompact warning (v1.2) | Percentage thresholds gave wildly different absolute values per model | ✓ Good — consistent UX across 200K and 1M |
+| Flat 20K autocompact warning (v1.2) | Percentage thresholds gave wildly different absolute values per model | ⚠️ Amended 2026-08-06 (review finding 23) — the flat buffer is right, its baseline was not. Measured against the RAW max it sat 13,000 tokens above the point where the bar already reads 100%, so it could never fire before the autocompact it announces. Now measured against `GetEffectiveMaxTokens` (max − 33K), the same baseline the percentage uses |
 | Optional settingsService in JsonlService (v1.2) | Default null preserves 13+ existing test constructors unchanged | ✓ Good — zero test breakage |
 | UNC path guard before Directory.Exists (v1.2) | Windows Directory.Exists hangs on unreachable UNC servers | ✓ Good — prevents app freeze |
 | Explicit ToolTipService.ToolTip in XAML (v1.2) | WinUI3Localizer Uid-only injection doesn't create tooltip UI at parse time | ✓ Good — discovered and fixed via UAT |

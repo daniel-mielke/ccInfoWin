@@ -409,8 +409,8 @@ private async Task InitializeWebViewAsync(WebView2 webView)
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <RootNamespace>CCInfoWindows</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Platforms>x64;ARM64</Platforms>
-    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <Platforms>x64;ARM64</Platforms>            <!-- x64 only since 2026-08-06, see note below -->
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>   <!-- win-x64 only since 2026-08-06 -->
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
     <Nullable>enable</Nullable>
@@ -427,6 +427,14 @@ private async Task InitializeWebViewAsync(WebView2 webView)
   </ItemGroup>
 </Project>
 ```
+
+*Note 2026-08-06 (review finding 46): `<Platforms>` is `x64` and `<RuntimeIdentifiers>` is `win-x64` today.
+The ARM64 half of the values above was declared here in v1.0 and carried for a year without ever being
+built or tested — the solution's `SolutionConfigurationPlatforms` never had ARM64 rows, so
+`dotnet build CCInfoWindows.sln -p:Platform=ARM64` failed with MSB4126, while `-p:Platform=x86` silently
+redirected to x64. Removed so the declared surface matches what ships. The csproj also pins
+`PublishTrimmed`/`PublishAot` to `false` with a `FailOnTrimmedPublish` guard target now (see the
+"Release Build Rules (STRICT)" section of `CLAUDE.md`).*
 
 ### .gitignore (Phase 1 Baseline)
 ```gitignore

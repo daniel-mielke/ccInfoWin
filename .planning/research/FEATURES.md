@@ -94,7 +94,7 @@ After cold start, the "Aktive Sitzung" / "Active Session" ComboBox is populated 
   - Iterate ALL entries to resolve Cwd (first non-empty wins, not just `entries[0]`).
   - Fallback Cwd surrogate from `SessionNameHelper.DecodeProjectDirectory(projectDirName)` when no entry carries `cwd`.
   - Soften `IsValidProjectDirectory`: keep sessions whose Cwd is empty/unresolvable but whose decoded dir name yields a display name. Mark visually as "no cwd resolved" (greyed/italic) if needed.
-  - `Debug.WriteLine` count of dropped sessions + reason for diagnosability.
+  - Log the count of dropped sessions + reason for diagnosability via `AppLog.Write` — **not** `Debug.WriteLine`, which this line originally specified (corrected 2026-08-06: `[Conditional("DEBUG")]`, erased from Release).
 - **Phase B (Configurable visibility window):**
   - `AppSettings.SessionVisibilityWindowDays` (int, default 30).
   - New ComboBox in Settings General tab with 4 entries: 7 / 30 / 90 / 0 (unlimited).
@@ -169,7 +169,7 @@ When `_pricingService.EnsurePricesLoadedAsync()` fails (network, JSON parse, fil
 
 **Concrete spec:**
 - Replace fire-and-forget catch-all in `MainViewModel.cs:366-370` with proper error propagation:
-  - Catch typed exceptions (`HttpRequestException`, `JsonException`, `IOException`); log to `Debug.WriteLine` AND surface to a new `HasPricingError` ObservableProperty.
+  - Catch typed exceptions (`HttpRequestException`, `JsonException`, `IOException`); log via `AppLog.Write` AND surface to a new `HasPricingError` ObservableProperty. *(Corrected 2026-08-06 on two counts: `Debug.WriteLine` is erased from Release, and the premise is wrong anyway — `EnsurePricesLoadedAsync` cannot throw, because every loader inside `LiteLLMPricingService` catches internally. The error flag has to be driven off `IPricingService.Source == PricingSource.Unknown`, not off a catch. See `.planning/research/rootcause-pricing-never-loaded.md` → "Status 2026-08-06".)*
   - Marshal exception observation to UI thread via `DispatcherQueue.TryEnqueue` (couples with C-2 below — same architectural family).
 - New `HasPricingError` + `PricingErrorMessage` ObservableProperties on `MainViewModel`.
 - New InfoBar in MainView (or Settings Updates tab) showing the error with a "Retry" button → `RetryPricingLoadCommand`.

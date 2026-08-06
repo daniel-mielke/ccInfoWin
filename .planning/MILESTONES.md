@@ -1,10 +1,11 @@
 # Milestones
 
-## v1.6 macOS v1.15.2 Feature Parity (Code complete: 2026-08-05)
+## v1.6 macOS v1.15.2 Feature Parity (Code complete: 2026-08-05 · UAT: 2026-08-06 · remediation in progress · NOT tagged)
 
 **Phases completed:** 6 phases (0-5), 5 commits, no GSD (ultracode / plan mode)
 **Changes:** 45 files, +3,399/-705 lines
-**Tests:** 345 → 431 GREEN (+86); baseline made truly green in phase 0
+**Tests:** 345 → 434 GREEN (+89, incl. 3 `AxisLabelFitsInGutter` cases from the U6 fix); baseline made
+truly green in phase 0. Then 434 → 673 across the post-UAT remediation waves below.
 
 **Key accomplishments:**
 
@@ -42,10 +43,53 @@
   sample cannot fire a false "exhausted in 2 minutes" alarm — `Predict` now has both
   plausibility bounds where upstream has only the upper one.
 
-**Outstanding:** visual UAT (chart glow clipping, curve overshoot, both themes, export PNG vs
-live, Settings divider spacing) and a manual toast-delivery smoke test. The workstation was
-locked for the whole run, so DWM returned black frames and UIA Invoke did not fire commands.
-Tracked in STATE.md.
+**Visual UAT (2026-08-06):** run on an unlocked session against the Release build. U1–U11 all pass;
+U6 failed on the first attempt (axis labels wrapped — "100%" measures 24.36px into an 18px rect) and
+was fixed in `d975646` by widening `ChartRenderer.LeftMargin` 22 → 32. Full record with per-checkpoint
+evidence in `.planning/STATE.md`.
+
+**Post-UAT remediation wave (2026-08-06, in progress — branch `fix/repo-review-2026-08-06`):** a
+full-repo review of `b16c992` produced 46 findings (2 High, 31 Medium, 13 Low). Waves 1 and 2 have
+landed — 10 commits, 673/673 tests green. Highlights, because several change behaviour the UAT
+recorded:
+
+- Deduplication was inert against real JSONL: `BuildDeduplicationKey` read a `uniqueHash` field
+  Claude Code never writes, so the key was always empty and every assistant turn was counted 2–4×.
+  Keyed on `message.id|requestId` now, with the per-line `uuid` as fallback, and a repeated identity
+  supersedes the earlier entry rather than being skipped. Every token, statistic and cost figure the
+  app displays was roughly 1.9× too high and is now correct.
+- `installer/setup.iss` packaged `win-x64\publish\*`, which the mandated `dotnet build -c Release`
+  never writes — the copy on disk was a 114-day-old April binary, so a v1.6 tag would have shipped
+  v1.0-era code labelled `1.0.0`. Source repointed at the sanctioned output, the orphan tree deleted,
+  and the three divergent version strings unified on 1.6.0.
+- `AppLog` added: a Release-safe sink at `%LOCALAPPDATA%\CCInfoWindows\app.log` (1 MiB, single roll).
+  Roughly 41 `Debug.WriteLine` sites and seven bare catches were routed through it — they were all
+  `[Conditional("DEBUG")]` and therefore erased from the build users run, which is what made most of
+  the other findings undiagnosable in the field.
+- `ShouldWarnAutocompact` compared against the raw maximum minus 20K while `Utilization` divides by
+  the maximum minus 33K and clamps, so the warning threshold sat 13,000 tokens *above* the point where
+  the bar already reads 100% — it could never fire before the event it exists to pre-announce. Now
+  measured against the same baseline. CTX-04's wording and its two pinning tests were updated with it.
+- Auth no longer keys off `UnauthorizedAccessException` (a filesystem permission error while writing
+  the usage cache was being read as an HTTP 401 and force-logged the user out); `SessionExpiredException`
+  is the only 401 signal from the bridge now.
+- Localization: `CountdownFormatter` had `de-DE` and its date pattern hardcoded, so English users read
+  the weekly reset as "Mi. 06.08." — it now reads `CultureInfo.CurrentUICulture` plus a per-locale
+  `WeeklyResetDatePattern` key. Three more German literals and four hardcoded ComboBox labels moved
+  into both resw files.
+- The Sessions-tab Clear button bound through a `DataContext` that was never set and did nothing;
+  `ISessionNameStore.Save`/`SaveAsync` success flags were discarded at all four call sites, so a failed
+  rename looked successful and vanished on restart. `LoadSettings` now allow-lists and clamps every
+  persisted field — a bad `Language` string used to abort app launch with no recovery path.
+- The dashboard bootstrap had no failure surface: one throw left a rendered window with no timers, no
+  banner and no log. Timers are created before cache hydration now, and the existing
+  `HasApiError`/`ApiErrorMessage` InfoBar is actually used.
+
+**Outstanding before the tag:** the test-suite findings (31–33), rewiring `IsPricingError` off
+`IPricingService.Source` instead of an exception that can never be thrown, deleting the three dead
+messenger channels (finding 37), and — most importantly — **re-looking the UAT checkpoints the
+remediation invalidated**. U1–U11 were verified against pre-fix behaviour; STATE.md's
+"Review-Remediation 2026-08-06" section says which ones still hold and which do not.
 
 ---
 
@@ -93,7 +137,7 @@ Tracked in STATE.md.
 
 **Key accomplishments:**
 
-- ModelContextLimits rewritten from token-count heuristic to ModelFamily enum — Opus returns 1M, Sonnet uses configurable size, Haiku/Unknown default to 200K; flat 33K buffer and 20K warning threshold
+- ModelContextLimits rewritten from token-count heuristic to ModelFamily enum — Opus returns 1M, Sonnet uses configurable size, Haiku/Unknown default to 200K; flat 33K buffer and 20K warning threshold *(the 20K is measured against the **effective** max since the 2026-08-06 remediation — against the raw max it could never fire before the bar saturated; see the v1.6 entry)*
 - Sonnet context window setting added to Settings view (200K/1M ComboBox) with live refresh via WeakReferenceMessenger — context bars update immediately on setting change
 - ISettingsService injected into JsonlService for SonnetContextSize passthrough to GetMaxContextTokens, completing the end-to-end settings→display pipeline
 - IsValidProjectDirectory guard filters orphaned sessions (deleted project directories, UNC paths) and subagent context bars sorted alphabetically by AgentId

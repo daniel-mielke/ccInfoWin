@@ -95,6 +95,11 @@ dotnet add CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj package Microsoft.Gr
 
 **IMPORTANT:** Win2D requires a specific CPU architecture target. The project already has `<Platforms>x64;ARM64</Platforms>` and `Directory.Build.props` sets `<Platform>x64</Platform>` as default — this satisfies Win2D's requirement. Do NOT set to `Any CPU`.
 
+*(Updated 2026-08-06, review finding 46: it is `<Platforms>x64</Platforms>` now. ARM64 was declared in both
+project files for a year but could never be built from the solution — the `SolutionConfigurationPlatforms`
+section had no ARM64 rows, so `-p:Platform=ARM64` failed with MSB4126 — and was never tested. The advice
+above is unaffected: an explicit architecture is still set and still must not be `Any CPU`.)*
+
 ---
 
 ## Architecture Patterns
@@ -377,7 +382,7 @@ public class UsageHistoryPoint
 ### Pitfall 6: Architecture Not Set to x64/ARM64
 **What goes wrong:** Build fails with "Win2D requires a specific CPU architecture."
 **Why it happens:** Win2D is implemented in C++ and cannot target Any CPU.
-**How to avoid:** Already resolved — project targets `x64;ARM64` and Directory.Build.props defaults to x64. No action needed, but be aware if adding ARM64 build pipelines.
+**How to avoid:** Already resolved — project targets `x64` and Directory.Build.props defaults to x64. No action needed. *(2026-08-06: `ARM64` was dropped from `<Platforms>`/`<RuntimeIdentifiers>` — review finding 46 proved it had never been buildable from the solution nor tested. Re-adding it needs an ARM64 device, an ARM64 installer and a real test run, not just the two property values.)*
 
 ---
 

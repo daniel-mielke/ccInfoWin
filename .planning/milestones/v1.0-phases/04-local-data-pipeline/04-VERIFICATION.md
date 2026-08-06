@@ -16,6 +16,24 @@ human_verification:
 **Status:** passed (all automated checks pass, 1 empty-state UI item requires running app)
 **Re-verification:** No — initial verification (post-execution, documentation gap closure)
 
+> **Note 2026-08-06 — three statements below no longer describe the code** (2026-08-06 full-repo review
+> remediation; history kept as written):
+>
+> 1. **Deduplication was never by `uuid|requestId`.** It shipped keyed on `uuid` alone and was later changed
+>    to a `uniqueHash` field that Claude Code does not write, which made it inert — every assistant turn was
+>    counted 2–4×. `uuid` is unique per JSONL *line*, and one assistant message spans several lines, so keying
+>    on it deduplicates nothing either. The key is `message.id|requestId` now, with `uuid` only as a fallback,
+>    and a repeated identity supersedes the earlier entry in place (only the last line of a streamed turn
+>    carries the completed `output_tokens`). Review finding 2.
+> 2. **`Models/TokenSummary.cs` is deleted** and `IJsonlService.GetTokenSummary` is off the interface —
+>    `MainViewModel` stopped calling it long before the review; `GetTokenSummary` survives only as an internal
+>    test seam. `IJsonlService.GetSubagentContext` is gone for the same reason (review finding 30).
+> 3. The wiring row "MainViewModel → `_jsonlService.GetTokenSummary(...)` in UpdateTokenDisplay" is therefore
+>    also historical.
+>
+> TOKS-01 and TOKS-04 remain satisfied — by `GetStatistics` / `StatisticsSummary`, not by the surface named
+> here.
+
 ---
 
 ## Goal Achievement

@@ -18,7 +18,14 @@
     - `< 24h && next calendar day` → `"morgen HH:mm"` / `"tomorrow HH:mm"` (localized resw key)
     - `>= 24h` → `"ddd dd.MM. HH:mm"` (weekday + date, e.g. `"Mi 8.5. 14:30"`)
   - Compute the comparison in `LocalDateTime` to avoid TZ-offset jumps producing false "tomorrow" classifications.
-  - Add resw keys: `NextWindowToday.Format`, `NextWindowTomorrow.Format`, `NextWindowFuture.Format` (DE+EN both).
+  - Add resw keys: `NextWindowTodayFormat`, `NextWindowTomorrowFormat`, `NextWindowFutureFormat` (DE+EN both).
+    **Corrected 2026-08-06:** these three were originally written here as `NextWindowToday.Format` /
+    `NextWindowTomorrow.Format` / `NextWindowFuture.Format`. WinUI3Localizer 2.3.0 splits a resw key at the
+    FIRST dot and treats the left half as a target element name, so a dotted key resolves to an empty string
+    with no error — the exact trap M2-P1 below warns about, recommended here by accident. Every resw key must
+    be single-segment except the `[using:...]` attached-property form. `ResourceCoverageTests` enforces this
+    and also asserts every `<data name>` is resolvable. Shipped reality: Phase 27 used the two single-segment
+    keys `NextWindowLabelDe` / `NextWindowLabelEn`.
   - Unit-test with `FakeClock` at five boundaries: now=23:50/reset=00:20 same day, now=23:50/reset=00:20 next day, now=10:00/reset=15:00 same day, now=10:00/reset=15:00 next day, now=10:00/reset=10:30 in 7 days (DST jump).
 - **Phase that should address:** A1 (Next 5h-window start time label). The format helper should live in `Helpers/CountdownFormatter.cs` (extend, do not duplicate) so weekly/Sonnet labels can later opt into the same rule.
 
@@ -154,11 +161,20 @@
     _ = Task.Run(async () => {
         try { await _pricingService.EnsurePricesLoadedAsync(); }
         catch (Exception ex) {
-            Debug.WriteLine($"[MainViewModel] Pricing load failed: {ex.Message}");
+            AppLog.Write("MainViewModel.PricingLoad", ex);
             _dispatcherQueue?.TryEnqueue(() => /* set IsPricingError per B3-P1 */);
         }
     });
     ```
+    **Corrected 2026-08-06 (review finding 34):** the snippet above originally logged via
+    `Debug.WriteLine`. That carries `[Conditional("DEBUG")]`, so the compiler erases it from the Release
+    build users run — a catch body whose only statement is `Debug.WriteLine` is an *empty* catch body in
+    production, which is exactly the silent-failure class this pitfall is trying to prevent.
+    `CCInfoWindows.Helpers.AppLog` is the sink: `AppLog.Write(source, ex)` appends to
+    `%LOCALAPPDATA%\CCInfoWindows\app.log` (1 MiB, single roll), never throws, thread-safe, works before
+    the DI container exists. Second correction: this particular catch is unreachable —
+    `EnsurePricesLoadedAsync` cannot throw because every loader inside `LiteLLMPricingService` catches
+    internally, so `IsPricingError` has to be driven off `IPricingService.Source`, not off an exception.
   - DON'T add `CancellationToken` plumbing for these fire-and-forget paths just because OWASP says you should — this app's polling/refresh is naturally bounded by `_pollTimer.Interval`. Cancellation tokens are for `AggregateStatisticsAsync` (already has one at line 776) where the user can switch tabs and need stale work cancelled.
   - For `RefreshCommand.ExecuteAsync(null)` at line 1008: change to `_ = RefreshCommand.ExecuteAsync(null)` with the discard `_` to make fire-and-forget intent explicit. The comment already explains why; the discard documents at the call site.
 - **Phase that should address:** C-1 — Fire-and-forget exception swallow remediation. Document "what fire-and-forget means in this codebase" in CLAUDE.md or an ADR.
@@ -212,7 +228,12 @@
 - **Root cause:** `WinUI3Localizer` resolves keys silently — missing key returns empty string or key literal depending on config. No compile-time check. v1.4 added `ResourceCoverageTests` (`PROJECT.md:45`) that validates 6 L10N-01 keys × 2 locales structurally — extend it.
 - **Prevention:**
   - Add new keys to `ResourceCoverageTests` enumeration. Test runs on every build; missing or mismatched key → red.
-  - Naming convention: `Cluster.Component.State` (e.g. `Pricing.LastFetch.Never`, `Pricing.LastFetch.Format`). Avoid bare names that might collide with future additions.
+  - Naming convention: **single-segment PascalCase with the cluster as a prefix**, e.g. `LastFetchNever`,
+    `LastFetchMinutesAgo`. **Corrected 2026-08-06:** this line originally prescribed `Cluster.Component.State`
+    (`Pricing.LastFetch.Never`). Dots are not a namespace separator here — WinUI3Localizer 2.3.0 splits at the
+    first dot and reads the left half as a target element name, so every dotted key silently resolves to an
+    empty string. Shipped reality: `LastFetchNever` / `LastFetchJustNow` / `LastFetchMinutesAgo` /
+    `LastFetchHoursAgo` / `LastFetchDaysAgo`. Long prefixes, not dots, are how you avoid collisions.
   - Use `Localizer.Get().GetLocalizedString(key)` inside a try/catch with a fallback (mirror the pattern at `MainViewModel.cs:638-644`) — defensive against missing keys at runtime.
 - **Phase that should address:** M-2 — Localize hardcoded EN strings in `LastFetchRelativeTime`. Couples with B3-P1 (same surface).
 

@@ -62,7 +62,7 @@ Even after fixing Bug 1, ALL JSONL files (regardless of age) would surface. User
 1. **Resolve Cwd across all entries**, not just the first. Iterate entries, take the first non-empty `cwd` (current code already iterates — change `if (string.IsNullOrEmpty(data.Cwd)) data.Cwd = firstEntry.Cwd;` to a per-entry update inside `ApplyEntryToProjectData`).
 2. **Add fallback Cwd surrogate** when no entry carries `cwd`: derive from `SessionNameHelper.DecodeProjectDirectory(projectDirName)`. This handles encoded dir names like `D--myProjects-ccInfoWin` → produces a usable display label even without filesystem-resolvable Cwd.
 3. **Soften `IsValidProjectDirectory` filter**: don't drop sessions just because `Cwd` is empty/unresolvable. Keep them in the list if a display name can still be derived from the project directory name. Mark them visually as "no cwd resolved" if needed (greyed/italic).
-4. **Logging**: emit `Debug.WriteLine` with how many sessions were dropped and why — makes future regressions diagnosable without a debugger.
+4. **Logging**: emit `AppLog.Write("JsonlService.RebuildSessionsList", …)` with how many sessions were dropped and why — makes future regressions diagnosable without a debugger. *(Corrected 2026-08-06: this step originally said `Debug.WriteLine`, which is `[Conditional("DEBUG")]` and therefore erased from the Release build users run — the opposite of "diagnosable without a debugger". `CCInfoWindows.Helpers.AppLog` is the Release-safe sink: `%LOCALAPPDATA%\CCInfoWindows\app.log`, 1 MiB with a single roll, never throws, thread-safe.)*
 
 ### Phase B — Configurable visibility window (Option C)
 

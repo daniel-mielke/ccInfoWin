@@ -5,9 +5,9 @@ milestone_name: macOS ccInfo v1.15.2 Feature Parity
 status: uat_complete
 workflow: ultracode / plan-mode (NOT GSD -- see CLAUDE.md "Workflows")
 roadmap: .planning/milestones/v1.6-ROADMAP.md
-stopped_at: Visual UAT complete. U1-U11 all pass; U6 failed and was fixed (axis label gutter). Ready for the v1.6 ship tag.
-last_updated: "2026-08-06T07:30:00.000Z"
-last_activity: 2026-08-06 -- visual UAT U1-U11, U6 axis-label regression fixed, 434/434 tests green
+stopped_at: Visual UAT complete (U1-U11 pass). A full-repo review then produced 46 findings; remediation waves 1+2 have landed on branch fix/repo-review-2026-08-06. The ship tag is NOT ready -- the UAT evidence predates the fixes. See "Review-Remediation 2026-08-06".
+last_updated: "2026-08-06T17:10:00.000Z"
+last_activity: 2026-08-06 -- full-repo review (46 findings); remediation waves 1+2 landed, 673/673 tests green
 progress:
   total_phases: 6
   completed_phases: 6
@@ -38,8 +38,116 @@ Last activity: 2026-08-06 -- UAT U1-U11, U6-Regression gefixt, 434/434 Tests gr�
 noch eigene manuelle Tests durch (mehrere Stunden) und will erst danach taggen. Vor dem Tag also
 nachfragen, ob dabei etwas aufgefallen ist; mögliche Funde landen zuerst hier, nicht direkt im Tag.
 
+**Dazwischen ist etwas passiert:** ein Full-Repo-Review am 2026-08-06 hat 46 Findings produziert, die
+auf `fix/repo-review-2026-08-06` behoben werden. Der Abschnitt
+**„Review-Remediation 2026-08-06"** unten ist damit Pflichtlektüre vor dem Tag — er listet die
+Verhaltensänderungen und sagt, welche UAT-Prüfpunkte ihre Beweiskraft verloren haben.
+
 Wenn er dabei einen Reset-Toast sieht: das 5-h-Fenster endet regulär am 2026-08-06 um 13:29 lokal,
 ein Toast zu diesem Zeitpunkt ist also echt und kein Rückstand aus der UAT.
+
+## Review-Remediation 2026-08-06 — LIES DAS VOR DEM SHIP-TAG
+
+Am 2026-08-06 (10:21–11:40) lief ein **Full-Repo-Review** gegen Commit `b16c992` — 130 C#-Dateien,
+6 XAML, ~13,5k LoC, Produktion + Testsuite + Build-Konfiguration, 14 parallele Reviewer.
+Ergebnis: **46 Findings** (2 High, 31 Medium, 13 Low). Bericht:
+`.planning/reviews/2026-08-06_1021_full-repo-review.md` — **nicht** in git (`.gitignore`), liegt nur
+auf dieser Maschine.
+
+Die Behebung läuft auf dem Branch **`fix/repo-review-2026-08-06`**. Stand: Welle 1 und 2 sind
+gelandet (10 Commits, Build grün, 673/673 Tests grün). **Nicht** in diesen zwei Wellen: die
+Testsuite-Findings 31–33, das Umhängen von `IsPricingError` auf `IPricingService.Source`
+(Finding 34, Pricing-Teil) und das Löschen der drei toten Messenger-Kanäle (Finding 37).
+Stand bei Abfassung dieses Abschnitts: das Pricing-Umhängen liegt als `MainViewModel.ApplyPricingSource`
+im Arbeitsbaum, ist aber noch nicht committet; die drei Message-Typen unter `Messages/` existieren
+alle noch. Vor dem Tag also `git log` gegen diese drei Punkte prüfen, nicht diesen Absatz glauben.
+
+**Der entscheidende Punkt für die Abnahme: die UAT-Belege U1–U11 oben sind ÄLTER als diese Fixes.**
+Sie wurden gegen einen Release-Build mit dem *alten* Verhalten erhoben. Alles, was die Remediation
+angefasst hat, braucht vor dem Tag einen zweiten Blick — die Tabelle unten sagt, was genau.
+
+### Verhaltensänderungen, die ein Tester kennen muss
+
+1. **Alle Token- und Kostenzahlen fallen** (Finding 2, `ca3abb2`). Die Deduplizierung las bisher ein
+   Feld `uniqueHash`, das Claude Code nie schreibt — der Schlüssel war immer leer, der Guard
+   short-circuitete, und jede Assistant-Nachricht wurde 2–4× gezählt. Gemessen am echten Korpus:
+   492 `"type":"assistant"`-Zeilen bei 254 verschiedenen `message.id`. Statistik Heute/Woche/Monat,
+   die Session-Summe und die USD-Kosten waren dadurch rund **1,9× zu hoch** und sind jetzt korrekt,
+   also sichtbar **kleiner**. Wer die UAT-Zahlen mit dem neuen Build vergleicht, darf den Rückgang
+   nicht als Regression lesen. Zusatzeffekt: eine wiederholte Identität *überschreibt* jetzt den
+   früheren Eintrag statt übersprungen zu werden, weil nur die letzte Zeile eines gestreamten
+   Assistant-Turns die fertigen `output_tokens` trägt — die Output-Zahlen werden also nicht nur
+   kleiner, sondern auch vollständiger.
+   **Nicht betroffen:** die Kontextfenster-Anzeige. `BuildContextWindow` liest den *letzten*
+   Assistant-Eintrag der neuesten Session-Datei, summiert nichts, und ist von der Dedup-Änderung
+   damit unberührt. Die 31 % bei 309.951 Tokens aus der UAT gelten weiter.
+2. **Die Autocompact-Warnung feuert jetzt überhaupt** (Finding 23, `012cfd3`). `ShouldWarnAutocompact`
+   verglich gegen den **rohen** Maximalwert minus 20K, während `Utilization` durch Maximum minus 33K
+   teilt und auf 1.0 klemmt. Die Warnschwelle lag damit 13.000 Tokens *oberhalb* des Punktes, an dem
+   der Balken schon „100 %" zeigt — sie kam nie vor dem Ereignis, das sie ankündigen soll. Beispiel:
+   200K-Modell bei 170.000 Tokens = roter 100-%-Balken, keine Warnung. Jetzt wird gegen dieselbe
+   Basis wie die Prozentanzeige gemessen, die Warnung erscheint also ~20K *vor* der Sättigung.
+   Requirement CTX-04 und die zwei pinnenden Tests wurden bewusst mitgezogen.
+3. **Das Wochen-Reset-Datum ist lokalisiert** (Finding 21, `816cfc2`). `CountdownFormatter` hatte
+   `new CultureInfo("de-DE")` und das Muster `"ddd dd.MM., HH:mm"` fest verdrahtet — ein englischer
+   Nutzer las „Mi. 06.08." als 8. Juni. Jetzt: `CultureInfo.CurrentUICulture` plus Muster aus dem
+   resw-Key `WeeklyResetDatePattern`. **de-DE ist wertgleich** (`ddd dd.MM., HH:mm`), auf Deutsch
+   ändert sich also nichts; en-US zeigt neu `ddd, MMM d, HH:mm`. Auf Englisch ebenfalls neu
+   lokalisiert: Refresh-Dropdown „Manual", die vier Session-Timeout-Einträge, das Pricing-Quellen-Label
+   und die Beschriftung im exportierten PNG.
+4. **Settings ist an mehreren Stellen anders** (Findings 11, 19, 22, 25, `3ca906b`). Der
+   Clear-Button im Sessions-Tab war über einen `DataContext` gebunden, der nie gesetzt wurde — er tat
+   *nichts* und tut jetzt etwas. Fehlgeschlagene Umbenennungen sahen erfolgreich aus und waren nach
+   dem Neustart weg; `Save()`/`SaveAsync()` melden jetzt `false`, der Fehler wird geloggt und die
+   In-Memory-Map zurückgerollt (`NameChanged` wird erneut gefeuert). `LoadSettings` allow-listet und
+   klemmt jetzt jedes persistierte Feld — ein kaputter `Language`-String bricht den App-Start nicht
+   mehr ab, ein Wert außerhalb des Bereichs wird still repariert statt übernommen. „Nur manuell" ist
+   jetzt das echte Sentinel `AppSettings.ManualRefreshSeconds`.
+5. **Der Reset-Toast lässt sich anders auslösen als in U11 beschrieben** (Finding 20, `6bb96d8`).
+   Eine neue Fenster-Identität gilt nur noch als Rotation, wenn die *gespeicherte* `ResetsAt` des
+   verfolgten Fensters bereits vorbei ist (`IsRealRotation`, minus Uhr-Toleranz). Grund: der
+   Wochen-Slot wird mit `SevenDayOpus ?? SevenDay` gefüttert, und ein Poll, der `seven_day_opus`
+   kurz weglässt, änderte bisher die Identität ohne echte Rotation — inklusive falschem
+   „Fenster zurückgesetzt"-Toast und Zurücksetzen der 80/95-Flags. **Folge für die Wiederholung von
+   U11:** eine veraltete `windowId` in `notification-state.json` allein genügt nicht mehr, die
+   präparierte `ResetsAt` muss ebenfalls in der Vergangenheit liegen (und innerhalb
+   `MaxLateResetToastAge`, sonst wird der Toast als veraltete Nachricht unterdrückt). Außerdem:
+   `Dispose()` löscht den persistierten Zustand nicht mehr (nur noch `CancelAll()` tut das), und das
+   Burn-Rate-Flag überlebt jetzt einen Neustart (`NotificationState.BurnRateNotifiedWindowId`).
+6. **Der Kaltstart hat jetzt eine Fehleroberfläche** (Finding 4, `ed73734`). Ein Wurf in
+   `MainView.OnLoaded` hinterließ ein voll gerendertes Dashboard bei `--` / 0 %, ohne Timer, ohne
+   Banner, ohne Logzeile (der `catch` schrieb nur `Debug.WriteLine`, das im Release wegkompiliert
+   wird). Jetzt: Timer vor der Cache-Hydrierung, InfoBar mit generischem Text, Details im Log.
+   Wenn beim manuellen Test ein Fehlerbanner auftaucht, wo vorher „alles leer" stand, ist das der
+   Fix, nicht ein neuer Bug.
+7. **Es gibt einen neuen Diagnosekanal.** `%LOCALAPPDATA%\CCInfoWindows\app.log` (1 MiB, ein Roll
+   nach `app.log.1`) sammelt jetzt *behandelte* Fehler, die im Release vorher spurlos verschwanden.
+   Bei jedem Fund während der manuellen Tests: diese Datei mitliefern. `crash.log` bleibt für
+   unbehandelte Ausnahmen und ist weiterhin **ungedeckelt** (Backlog).
+8. **Der Installer packt jetzt das richtige Verzeichnis** (Findings 1 und 3, `4d6350f`).
+   `setup.iss` las `bin\x64\Release\...\win-x64\publish\*` — ein Verzeichnis, das der vorgeschriebene
+   Release-Build nie füllt; auf dieser Maschine lag darin ein April-Binary. Ein v1.6-Tag hätte ein
+   `CCInfoWindows-1.0.0-Setup.exe` mit v1.0-Code erzeugt. Quelle repariert, `win-x64/`-Baum
+   entfernt, Version auf 1.6.0 vereinheitlicht. **Ein Installer-Durchlauf ist damit erstmals ein
+   sinnvoller Test** und sollte vor dem Tag einmal laufen (`iscc installer/setup.iss` → `dist/`).
+
+### UAT-Prüfpunkte, die vor dem Tag einen zweiten Blick brauchen
+
+| # | Betroffen? | Warum |
+|---|---|---|
+| U1 Kurvenform | nein | Fritsch-Carlson unverändert |
+| U2 Überschwingen | nein | Monotonie-Logik unverändert |
+| U3 Fill-Fade | nein | Fill-Gradient unverändert |
+| U4 Glow | nein | Glow-Schichten unverändert |
+| U5 Glow-Ränder | nein | `GlowInset` unverändert |
+| U6 Achsenlabels | nein | `LeftMargin`-Fix aus `d975646` steht, Tests pinnen ihn |
+| U7 Chart-Höhe | nein | eine Zahl in `MainView.xaml`, nicht angefasst |
+| **U8 beide Themes** | **ja, klein** | `PercentageToColorConverter` löste die vier `Progress*Brush`-Keys über `Application.Current.Resources` auf, also gegen das **OS**-Theme, das diese App nie setzt — bei Windows hell und App dunkel behielten die drei Fortschrittsbalken die helle Palette, während jedes `{ThemeResource}` daneben dem App-Theme folgte (Finding 42). Genau die Kombination, die U8 über den Dark-Mode-Schalter geprüft hat. Der Review nennt den Unterschied selbst „visually negligible" (Apples hell/dunkel-Varianten derselben Farben, `#34C759` vs `#30D158`), die Balken kommen jetzt aber aus `ChartColors` statt aus `AppTheme.xaml` — minimal andere Grüntöne als auf den UAT-Screenshots. **Wave 3 hat die frühere Restgrenze behoben:** der Converter ist gelöscht, die drei Balken binden auf `MainViewModel.{Context,Weekly,Sonnet}UtilizationBrush`, und `MainView.OnActualThemeChanged` ruft `ApplyTheme` — ein Theme-Umschalten greift jetzt sofort statt erst beim nächsten Utilization-Update |
+| **U9 Export ≡ Live** | **ja** | Der Farb-Gradient wurde bisher bis „jetzt" gespannt, während seine Stops auf den *letzten Sample* normalisiert waren — Farbe und Geometrie waren nicht deckungsgleich, sobald der letzte Poll älter war (Finding 38). `GetRightEdgeAbsoluteX` ist weg, `GetRightEdgeX` liefert plot-relativ, und `ChartGeometry.SpanEndPlotX` ist jetzt die eine Quelle für beides. Die Deckungsgleichheit Export↔Live bleibt strukturell gegeben (gemeinsamer Pfad), aber die **Farbpositionen** unterscheiden sich von den UAT-Screenshots |
+| **U10 Settings → Allgemein** | **teilweise** | Zeilenzahl und Divider unverändert (8 → 7 gilt weiter). Neu sind die **Labels auf Englisch**: „Manual" statt „Manuell", die vier Timeout-Einträge über `l:Uids.Uid`. Auf Deutsch unverändert |
+| **U11 Reset-Toast** | **ja, Verfahren geändert** | Siehe Punkt 5 oben: `IsRealRotation` verlangt eine abgelaufene `ResetsAt`. Der Beleg „Toast am Schirm gesehen" bleibt gültig für die Auslieferung *an sich*, aber die Auslöse-Anleitung in diesem Dokument stimmt nicht mehr |
+| **Statistik-/Token-Zahlen** | **ja** | Dedup-Fix, siehe Punkt 1. Die in „Was nicht offen ist" protokollierten Zahlen sind teils überholt: die Statistik-Summen fallen, die Modell-Zeile („Haiku 4.5, Opus 4.7, Opus 4.8, Opus 5") und die Kontextfenster-Prozente bleiben |
+| **Kontextbalken-Warnung** | **ja** | Finding 23, siehe Punkt 2. Die Warnung war in der UAT nicht auslösbar und ist es jetzt |
 
 ### Laufzeitbeleg Phase 4 (aus `%LOCALAPPDATA%\CCInfoWindows\notification-state.json`)
 
@@ -90,7 +198,9 @@ zugesagten Ergebnisse. Implementiert ist die Veto-Semantik.
 
 ### Verify-Umgebung (für Folgephasen)
 
-- Testbaseline **434/434 grün** (Stand 2026-08-06, inkl. 3 neuer `AxisLabelFitsInGutter`-Fälle).
+- Testbaseline **434/434 grün** (Stand 2026-08-06 vormittags, inkl. 3 neuer `AxisLabelFitsInGutter`-Fälle).
+  **Überholt seit der Review-Remediation:** auf `fix/repo-review-2026-08-06` sind es nach Welle 1+2
+  **673/673 grün**. Die 434 gelten nur noch für den Stand `b16c992`.
   Historisch: 345/345 nach Phase 0. Die zwei früher als „pre-existing" geführten
   `ClaudeApiServiceTests`-Fehler waren veraltete Tests (HttpClient-Ära), nicht ein
   Produktionsbug — sie wurden in Phase 0 auf den echten Vertrag
@@ -209,7 +319,8 @@ können gelöscht werden — `notification-state.json.bak` sollte man **nicht** 
 `u5-glow-left-top.png`, `u9-live-replica.png`, `u8-main-light.png`, `u8-settings-light.png`,
 `u10-settings-general.png`, `u11-windows-dnd-state.png`.
 
-Was **nicht** offen ist: alle Zahlen-/Text-Prüfungen wurden per UIA-Baum belegt —
+Was **nicht** offen ist (Stand `b16c992` — die Statistik-Summen darin sind seit dem Dedup-Fix überholt,
+siehe „Review-Remediation 2026-08-06" Punkt 1): alle Zahlen-/Text-Prüfungen wurden per UIA-Baum belegt —
 Kontextfenster 31 % bei 309.951 Tokens (Opus 5, 1M-Fenster; bei 200 K wäre auf 100 % geklemmt
 worden), Statistik-Zeile „Haiku 4.5, Opus 4.7, Opus 4.8, Opus 5" (dedupliziert und sortiert,
 vorher „…, Opus 5, Opus 4.7, Opus 4.8"), und `notification-state.json` mit korrekt

@@ -22,6 +22,8 @@ launchSettings.json
 
 # Build outputs
 publish/
+# Inno Setup writes the installer here (installer/setup.iss: OutputDir=..\dist)
+/dist/
 *.exe
 *.dll
 *.pdb

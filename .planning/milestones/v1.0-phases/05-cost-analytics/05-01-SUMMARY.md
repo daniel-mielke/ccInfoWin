@@ -72,6 +72,16 @@ Cost analytics backend with LiteLLM pricing integration, per-entry cost calculat
 
 4. **DeduplicationKey in EntryLogItem**: Storing the `uuid|requestId` deduplication key in EntryLogItem (alongside token data) enables TOKS-04 cross-project deduplication during time-period aggregation without a separate data structure.
 
+   *Corrected 2026-08-06 (review finding 2): the structural decision — carry the key on the log item —
+   survived, but neither the key nor the mechanism described here is what runs. `uuid` is unique per JSONL
+   **line** and one assistant message spans several lines, so `uuid|requestId` deduplicated nothing; a later
+   change (`debab85`) made it worse by keying on a `uniqueHash` field Claude Code never writes, which left the
+   key permanently empty and every assistant turn counted 2–4×. The key is `message.id|requestId` now, with
+   `uuid` only as a fallback for lines carrying no `message.id`. The `seenIds` HashSet named in the TOKS-04 row
+   below is also gone: `ProjectData.EntryIndexByKey` maps an identity to its index in `EntryLog`, and a repeated
+   identity **supersedes** the earlier entry rather than being skipped — first-seen-wins would freeze a partial
+   count, because only the last line of a streamed turn carries the completed `output_tokens`.*
+
 ## Deviations from Plan
 
 None — plan executed exactly as written.

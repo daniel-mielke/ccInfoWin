@@ -65,9 +65,20 @@ Not applicable — this phase modifies helper/model logic only. No UI rendering 
 | CTX-01 | 12-01-PLAN.md | User sees 1M context limit for Opus sessions | SATISFIED | `ModelFamily.Opus => ExtendedContextLimit (1_000_000)`; test `["claude-opus-4-6", 1_000_000]` passes |
 | CTX-02 | 12-01-PLAN.md | User sees 200K context limit for Haiku sessions | SATISFIED | Haiku falls to `_ => DefaultContextLimit (200_000)`; test `["claude-haiku-4-5", 200_000]` passes |
 | CTX-03 | 12-01-PLAN.md | User sees context limit based on configured Sonnet setting (200K or 1M) | SATISFIED | `sonnetContextSize` default param hook in place; `GetMaxContextTokens_SonnetWithExplicitMillionContext_ReturnsMillion` passes; full wiring deferred to Phase 13 (by design) |
-| CTX-04 | 12-01-PLAN.md | User receives autocompact warning at 20K tokens remaining, regardless of model | SATISFIED | `ShouldWarnAutocompact` fires at `maxTokens - AutocompactWarningBuffer (20_000)`; tests cover both 200K and 1M boundaries |
+| CTX-04 | 12-01-PLAN.md | User receives autocompact warning at 20K tokens remaining, regardless of model | SATISFIED **as specified**, but the specification was wrong — see note below | `ShouldWarnAutocompact` fired at `maxTokens - AutocompactWarningBuffer (20_000)`; tests covered both 200K and 1M boundaries |
 | CTX-05 | 12-01-PLAN.md | User sees correct progress bar percentage reflecting model-based effective max | SATISFIED | `ContextWindowData.Utilization` uses `GetEffectiveMaxTokens(MaxTokens)` (flat 33K buffer); `[InlineData(967_000, 1_000_000, 1.0)]` validates Opus session |
 | CTX-06 | 12-01-PLAN.md | User sees correct context limits on subagent progress bars | SATISFIED | `SubagentContextData.Utilization` uses `GetEffectiveMaxTokens(MaxTokens)`; `SubagentContextData_Utilization_UsesFlat33KBuffer` test passes with 200K and 1M cases |
+
+> **Note 2026-08-06 (review finding 23) — CTX-04's baseline was wrong, and this report verified the wrong
+> thing faithfully.** CTX-04 and CTX-05 in the two rows above use *different* baselines: the warning
+> subtracted 20K from the RAW maximum, while `Utilization` divides by `maxTokens − 33K` and clamps to 1.0.
+> Because 20K < 33K, the warning threshold sat 13,000 tokens **above** the point where the bar already
+> displays 100% — a 200K model at 170,000 tokens showed a saturated red bar and no warning, and if
+> autocompact really fires at the 33K reserve the app models, the warning never arrived at all. Both
+> pinning tests asserted the defect. `ShouldWarnAutocompact` now compares against
+> `GetEffectiveMaxTokens(maxTokens) − AutocompactWarningBuffer`, so it warns 20K before the bar
+> saturates instead of 13K after; the requirement text in `.planning/milestones/v1.2-REQUIREMENTS.md`
+> and the two tests were amended with it. History above kept as written.
 
 All 6 requirement IDs from the plan frontmatter are accounted for. REQUIREMENTS.md traceability table marks all CTX-01 through CTX-06 as Complete for Phase 12. No orphaned requirements.
 

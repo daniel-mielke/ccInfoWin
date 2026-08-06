@@ -7,6 +7,44 @@ originSessionId: 4fcfe4f9-d257-456b-bc4f-1109b37175ac
 # Pricing service never loads — timestamp shows "Never"
 
 **Reported:** 2026-05-07 by user during v1.4 UAT (Phase 22 Test 4).
+**Status:** partly resolved — see "Status 2026-08-06". Still open, do not close.
+
+## Status 2026-08-06 (after the full-repo review remediation, findings 34 and 15)
+
+The 2026-05-07 report asked for a diagnosis and got blocked by the absence of a log. That part is fixed;
+the reason the fetch fails on this machine is still unknown, and the user-facing banner is still dead.
+
+**Now diagnosable — verified against `Services/LiteLLMPricingService.cs`:**
+
+- Every failure path writes to `%LOCALAPPDATA%\CCInfoWindows\app.log` via `AppLog`, with a distinct source tag
+  per path: `LiteLLMPricingService.LiveFetch`, `.LocalCache`, `.EmbeddedResource`, `.CacheWrite`. The
+  "run it under a debugger and watch `Debug.WriteLine`" step in "How to diagnose" below is obsolete — read the
+  log instead. It survives in Release, which `Debug.WriteLine` never did.
+- A well-formed response yielding **zero** Anthropic entries now counts as a failure
+  (`TryLoadFromLiveApiAsync` returns false and keeps the previous table) instead of publishing an empty map as
+  `PricingSource.Live`. That was the reachable trigger for a total pricing failure that the About tab reported
+  as healthy.
+- A genuinely empty table is published as `PricingSource.Unknown`, not `PricingSource.Fallback`. The About tab
+  therefore reads "Unknown" / "Unbekannt" instead of asserting "Fallback (bundled)" while every entry priced
+  at `~$0.00`. `SettingsViewModel.PricingSourceText` resolves both labels through resw keys now, so this is
+  visible in German too.
+- `LastFetch` is still only stamped for `PricingSource.Live`, which is why the original symptom is "Never" and
+  not a stale timestamp: on this machine the live fetch has never succeeded. That is now a one-line answer from
+  `app.log` rather than a debugging session.
+
+**Still open:**
+
+- **The banner's trigger.** Up to and including the two landed waves, `MainViewModel` set `IsPricingError`
+  from a `catch` around `_pricingService.EnsurePricesLoadedAsync()` — and that method cannot throw, because
+  every loader catches internally. Requirements PRICING-01..03 and their InfoBar were therefore unreachable in
+  production for the whole v1.5–v1.6 span. The correct trigger is `_pricingService.Source == PricingSource.Unknown`,
+  which wave 1 made reachable. That rewiring (`MainViewModel.ApplyPricingSource`) is in flight in the wave
+  running at the time of writing — present in the working tree, not yet in a commit. **Verify it is committed
+  before treating PRICING-01 as met**, and confirm the banner actually appears with an empty pricing table.
+- The underlying question from 2026-05-07 — *why* does the live fetch fail here — is unanswered. Next step is
+  now cheap: run the Release build, then read `app.log` for a `LiteLLMPricingService.LiveFetch` entry.
+- Phase 22 POLISH-07 (About-tab timestamp ticking) is still unverifiable visually for the same reason: without
+  a successful live fetch there is no changing timestamp to render.
 
 ## Symptom
 

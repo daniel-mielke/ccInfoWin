@@ -65,7 +65,7 @@ None — discussion stayed within phase scope
 |----|-------------|-----------------|
 | TOKS-02 | Tab bar (segmented control) switches between four time periods with loading indicator | CommunityToolkit.WinUI.Controls.Segmented v8.2.251219 confirmed; shimmer via Storyboard |
 | TOKS-03 | Subagent tokens included in all time period aggregations | Subagent JSONL files already parsed in JsonlService; extend GetStatistics to include subagent files |
-| TOKS-04 | JSONL entries deduplicated by messageId and requestId | `SeenIds` HashSet already exists in ProjectData; pattern extends naturally to time-period aggregation |
+| TOKS-04 | JSONL entries deduplicated by messageId and requestId | `SeenIds` HashSet already exists in ProjectData; pattern extends naturally to time-period aggregation — *superseded 2026-08-06 (review finding 2): the `SeenIds` set is gone and the requirement was unimplemented for the whole v1.0–v1.6 span. What existed keyed on `uuid` (per-line, not per-message) and later on a `uniqueHash` field Claude Code never writes. Now: `ProjectData.EntryIndexByKey` keyed on `message.id\|requestId` with `uuid` as fallback, superseding a repeated identity in place* |
 | COST-01 | Model prices fetched live from LiteLLM Pricing API with 12-hour cache | URL confirmed: https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json |
 | COST-02 | Costs primarily from costUSD field in JSONL; fallback to token count * model price | costUSD is top-level field in JSONL entry; confirmed by ccusage source analysis |
 | COST-03 | Estimated costs marked with tilde prefix (~) when model not in pricing database | Logic: if fallback was used, set IsEstimated flag; format cost as "~$X.XX" |

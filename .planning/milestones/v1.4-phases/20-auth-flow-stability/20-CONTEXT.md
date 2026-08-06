@@ -19,6 +19,14 @@ Out of scope: any history persistence work (Phase 21), refresh spinner / inactiv
 
 ### 401 Detection & Auto-Reauth Routing
 
+> **Note 2026-08-06 (review finding 5):** D-01's routing still stands, but the exception type it names does
+> not. `WebViewBridge` raised `UnauthorizedAccessException` for HTTP 401 — a type the BCL also throws for a
+> denied filesystem ACL, so a permission error while writing `usage_cache.json` inside the same `try` was
+> read as an expired session and force-logged the user out. The bridge now raises the dedicated
+> `SessionExpiredException`, which is the only 401 signal, and `catch (UnauthorizedAccessException)` around a
+> bridge call is dead code. Every occurrence of `UnauthorizedAccessException` in this document and in
+> `20-RESEARCH.md` should be read as `SessionExpiredException`.
+
 - **D-01:** First-401 detection lives in `MainViewModel.Receive(AuthStateChangedMessage)`. The handler is the single dispatch point for auth-state changes. When `message.Value == false` AND `_autoReauthAttempted == false`: set the flag to true, call `_navigationService.NavigateTo<LoginView>()`, do NOT set `IsSessionExpired`. When `message.Value == false` AND `_autoReauthAttempted == true`: fall through to the existing path (`IsSessionExpired = true`, InfoBar shows). The `WebViewBridge` and `ClaudeApiService` are NOT changed — they continue to throw `UnauthorizedAccessException` and send `AuthStateChangedMessage(false)` respectively.
 - **D-02:** `_autoReauthAttempted` resets to `false` on:
   1. The `RefreshUsageAsync` (or the wrapping `PollUsageAsync`) success path — after a successful HTTP 200 the next 401 is treated as a fresh first-attempt
