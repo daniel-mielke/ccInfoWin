@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Xml.Linq;
 using CCInfoWindows.Helpers;
 using Windows.UI;
 
@@ -5,6 +7,12 @@ namespace CCInfoWindows.Tests.Helpers;
 
 public class ChartColorsTests
 {
+    private static readonly XNamespace XamlNs = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+    private static readonly XNamespace XNs = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+    private static readonly string[] ProgressBrushKeys =
+        ["ProgressGreenBrush", "ProgressYellowBrush", "ProgressOrangeBrush", "ProgressRedBrush"];
+
     // --- BuildColorLookup count tests ---
 
     [Fact]
@@ -142,5 +150,90 @@ public class ChartColorsTests
         {
             Assert.Equal(255, color.A);
         }
+    }
+
+    // --- ChartColors is the code-side mirror of Resources/AppTheme.xaml ---
+
+    [Theory]
+    [InlineData(true, "Dark")]
+    [InlineData(false, "Light")]
+    public void ProgressBrushes_MatchAppThemeXaml(bool isDark, string themeKey)
+    {
+        // PercentageToColorConverter resolves the three progress bars through ChartColors instead of
+        // Application.Current.Resources (which followed the OS theme, not the app's element theme).
+        // That only stays correct while the two palettes agree, so this reads the actual XAML.
+        var declared = LoadThemeBrushes(themeKey);
+
+        foreach (var brushKey in ProgressBrushKeys)
+        {
+            Assert.True(declared.TryGetValue(brushKey, out var expected),
+                $"AppTheme.xaml theme dictionary '{themeKey}' declares no {brushKey}.");
+            Assert.Equal(expected, ChartColors.GetColor(brushKey, isDark));
+        }
+    }
+
+    [Theory]
+    [InlineData(0.0, "ProgressGreenBrush")]
+    [InlineData(0.49, "ProgressGreenBrush")]
+    [InlineData(0.50, "ProgressYellowBrush")]
+    [InlineData(0.80, "ProgressOrangeBrush")]
+    [InlineData(0.95, "ProgressRedBrush")]
+    [InlineData(1.50, "ProgressRedBrush")]
+    public void GetZoneColor_ReturnsTheThresholdBrushColorForThatZone(double utilization, string expectedKey)
+    {
+        foreach (var isDark in new[] { true, false })
+        {
+            Assert.Equal(ChartColors.GetColor(expectedKey, isDark), ChartColors.GetZoneColor(utilization, isDark));
+        }
+    }
+
+    private static Dictionary<string, Color> LoadThemeBrushes(string themeKey)
+    {
+        var root = XDocument.Load(FindAppThemePath()).Root!;
+        var themeDictionary = root
+            .Element(XamlNs + "ResourceDictionary.ThemeDictionaries")!
+            .Elements(XamlNs + "ResourceDictionary")
+            .Single(d => (string?)d.Attribute(XNs + "Key") == themeKey);
+
+        return themeDictionary
+            .Elements(XamlNs + "SolidColorBrush")
+            .ToDictionary(
+                b => (string)b.Attribute(XNs + "Key")!,
+                b => ParseHexColor((string)b.Attribute("Color")!));
+    }
+
+    /// <summary>Accepts both #RRGGBB and #AARRGGBB, which AppTheme.xaml mixes.</summary>
+    private static Color ParseHexColor(string hex)
+    {
+        var digits = hex.TrimStart('#');
+        var hasAlpha = digits.Length == 8;
+        var offset = hasAlpha ? 2 : 0;
+
+        return Color.FromArgb(
+            hasAlpha ? Hex(digits, 0) : (byte)255,
+            Hex(digits, offset),
+            Hex(digits, offset + 2),
+            Hex(digits, offset + 4));
+    }
+
+    private static byte Hex(string digits, int index) =>
+        byte.Parse(digits.AsSpan(index, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+    private static string FindAppThemePath()
+    {
+        // Walk up from the test output directory to the app's Resources folder, as the localization
+        // coverage tests do for the .resw files.
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(
+                dir.FullName, "CCInfoWindows", "CCInfoWindows", "Resources", "AppTheme.xaml");
+            if (File.Exists(candidate))
+                return candidate;
+
+            dir = dir.Parent;
+        }
+
+        throw new InvalidOperationException("Could not locate Resources/AppTheme.xaml from the test base directory.");
     }
 }

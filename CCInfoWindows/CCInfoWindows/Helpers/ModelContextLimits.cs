@@ -7,6 +7,11 @@ namespace CCInfoWindows.Helpers;
 /// </summary>
 public static class ModelContextLimits
 {
+    /// <summary>
+    /// Single classifier for the Claude families this app renders differently. Everything that
+    /// keys off the family (badge colour today) must go through <see cref="GetModelFamily"/> so a
+    /// new family is added in exactly one substring ladder.
+    /// </summary>
     public enum ModelFamily
     {
         Unknown,
@@ -105,13 +110,24 @@ public static class ModelContextLimits
         => Math.Max(1, maxTokens - StandardAutocompactBuffer);
 
     /// <summary>
-    /// Returns true when the remaining tokens fall below the flat 20K autocompact warning threshold.
+    /// Returns true when the session is within <see cref="AutocompactWarningBuffer"/> tokens of the
+    /// effective limit — i.e. of the same baseline the displayed percentage divides by.
+    ///
+    /// The buffer must be subtracted from the EFFECTIVE max, not the raw one: the bar saturates at
+    /// <see cref="GetEffectiveMaxTokens"/>, so subtracting 20K from the raw maximum put the warning
+    /// threshold 13,000 tokens ABOVE the saturation point and the pre-announcement arrived after
+    /// the event. Pinned by ShouldWarnAutocompact_WarnsBeforeTheBarSaturates.
+    ///
+    /// The threshold is floored at 1 token so a max small enough to make the window degenerate
+    /// (GetEffectiveMaxTokens clamps at 1) still cannot warn about an empty context.
     /// </summary>
     public static bool ShouldWarnAutocompact(long totalTokens, long maxTokens)
     {
         if (maxTokens <= 0)
             return false;
-        return totalTokens >= maxTokens - AutocompactWarningBuffer;
+
+        var warningThreshold = Math.Max(1, GetEffectiveMaxTokens(maxTokens) - AutocompactWarningBuffer);
+        return totalTokens >= warningThreshold;
     }
 
     /// <summary>
@@ -132,31 +148,27 @@ public static class ModelContextLimits
     /// Opus = purple (#BF5AF2), Sonnet = orange (#FF9F0A), Haiku = blue (#0A84FF).
     /// Falls back to gray (#636366) for unknown models.
     /// </summary>
-    public static string GetBadgeColorHex(string? modelName)
+    public static string GetBadgeColorHex(string? modelName) => GetModelFamily(modelName) switch
     {
-        if (string.IsNullOrEmpty(modelName))
-            return FallbackBadgeColor;
-
-        var lower = modelName.ToLowerInvariant();
-
-        if (lower.Contains("opus"))
-            return OpusBadgeColor;
-        if (lower.Contains("sonnet"))
-            return SonnetBadgeColor;
-        if (lower.Contains("haiku"))
-            return HaikuBadgeColor;
-
-        return FallbackBadgeColor;
-    }
+        ModelFamily.Opus => OpusBadgeColor,
+        ModelFamily.Sonnet => SonnetBadgeColor,
+        ModelFamily.Haiku => HaikuBadgeColor,
+        _ => FallbackBadgeColor
+    };
 
     private const string OpusBadgeColor = "#BF5AF2";
     private const string SonnetBadgeColor = "#FF9F0A";
     private const string HaikuBadgeColor = "#0A84FF";
     private const string FallbackBadgeColor = "#636366";
 
-    private static string StripDateSuffix(string modelName)
+    /// <summary>
+    /// Removes a trailing 8-digit release-date segment from a model id
+    /// ("claude-sonnet-4-5-20250929" -> "claude-sonnet-4-5"), returning the input unchanged when
+    /// there is none. Public because the pricing lookup normalises the same ids — one copy, so a
+    /// new Anthropic id format cannot be patched for lookups and missed for display.
+    /// </summary>
+    public static string StripDateSuffix(string modelName)
     {
-        // Strip date suffixes like "-20251001"
         var parts = modelName.Split('-');
         if (parts.Length > 0 && parts[^1].Length == 8 && long.TryParse(parts[^1], out _))
             return string.Join('-', parts[..^1]);

@@ -133,12 +133,11 @@ public class ChartRendererTests
             $"glow at 100% would be clipped: y={y}, top={ChartRenderer.TopMargin}");
     }
 
-    // --- GetRightEdgeAbsoluteX tests ---
+    // --- GetRightEdgeX tests (plot-relative, same space as ToX) ---
 
     [Fact]
-    public void GetRightEdgeAbsoluteX_MidSegment_ReturnsNextPointX()
+    public void GetRightEdgeX_MidSegment_ReturnsNextPointX()
     {
-        // endIndex < last point: right edge is next point's X (canvas-absolute)
         const float plotWidth = 200f;
         var windowStart = DateTimeOffset.UtcNow.AddHours(-2);
         var points = new List<UsageHistoryPoint>
@@ -147,15 +146,14 @@ public class ChartRendererTests
             new() { Timestamp = windowStart.AddHours(1.5), Utilization = 0.5 }
         };
 
-        var result = ChartRenderer.GetRightEdgeAbsoluteX(points, endIndex: 0, windowStart, plotWidth);
+        var result = ChartRenderer.GetRightEdgeX(points, endIndex: 0, windowStart, plotWidth);
 
-        var expectedRelativeX = ChartRenderer.ToX(points[1].Timestamp, windowStart, plotWidth);
-        var expectedAbsoluteX = ChartRenderer.LeftMargin + expectedRelativeX;
-        Assert.Equal(expectedAbsoluteX, result, precision: 2);
+        var expected = ChartRenderer.ToX(points[1].Timestamp, windowStart, plotWidth);
+        Assert.Equal(expected, result, precision: 2);
     }
 
     [Fact]
-    public void GetRightEdgeAbsoluteX_LastSegmentNowWithinWindow_ReturnsNowX()
+    public void GetRightEdgeX_LastSegmentNowWithinWindow_ReturnsNowX()
     {
         // endIndex == last point, now is within the 5-hour window
         const float plotWidth = 200f;
@@ -165,15 +163,15 @@ public class ChartRendererTests
             new() { Timestamp = windowStart.AddHours(1), Utilization = 0.3 }
         };
 
-        var result = ChartRenderer.GetRightEdgeAbsoluteX(points, endIndex: 0, windowStart, plotWidth);
+        var result = ChartRenderer.GetRightEdgeX(points, endIndex: 0, windowStart, plotWidth);
 
         // ToX already clamps, so the extra Math.Min the old implementation applied was redundant.
         var nowX = ChartRenderer.ToX(DateTimeOffset.UtcNow, windowStart, plotWidth);
-        Assert.Equal(ChartRenderer.LeftMargin + nowX, result, precision: 1);
+        Assert.Equal(nowX, result, precision: 1);
     }
 
     [Fact]
-    public void GetRightEdgeAbsoluteX_LastSegmentNowBeyondWindow_ClampsToInsetRightEdge()
+    public void GetRightEdgeX_LastSegmentNowBeyondWindow_ClampsToInsetRightEdge()
     {
         // endIndex == last point, now is past the 5-hour window end. ToX clamps to the inset
         // right edge; the old Math.Min(nowX, plotWidth) would have pushed the glow into the
@@ -185,75 +183,16 @@ public class ChartRendererTests
             new() { Timestamp = windowStart.AddHours(1), Utilization = 0.3 }
         };
 
-        var result = ChartRenderer.GetRightEdgeAbsoluteX(points, endIndex: 0, windowStart, plotWidth);
+        var result = ChartRenderer.GetRightEdgeX(points, endIndex: 0, windowStart, plotWidth);
 
-        Assert.Equal(ChartRenderer.LeftMargin + plotWidth - ChartRenderer.GlowInset, result, precision: 2);
-    }
-
-    // --- GetContiguousSpans tests ---
-
-    [Fact]
-    public void GetContiguousSpans_EmptyPoints_ReturnsEmptyList()
-    {
-        var spans = ChartRenderer.GetContiguousSpans([]);
-        Assert.Empty(spans);
-    }
-
-    [Fact]
-    public void GetContiguousSpans_SinglePoint_ReturnsOneSpan_0_0()
-    {
-        var points = new List<UsageHistoryPoint>
-        {
-            new() { Timestamp = DateTimeOffset.UtcNow, Utilization = 0.3 }
-        };
-
-        var spans = ChartRenderer.GetContiguousSpans(points);
-
-        Assert.Single(spans);
-        Assert.Equal(0, spans[0].StartIndex);
-        Assert.Equal(0, spans[0].EndIndex);
-    }
-
-    [Fact]
-    public void GetContiguousSpans_FivePoints_ReturnsOneSpan_0_4()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var points = new List<UsageHistoryPoint>
-        {
-            new() { Timestamp = now, Utilization = 0.1 },
-            new() { Timestamp = now.AddMinutes(1), Utilization = 0.3 },
-            new() { Timestamp = now.AddMinutes(2), Utilization = 0.5 },
-            new() { Timestamp = now.AddMinutes(3), Utilization = 0.7 },
-            new() { Timestamp = now.AddMinutes(4), Utilization = 0.9 },
-        };
-
-        var spans = ChartRenderer.GetContiguousSpans(points);
-
-        Assert.Single(spans);
-        Assert.Equal(0, spans[0].StartIndex);
-        Assert.Equal(4, spans[0].EndIndex);
-    }
-
-    [Fact]
-    public void GetContiguousSpans_HundredPoints_ReturnsOneSpan_0_99()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var points = Enumerable.Range(0, 100)
-            .Select(i => new UsageHistoryPoint
-            {
-                Timestamp = now.AddMinutes(i),
-                Utilization = i / 100.0
-            })
-            .ToList();
-
-        var spans = ChartRenderer.GetContiguousSpans(points);
-
-        Assert.Single(spans);
-        Assert.Equal(0, spans[0].StartIndex);
-        Assert.Equal(99, spans[0].EndIndex);
+        Assert.Equal(plotWidth - ChartRenderer.GlowInset, result, precision: 2);
     }
 
     // --- BuildGradientStops tests ---
+    //
+    // spanEndX is always ChartRenderer.GetRightEdgeX for the span, exactly as ChartDrawing passes
+    // it. Where a test wants the pre-fix "normalise to the last sample" framing it passes
+    // ToX(last point) explicitly, which is what that value collapses to when polling is current.
 
     [Fact]
     public void BuildGradientStops_SinglePointSpan_ReturnsOneStop_Position0()
@@ -265,7 +204,9 @@ public class ChartRendererTests
         };
         var colorLookup = ChartColors.BuildColorLookup(isDark: true);
 
-        var stops = ChartRenderer.BuildGradientStops(points, 0, 0, windowStart, 200f, colorLookup);
+        var stops = ChartRenderer.BuildGradientStops(
+            points, 0, 0, windowStart, 200f, colorLookup,
+            spanEndX: ChartRenderer.ToX(points[0].Timestamp, windowStart, 200f));
 
         Assert.Single(stops);
         Assert.Equal(0.0f, stops[0].Position, precision: 4);
@@ -282,7 +223,9 @@ public class ChartRendererTests
         };
         var colorLookup = ChartColors.BuildColorLookup(isDark: true);
 
-        var stops = ChartRenderer.BuildGradientStops(points, 0, 1, windowStart, 200f, colorLookup);
+        var stops = ChartRenderer.BuildGradientStops(
+            points, 0, 1, windowStart, 200f, colorLookup,
+            spanEndX: ChartRenderer.ToX(points[1].Timestamp, windowStart, 200f));
 
         Assert.Equal(2, stops.Length);
         Assert.Equal(0.0f, stops[0].Position, precision: 4);
@@ -301,7 +244,9 @@ public class ChartRendererTests
         };
         var colorLookup = ChartColors.BuildColorLookup(isDark: true);
 
-        var stops = ChartRenderer.BuildGradientStops(points, 0, 2, windowStart, 200f, colorLookup);
+        var stops = ChartRenderer.BuildGradientStops(
+            points, 0, 2, windowStart, 200f, colorLookup,
+            spanEndX: ChartRenderer.ToX(points[2].Timestamp, windowStart, 200f));
 
         Assert.Equal(colorLookup[0], stops[0].Color);
         Assert.Equal(colorLookup[50], stops[1].Color);
@@ -322,7 +267,9 @@ public class ChartRendererTests
         };
         var colorLookup = ChartColors.BuildColorLookup(isDark: true);
 
-        var stops = ChartRenderer.BuildGradientStops(points, 0, 2, windowStart, 200f, colorLookup);
+        var stops = ChartRenderer.BuildGradientStops(
+            points, 0, 2, windowStart, 200f, colorLookup,
+            spanEndX: ChartRenderer.ToX(points[2].Timestamp, windowStart, 200f));
 
         Assert.Equal(0.0f, stops[0].Position, precision: 3);
         Assert.Equal(0.5f, stops[1].Position, precision: 3);
@@ -339,7 +286,9 @@ public class ChartRendererTests
         };
         var colorLookup = ChartColors.BuildColorLookup(isDark: true);
 
-        var stops = ChartRenderer.BuildGradientStops(points, 0, 0, windowStart, 200f, colorLookup);
+        var stops = ChartRenderer.BuildGradientStops(
+            points, 0, 0, windowStart, 200f, colorLookup,
+            spanEndX: ChartRenderer.ToX(points[0].Timestamp, windowStart, 200f));
 
         Assert.IsType<(float Position, Color Color)[]>(stops);
     }
@@ -357,11 +306,66 @@ public class ChartRendererTests
             .ToList();
         var colorLookup = ChartColors.BuildColorLookup(isDark: true);
 
-        var stops = ChartRenderer.BuildGradientStops(points, 0, points.Count - 1, windowStart, 200f, colorLookup);
+        var stops = ChartRenderer.BuildGradientStops(
+            points, 0, points.Count - 1, windowStart, 200f, colorLookup,
+            spanEndX: ChartRenderer.GetRightEdgeX(points, points.Count - 1, windowStart, 200f));
 
         foreach (var stop in stops)
         {
             Assert.InRange(stop.Position, 0.0f, 1.0f);
+        }
+    }
+
+    [Fact]
+    public void BuildGradientStops_RightEdgePastTheLastSample_KeepsTheLastStopBelowOne()
+    {
+        // Machine slept: the newest sample is at 2h but the right edge (and therefore the brush
+        // endpoint) is at 4h. Forcing the last stop to 1.0 used to stretch the gradient 2.25x and
+        // paint the 1h colour at 2.25h. Clamp edge behaviour holds the final colour across the
+        // flat extension instead, which is what the curve actually shows there.
+        var windowStart = DateTimeOffset.UtcNow.AddHours(-4);
+        var points = new List<UsageHistoryPoint>
+        {
+            new() { Timestamp = windowStart.AddHours(1), Utilization = 0.2 },
+            new() { Timestamp = windowStart.AddHours(2), Utilization = 0.6 },
+        };
+        var colorLookup = ChartColors.BuildColorLookup(isDark: true);
+
+        var stops = ChartRenderer.BuildGradientStops(
+            points, 0, 1, windowStart, 200f, colorLookup,
+            spanEndX: ChartRenderer.ToX(windowStart.AddHours(4), windowStart, 200f));
+
+        Assert.Equal(0.0f, stops[0].Position, precision: 4);
+        Assert.Equal(1.0f / 3.0f, stops[^1].Position, precision: 4);
+    }
+
+    [Fact]
+    public void BuildGradientStops_EveryStop_RendersAtItsOwnSampleX()
+    {
+        // The invariant behind finding 38: a stop at position p renders at
+        // spanStartX + p * (spanEndX - spanStartX). That has to be the sample's own X, or the
+        // colouring and the geometry disagree.
+        const float plotWidth = 200f;
+        var windowStart = DateTimeOffset.UtcNow.AddHours(-4);
+        var points = Enumerable.Range(0, 6)
+            .Select(i => new UsageHistoryPoint
+            {
+                Timestamp = windowStart.AddMinutes(i * 20),
+                Utilization = i / 6.0
+            })
+            .ToList();
+        var colorLookup = ChartColors.BuildColorLookup(isDark: true);
+        var spanStartX = ChartRenderer.ToX(points[0].Timestamp, windowStart, plotWidth);
+        var spanEndX = ChartRenderer.ToX(windowStart.AddHours(4), windowStart, plotWidth);
+
+        var stops = ChartRenderer.BuildGradientStops(
+            points, 0, points.Count - 1, windowStart, plotWidth, colorLookup, spanEndX);
+
+        for (var i = 0; i < points.Count; i++)
+        {
+            var renderedX = spanStartX + (stops[i].Position * (spanEndX - spanStartX));
+            var sampleX = ChartRenderer.ToX(points[i].Timestamp, windowStart, plotWidth);
+            Assert.Equal(sampleX, renderedX, precision: 3);
         }
     }
 

@@ -71,35 +71,26 @@ public static class ChartRenderer
     }
 
     /// <summary>
-    /// Returns the canvas-absolute X coordinate of the right edge for a span.
-    /// For mid-span ends, the right edge is the next point's X position.
-    /// For the last span, the right edge is the current time.
-    /// The returned value already includes LeftMargin -- use directly in path calls.
+    /// Returns the X coordinate where a span ends, in the same plot-relative space as
+    /// <see cref="ToX"/> — callers add LeftMargin themselves, exactly as they do for point
+    /// coordinates. For mid-span ends that is the next point's X; for the last span it is "now",
+    /// which extends the curve flat from the newest sample to the current time.
+    ///
+    /// This is the single definition of a span's right edge. Both the geometry (the flat extension
+    /// and the fill's closing edge) and the hue gradient's normalisation derive from one call, so
+    /// they cannot disagree about where the span ends when polling is not current.
     /// </summary>
-    public static float GetRightEdgeAbsoluteX(
+    public static float GetRightEdgeX(
         IReadOnlyList<UsageHistoryPoint> points,
         int endIndex,
         DateTimeOffset windowStart,
         float plotWidth)
     {
-        if (endIndex < points.Count - 1)
-        {
-            return LeftMargin + ToX(points[endIndex + 1].Timestamp, windowStart, plotWidth);
-        }
+        var edgeTimestamp = endIndex < points.Count - 1
+            ? points[endIndex + 1].Timestamp
+            : DateTimeOffset.UtcNow;
 
-        return LeftMargin + ToX(DateTimeOffset.UtcNow, windowStart, plotWidth);
-    }
-
-    /// <summary>
-    /// Returns all data points as a single contiguous span.
-    /// Since UsageHistoryPoint has no IsGap field, all points are always contiguous.
-    /// Returns an empty list for empty input. Signature ready for future gap support.
-    /// </summary>
-    public static List<(int StartIndex, int EndIndex)> GetContiguousSpans(
-        IReadOnlyList<UsageHistoryPoint> points)
-    {
-        if (points.Count == 0) return [];
-        return [(0, points.Count - 1)];
+        return ToX(edgeTimestamp, windowStart, plotWidth);
     }
 
     /// <summary>
@@ -229,8 +220,19 @@ public static class ChartRenderer
 
     /// <summary>
     /// Builds gradient stop tuples for a span of data points.
-    /// Positions are normalized to [0, 1] within the span (not the full chart width), so the
-    /// glow insets cancel out and do not shift the colors.
+    ///
+    /// Positions are normalized to [0, 1] across the brush's own extent — from the first point's X
+    /// to <paramref name="spanEndX"/>, which the caller must take from
+    /// <see cref="GetRightEdgeX"/>, the same value the geometry's right edge uses. Both arguments
+    /// are in plot-relative <see cref="ToX"/> space; LeftMargin and any canvas offset cancel out of
+    /// the ratio, so the caller does not need to pass them.
+    ///
+    /// The last stop deliberately lands BELOW 1.0 whenever the right edge sits past the newest
+    /// sample (stale polling, machine sleep, cold start from persisted history). That is correct:
+    /// beyond it the curve is the flat extension at the newest sample's value, and
+    /// CanvasEdgeBehavior.Clamp holds the final colour across exactly that stretch. Forcing the
+    /// last stop to 1.0 is what used to smear every colour toward "now".
+    ///
     /// Colors are looked up from the pre-built colorLookup array by utilization index.
     /// Return type is plain C# tuples — no Win2D dependency. Conversion to CanvasGradientStop
     /// happens in ChartDrawing.
@@ -241,34 +243,24 @@ public static class ChartRenderer
         int endIndex,
         DateTimeOffset windowStart,
         float plotWidth,
-        Color[] colorLookup)
+        Color[] colorLookup,
+        float spanEndX)
     {
         var spanStartX = ToX(points[startIndex].Timestamp, windowStart, plotWidth);
-        var spanEndX = ToX(points[endIndex].Timestamp, windowStart, plotWidth);
         var spanWidth = spanEndX - spanStartX;
 
         if (spanWidth <= 0f) spanWidth = 1f;
 
-        var stops = new List<(float Position, Color Color)>();
+        var stops = new (float Position, Color Color)[endIndex - startIndex + 1];
 
         for (var i = startIndex; i <= endIndex; i++)
         {
             var x = ToX(points[i].Timestamp, windowStart, plotWidth);
             var position = Math.Clamp((x - spanStartX) / spanWidth, 0f, 1f);
             var colorIndex = (int)Math.Clamp(points[i].Utilization * 100.0, 0, 100);
-            stops.Add((position, colorLookup[colorIndex]));
+            stops[i - startIndex] = (position, colorLookup[colorIndex]);
         }
 
-        if (stops.Count == 1)
-        {
-            stops[0] = (0.0f, stops[0].Color);
-        }
-        else if (stops.Count > 1)
-        {
-            stops[0] = (0.0f, stops[0].Color);
-            stops[^1] = (1.0f, stops[^1].Color);
-        }
-
-        return [.. stops];
+        return stops;
     }
 }

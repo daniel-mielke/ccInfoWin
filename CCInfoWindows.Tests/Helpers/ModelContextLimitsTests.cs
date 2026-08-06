@@ -210,21 +210,45 @@ public class ModelContextLimitsTests
         Assert.Equal("Unbekannt", result);
     }
 
+    // -------------------------------------------------------------------------
+    // Autocompact warning — 20K before the EFFECTIVE max (see CTX-04 amendment)
+    // -------------------------------------------------------------------------
+
     [Theory]
-    [InlineData(180_000, 200_000, true)]    // exactly at 200K - 20K boundary
-    [InlineData(180_001, 200_000, true)]    // above boundary
-    [InlineData(200_000, 200_000, true)]    // at max
-    [InlineData(179_999, 200_000, false)]   // just below boundary
+    // 200K model: effective max 167K, so the warning threshold is 147K.
+    [InlineData(147_000, 200_000, true)]    // exactly at the boundary
+    [InlineData(147_001, 200_000, true)]    // above the boundary
+    [InlineData(167_000, 200_000, true)]    // at the effective max, where the bar reads 100%
+    [InlineData(200_000, 200_000, true)]    // at the raw max
+    [InlineData(146_999, 200_000, false)]   // just below the boundary
     [InlineData(50_000, 200_000, false)]    // well below
-    [InlineData(980_000, 1_000_000, true)]  // exactly at 1M - 20K boundary
-    [InlineData(980_001, 1_000_000, true)]  // above 1M boundary
-    [InlineData(979_999, 1_000_000, false)] // just below 1M boundary
-    public void ShouldWarnAutocompact_UsesFlat20KBuffer(
+    // 1M model: effective max 967K, so the warning threshold is 947K.
+    [InlineData(947_000, 1_000_000, true)]
+    [InlineData(947_001, 1_000_000, true)]
+    [InlineData(946_999, 1_000_000, false)]
+    public void ShouldWarnAutocompact_Warns20KBeforeTheEffectiveMax(
         long totalTokens, long maxTokens, bool expected)
     {
         var result = ModelContextLimits.ShouldWarnAutocompact(totalTokens, maxTokens);
 
         Assert.Equal(expected, result);
+    }
+
+    [Theory]
+    [InlineData(200_000)]
+    [InlineData(1_000_000)]
+    public void ShouldWarnAutocompact_WarnsBeforeTheBarSaturates(long maxTokens)
+    {
+        // The regression this replaces: the buffer was subtracted from the RAW max, so for a 200K
+        // model the warning threshold sat at 180K while the bar already read 100% at 167K — the
+        // pre-announcement arrived 13,000 tokens after the event. One token below the effective
+        // max the warning must already be on, and the bar must not be saturated yet.
+        var effectiveMax = ModelContextLimits.GetEffectiveMaxTokens(maxTokens);
+        var justBeforeSaturation = effectiveMax - 1;
+        var data = new ContextWindowData { TotalTokens = justBeforeSaturation, MaxTokens = maxTokens };
+
+        Assert.True(ModelContextLimits.ShouldWarnAutocompact(justBeforeSaturation, maxTokens));
+        Assert.True(data.Utilization < 1.0);
     }
 
     [Fact]
@@ -233,5 +257,42 @@ public class ModelContextLimitsTests
         var result = ModelContextLimits.ShouldWarnAutocompact(100, 0);
 
         Assert.False(result);
+    }
+
+    [Fact]
+    public void ShouldWarnAutocompact_EmptyContextInADegenerateWindow_DoesNotWarn()
+    {
+        // maxTokens below the 33K reserve clamps the effective max to 1, which would make
+        // "effective - 20K" negative and warn about a context holding nothing at all.
+        Assert.False(ModelContextLimits.ShouldWarnAutocompact(0, 1_000));
+        Assert.True(ModelContextLimits.ShouldWarnAutocompact(1, 1_000));
+    }
+
+    // -------------------------------------------------------------------------
+    // Family classification drives the badge colour — one ladder, not two
+    // -------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("claude-opus-4-6", "#BF5AF2")]
+    [InlineData("claude-sonnet-4-6", "#FF9F0A")]
+    [InlineData("claude-haiku-4-5", "#0A84FF")]
+    [InlineData("unknown-model", "#636366")]
+    [InlineData(null, "#636366")]
+    [InlineData("", "#636366")]
+    public void GetBadgeColorHex_FollowsTheFamilyClassification(string? modelName, string expectedHex)
+    {
+        Assert.Equal(expectedHex, ModelContextLimits.GetBadgeColorHex(modelName));
+    }
+
+    [Theory]
+    [InlineData("claude-sonnet-4-5-20250929", "claude-sonnet-4-5")]
+    [InlineData("claude-haiku-4-5-20251001", "claude-haiku-4-5")]
+    [InlineData("claude-sonnet-4-5", "claude-sonnet-4-5")]        // nothing to strip
+    [InlineData("claude-opus-4-5-2025092", "claude-opus-4-5-2025092")]   // 7 digits, not a date
+    [InlineData("claude-opus-4-5-2025092x", "claude-opus-4-5-2025092x")] // 8 chars, not numeric
+    [InlineData("", "")]
+    public void StripDateSuffix_RemovesOnlyAnEightDigitTrailingSegment(string modelName, string expected)
+    {
+        Assert.Equal(expected, ModelContextLimits.StripDateSuffix(modelName));
     }
 }

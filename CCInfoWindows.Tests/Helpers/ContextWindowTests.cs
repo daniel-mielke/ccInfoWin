@@ -67,13 +67,16 @@ public class ContextWindowTests
         Assert.Equal(expected, result);
     }
 
-    // CTXW-04: autocompact threshold — flat 20K buffer
+    // CTXW-04: autocompact threshold — 20K before the effective max, i.e. before the same
+    // baseline Utilization divides by. Subtracting the buffer from the raw max instead put the
+    // threshold 13K above the point where the bar already showed 100%.
     [Theory]
-    [InlineData(180_000, 200_000, true)]    // exactly at boundary
-    [InlineData(190_000, 200_000, true)]    // above boundary
-    [InlineData(179_999, 200_000, false)]   // just below boundary
+    [InlineData(147_000, 200_000, true)]    // exactly at boundary (167K effective - 20K)
+    [InlineData(160_000, 200_000, true)]    // above boundary, bar not yet saturated
+    [InlineData(190_000, 200_000, true)]    // bar long saturated
+    [InlineData(146_999, 200_000, false)]   // just below boundary
     [InlineData(50_000, 200_000, false)]    // well below
-    public void ModelContextLimits_ShouldWarnAutocompact_UsesFlat20KBuffer(
+    public void ModelContextLimits_ShouldWarnAutocompact_Warns20KBeforeEffectiveMax(
         long totalTokens, long maxTokens, bool expected)
     {
         var result = ModelContextLimits.ShouldWarnAutocompact(totalTokens, maxTokens);

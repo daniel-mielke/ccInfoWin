@@ -76,7 +76,17 @@ public static class ChartDrawing
         public required CanvasGeometry Fill { get; init; }
         public required CanvasGeometry Line { get; init; }
         public required float SpanStartX { get; init; }
+
+        /// <summary>Canvas-absolute right edge — the brush endpoint and the flat extension use it.</summary>
         public required float SpanEndX { get; init; }
+
+        /// <summary>
+        /// The same right edge in plot-relative ChartRenderer.ToX space, which is what
+        /// BuildGradientStops normalises against. Carried on the geometry rather than recomputed so
+        /// both consumers see one DateTimeOffset.UtcNow sample.
+        /// </summary>
+        public required float SpanEndPlotX { get; init; }
+
         public required float BaselineY { get; init; }
         public required float PlotTopY { get; init; }
 
@@ -156,8 +166,8 @@ public static class ChartDrawing
 
         var baselineY = offsetY + ChartRenderer.ToY(0.0, plotHeight);
         var plotTopY = offsetY + ChartRenderer.ToY(1.0, plotHeight);
-        var rightEdgeX = offsetX
-            + ChartRenderer.GetRightEdgeAbsoluteX(filtered, count - 1, windowStart, plotWidth);
+        var rightEdgePlotX = ChartRenderer.GetRightEdgeX(filtered, count - 1, windowStart, plotWidth);
+        var rightEdgeX = offsetX + ChartRenderer.LeftMargin + rightEdgePlotX;
         var lastY = (float)ys[count - 1];
 
         // Screen space (y grows downward). Monotonicity survives the affine flip, so there is no
@@ -188,6 +198,7 @@ public static class ChartDrawing
             Line = CanvasGeometry.CreatePath(linePath),
             SpanStartX = (float)xs[0],
             SpanEndX = rightEdgeX,
+            SpanEndPlotX = rightEdgePlotX,
             BaselineY = baselineY,
             PlotTopY = plotTopY,
             Points = filtered
@@ -286,6 +297,9 @@ public static class ChartDrawing
     /// <summary>
     /// Horizontal hue gradient across the span, at full alpha. The fill modulates it with a
     /// separate vertical opacity brush; the line uses it directly.
+    ///
+    /// The stops are normalised against the geometry's own right edge, so a sample's colour lands
+    /// on that sample's X even when the last poll is old and the flat extension is long.
     /// </summary>
     private static CanvasLinearGradientBrush BuildHueBrush(
         ICanvasResourceCreator resourceCreator,
@@ -296,7 +310,8 @@ public static class ChartDrawing
     {
         var colorLookup = ChartColors.BuildColorLookup(isDark);
         var rawStops = ChartRenderer.BuildGradientStops(
-            geometry.Points, 0, geometry.Points.Count - 1, windowStart, plotWidth, colorLookup);
+            geometry.Points, 0, geometry.Points.Count - 1, windowStart, plotWidth, colorLookup,
+            geometry.SpanEndPlotX);
 
         var stops = new CanvasGradientStop[rawStops.Length];
         for (var i = 0; i < rawStops.Length; i++)
