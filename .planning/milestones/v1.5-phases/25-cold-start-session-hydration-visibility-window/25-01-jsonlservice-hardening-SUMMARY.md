@@ -90,6 +90,8 @@ internal async Task ProcessFilesForTestAsync(IEnumerable<string> filePaths)
 
 **Why `ProcessFilesForTestAsync` instead of `ScanAsync`:** `DiscoverSessions` always uses `forceFullRead: true`, which re-reads all entries from scratch. Since `_projectData` is not reset between scans, a second `DiscoverSessions` call double-counts entries (pre-Phase-25 SeenIds have unique UUIDs). The incremental path via `ProcessSingleFile` correctly starts from the stored position, picking up only new lines.
 
+> **Note added 2026-08-06 (post-review remediation, finding 2):** the double-counting claim above no longer holds. Deduplication now keys on `message.id|requestId` (per-line `uuid` only as fallback) and a repeated identity supersedes the earlier `EntryLog` entry in place, so a second full read is idempotent. `ProcessFilesForTestAsync` is kept anyway: it exercises the incremental read path the FileSystemWatcher actually uses, which a full re-scan would bypass. It now also runs the same per-file guard as the debounce callback.
+
 ## Updated Existing Test
 
 `JsonlServiceTests.RebuildSessionsList_ExcludesEmptyCwd` (line 381) was renamed and updated to `RebuildSessionsList_EmptyCwd_KeepsSessionWithDecodedDisplayName`. The old assertion (`Assert.Empty`) described the pre-Phase-25 bug. The new assertion confirms `Sessions` contains exactly one session with the decoded display name. This is a Rule 1 (bug fix) deviation.

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using CCInfoWindows.Services;
 
 namespace CCInfoWindows.Tests.Services;
@@ -15,16 +15,21 @@ public class JsonlServiceSubagentTests : IDisposable
 {
     // Synthetic project name — decodes via SessionNameHelper.DecodeProjectDirectory
     // to "fixture" without depending on any real machine path. Hermetic for CI and
-    // any maintainer layout. Future-proof against IsValidProjectDirectory creep into
-    // GetContextWindow (Phase 25 backlog).
+    // any maintainer layout. The fixture never creates the cwd its entries would name
+    // (they carry no cwd at all), so it also stays clear of the RebuildSessionsList
+    // validity filter; GetContextWindow is queried by project directory name directly.
     private const string ProjectDirName = "X--phase29-subagent-fixture";
+    private const string CacheDirectoryName = "cache";
 
     private readonly string _tempDir;
+    private readonly string _cacheDir;
 
     public JsonlServiceSubagentTests()
     {
         _tempDir = Path.Combine(Path.GetTempPath(), "subagent-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempDir);
+        _cacheDir = Path.Combine(_tempDir, CacheDirectoryName);
+        Directory.CreateDirectory(_cacheDir);
     }
 
     public void Dispose()
@@ -58,7 +63,7 @@ public class JsonlServiceSubagentTests : IDisposable
         File.SetLastWriteTimeUtc(agentFile, freshMtime);
         AssertMtimeWasSet(agentFile, freshMtime);
 
-        using var svc = new JsonlService(projectsDirectoryOverride: _tempDir);
+        using var svc = BuildService();
         await svc.InitializeAsync();
 
         // Act
@@ -90,7 +95,7 @@ public class JsonlServiceSubagentTests : IDisposable
         File.SetLastWriteTimeUtc(agentFile, staleMtime);
         AssertMtimeWasSet(agentFile, staleMtime);
 
-        using var svc = new JsonlService(projectsDirectoryOverride: _tempDir);
+        using var svc = BuildService();
         await svc.InitializeAsync();
 
         // Act
@@ -124,7 +129,7 @@ public class JsonlServiceSubagentTests : IDisposable
         File.SetLastWriteTimeUtc(agentFile, freshMtime);
         AssertMtimeWasSet(agentFile, freshMtime);
 
-        using var svc = new JsonlService(projectsDirectoryOverride: _tempDir);
+        using var svc = BuildService();
         await svc.InitializeAsync();
 
         // Act
@@ -140,8 +145,48 @@ public class JsonlServiceSubagentTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
+    // Watcher batch: a subagent write must not register a phantom session
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// A subagent write reaches ProcessSingleFile through the watcher batch. The walk-up there
+    /// stopped one directory short of the project, so the SESSION UUID became a _projectData key and
+    /// therefore a SessionInfo.Id — a session named after a UUID fragment appeared in the picker
+    /// whenever the visibility window was set to "Unlimited". Nothing was ever parsed out of the
+    /// file: subagent content is read on demand by FindSubagentFilesForNewestSession, which is why
+    /// the bar below still shows the agent.
+    /// </summary>
+    [Fact]
+    public async Task ProcessFilesForTest_SubagentFile_RegistersNoPhantomSession()
+    {
+        var agentFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "delta");
+        var sessionUuid = SessionUuidOf(agentFile);
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        await svc.ProcessFilesForTestAsync([agentFile]);
+
+        Assert.DoesNotContain(svc.Sessions, s => s.Id == sessionUuid);
+        Assert.Contains(svc.Sessions, s => s.Id == ProjectDirName);
+        Assert.Contains(svc.GetContextWindow(ProjectDirName).Subagents, s => s.AgentId == "delta");
+    }
+
+    // -------------------------------------------------------------------------
     // Fixture helpers
     // -------------------------------------------------------------------------
+
+    private JsonlService BuildService()
+        => new(projectsDirectoryOverride: _tempDir, cacheDirectoryOverride: _cacheDir);
+
+    /// <summary>
+    /// Subagent files live at {projectDir}/{sessionUuid}/subagents/agent-{id}.jsonl, so two hops up
+    /// from the agent file is the session UUID — the value that must never become a session id.
+    /// </summary>
+    private static string SessionUuidOf(string agentFilePath) =>
+        Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(agentFilePath)))!;
 
     /// <summary>
     /// Stages: {_tempDir}/{ProjectDirName}/{sessionUuid}.jsonl (main session,

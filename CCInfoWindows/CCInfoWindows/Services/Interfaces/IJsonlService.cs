@@ -17,14 +17,12 @@ public interface IJsonlService
     /// <summary>Raised whenever any JSONL data changes (new entries or new files).</summary>
     event EventHandler? DataUpdated;
 
-    /// <summary>Returns aggregated context window state for the given session.</summary>
+    /// <summary>
+    /// Returns aggregated context window state for the given session, including one entry per
+    /// currently active subagent. Returns <see cref="ContextWindowData.Empty"/> when the session is
+    /// unknown or its newest JSONL file cannot be read.
+    /// </summary>
     ContextWindowData GetContextWindow(string sessionId);
-
-    /// <summary>Returns context window state for a specific subagent within a session.</summary>
-    ContextWindowData GetSubagentContext(string sessionId, string agentId);
-
-    /// <summary>Returns aggregated token counts for the given session.</summary>
-    TokenSummary GetTokenSummary(string sessionId);
 
     /// <summary>Performs initial directory scan and starts the file watcher.</summary>
     Task InitializeAsync();

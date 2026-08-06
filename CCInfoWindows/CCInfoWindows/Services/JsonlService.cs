@@ -35,7 +35,9 @@ public sealed class JsonlService : IJsonlService, IDisposable
     private const string SaveCacheSource = "JsonlService.SaveCache";
     private const string ParseFileSource = "JsonlService.ParseFileIntoProject";
     private const string SubagentContextSource = "JsonlService.BuildSubagentContext";
+    private const string ContextWindowSource = "JsonlService.GetContextWindow";
     private const string FileChangeSource = "JsonlService.ProcessPendingFileChanges";
+    private const string FileDeletedSource = "JsonlService.OnFileDeleted";
     private const string WatcherErrorSource = "JsonlService.OnWatcherError";
 
     // -------------------------------------------------------------------------
@@ -49,10 +51,6 @@ public sealed class JsonlService : IJsonlService, IDisposable
         public string? ModelName { get; set; }
         public DateTimeOffset LastActivity { get; set; }
 
-        public long TotalInputTokens { get; set; }
-        public long TotalOutputTokens { get; set; }
-        public long TotalCacheCreationTokens { get; set; }
-        public long TotalCacheReadTokens { get; set; }
         public string? NewestSessionFile { get; set; }
         public DateTimeOffset NewestSessionModTime { get; set; }
 
@@ -81,11 +79,9 @@ public sealed class JsonlService : IJsonlService, IDisposable
         public long OutputTokens { get; init; }
         public long CacheCreationTokens { get; init; }
         public long CacheReadTokens { get; init; }
-        public long TotalTokens => InputTokens + OutputTokens + CacheCreationTokens + CacheReadTokens;
         public decimal? CostUsd { get; init; }
         public string? ModelName { get; init; }
         public string DeduplicationKey { get; init; } = string.Empty;
-        public string SourceFile { get; init; } = string.Empty;
     }
 
     // -------------------------------------------------------------------------
@@ -155,64 +151,20 @@ public sealed class JsonlService : IJsonlService, IDisposable
             if (string.IsNullOrEmpty(data.NewestSessionFile))
                 return ContextWindowData.Empty;
 
-            var entry = ReadLastAssistantEntryFromFile(data.NewestSessionFile);
-            if (entry is null)
-                return ContextWindowData.Empty;
-
-            var totalTokens = ComputeContextTokens(entry);
-            var modelName = ResolveModelName(data.NewestSessionFile, entry);
-            var maxTokens = ModelContextLimits.GetMaxContextTokens(
-                modelName, _pricingService.GetPrice, observedTokens: totalTokens);
-            var subagentFiles = FindSubagentFilesForNewestSession(data);
-            var subagents = BuildSubagentContext(subagentFiles, _pricingService);
-
-            return new ContextWindowData
+            // The pointer is a snapshot: the file it names can be deleted, renamed or locked at
+            // any time, and every caller is a UI refresh tick that must degrade rather than throw.
+            try
             {
-                TotalTokens = totalTokens,
-                MaxTokens = maxTokens,
-                ModelName = modelName,
-                ShouldWarnAutocompact = ModelContextLimits.ShouldWarnAutocompact(totalTokens, maxTokens),
-                Subagents = subagents
-            };
-        }
-    }
-
-    public ContextWindowData GetSubagentContext(string projectDirName, string agentId)
-    {
-        lock (_sessionsLock)
-        {
-            if (!_projectData.TryGetValue(projectDirName, out var data))
-                return ContextWindowData.Empty;
-
-            var subagentFiles = FindSubagentFilesForNewestSession(data);
-            var subagents = BuildSubagentContext(subagentFiles, _pricingService);
-            var agent = subagents.FirstOrDefault(a => a.AgentId == agentId);
-            if (agent is null)
-                return ContextWindowData.Empty;
-
-            return new ContextWindowData
+                return BuildContextWindow(data);
+            }
+            catch (IOException ex)
             {
-                TotalTokens = agent.TotalTokens,
-                MaxTokens = agent.MaxTokens,
-                ModelName = agent.ModelName,
-                ShouldWarnAutocompact = ModelContextLimits.ShouldWarnAutocompact(agent.TotalTokens, agent.MaxTokens),
-                Subagents = []
-            };
-        }
-    }
-
-    public TokenSummary GetTokenSummary(string projectDirName)
-    {
-        lock (_sessionsLock)
-        {
-            if (!_projectData.TryGetValue(projectDirName, out var data))
-                return TokenSummary.Empty;
-
-            return new TokenSummary
+                return HandleContextWindowFailure(data, ex);
+            }
+            catch (UnauthorizedAccessException ex)
             {
-                InputTokens = data.TotalInputTokens,
-                OutputTokens = data.TotalOutputTokens
-            };
+                return HandleContextWindowFailure(data, ex);
+            }
         }
     }
 
@@ -598,7 +550,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
             if (string.IsNullOrEmpty(data.Cwd) && !string.IsNullOrEmpty(entry.Cwd))
                 data.Cwd = entry.Cwd;
 
-            ApplyEntryToProjectData(entry, data, filePath);
+            ApplyEntryToProjectData(entry, data);
         }
 
         // DROPDOWN-02 diagnostic: when no entry in this file carries a cwd field, log the
@@ -617,7 +569,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
         UpdateFilePosition(filePath, newPosition);
     }
 
-    private static void ApplyEntryToProjectData(JsonlEntry entry, ProjectData data, string sourceFile = "")
+    private static void ApplyEntryToProjectData(JsonlEntry entry, ProjectData data)
     {
         if (entry.Timestamp.HasValue && entry.Timestamp > data.LastActivity)
             data.LastActivity = entry.Timestamp.Value;
@@ -629,7 +581,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
         if (usage is null)
             return;
 
-        var logItem = BuildEntryLogItem(entry, usage, sourceFile);
+        var logItem = BuildEntryLogItem(entry, usage);
 
         if (logItem.DeduplicationKey.Length > 0
             && data.EntryIndexByKey.TryGetValue(logItem.DeduplicationKey, out var knownIndex))
@@ -641,7 +593,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
         AppendEntry(data, logItem);
     }
 
-    private static EntryLogItem BuildEntryLogItem(JsonlEntry entry, JsonlUsage usage, string sourceFile) =>
+    private static EntryLogItem BuildEntryLogItem(JsonlEntry entry, JsonlUsage usage) =>
         new()
         {
             Timestamp = entry.Timestamp ?? DateTimeOffset.MinValue,
@@ -651,8 +603,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
             CacheReadTokens = usage.CacheReadInputTokens ?? 0,
             CostUsd = entry.CostUsd,
             ModelName = entry.Message?.Model,
-            DeduplicationKey = BuildDeduplicationKey(entry),
-            SourceFile = sourceFile
+            DeduplicationKey = BuildDeduplicationKey(entry)
         };
 
     private static void AppendEntry(ProjectData data, EntryLogItem item)
@@ -661,40 +612,23 @@ public sealed class JsonlService : IJsonlService, IDisposable
             data.EntryIndexByKey[item.DeduplicationKey] = data.EntryLog.Count;
 
         data.EntryLog.Add(item);
-        AddToTotals(data, item);
         ApplyModelName(data, item.ModelName);
     }
 
     /// <summary>
-    /// Replaces an already-counted entry with a later line carrying the same identity.
+    /// Replaces an already-recorded entry with a later line carrying the same identity.
     /// Claude Code writes one JSONL line per streamed content block of a single assistant
     /// message: every line repeats the identical input/cache figures while only the final line
     /// carries the completed output_tokens. Superseding (rather than skipping the repeat) keeps
     /// exactly one contribution per message AND keeps the authoritative one, and makes
     /// re-reading lines that were already parsed idempotent instead of additive.
+    /// <see cref="ProjectData.EntryLog"/> is the only place a contribution is recorded, so
+    /// replacing the element is the whole update — there is no parallel running total to correct.
     /// </summary>
     private static void SupersedeEntry(ProjectData data, int index, EntryLogItem replacement)
     {
-        SubtractFromTotals(data, data.EntryLog[index]);
         data.EntryLog[index] = replacement;
-        AddToTotals(data, replacement);
         ApplyModelName(data, replacement.ModelName);
-    }
-
-    private static void AddToTotals(ProjectData data, EntryLogItem item)
-    {
-        data.TotalInputTokens += item.InputTokens;
-        data.TotalOutputTokens += item.OutputTokens;
-        data.TotalCacheCreationTokens += item.CacheCreationTokens;
-        data.TotalCacheReadTokens += item.CacheReadTokens;
-    }
-
-    private static void SubtractFromTotals(ProjectData data, EntryLogItem item)
-    {
-        data.TotalInputTokens -= item.InputTokens;
-        data.TotalOutputTokens -= item.OutputTokens;
-        data.TotalCacheCreationTokens -= item.CacheCreationTokens;
-        data.TotalCacheReadTokens -= item.CacheReadTokens;
     }
 
     private static void ApplyModelName(ProjectData data, string? modelName)
@@ -826,6 +760,56 @@ public sealed class JsonlService : IJsonlService, IDisposable
             : fileName;
     }
 
+    private ContextWindowData BuildContextWindow(ProjectData data)
+    {
+        var sessionFile = data.NewestSessionFile!;
+
+        var entry = ReadLastAssistantEntryFromFile(sessionFile);
+        if (entry is null)
+            return ContextWindowData.Empty;
+
+        var totalTokens = ComputeContextTokens(entry);
+        var modelName = ResolveModelName(sessionFile, entry);
+        var maxTokens = ModelContextLimits.GetMaxContextTokens(
+            modelName, _pricingService.GetPrice, observedTokens: totalTokens);
+        var subagentFiles = FindSubagentFilesForNewestSession(data);
+        var subagents = BuildSubagentContext(subagentFiles, _pricingService);
+
+        return new ContextWindowData
+        {
+            TotalTokens = totalTokens,
+            MaxTokens = maxTokens,
+            ModelName = modelName,
+            ShouldWarnAutocompact = ModelContextLimits.ShouldWarnAutocompact(totalTokens, maxTokens),
+            Subagents = subagents
+        };
+    }
+
+    /// <summary>
+    /// A pointer to a file that no longer exists can never succeed, so it is dropped and the dead
+    /// read is not retried on every subsequent tick; the next write anywhere in the project
+    /// re-establishes it via <see cref="ProcessSingleFile"/>. A file that merely failed to open
+    /// keeps its pointer, so a transient sharing conflict does not blank the context bar.
+    /// </summary>
+    private static ContextWindowData HandleContextWindowFailure(ProjectData data, Exception ex)
+    {
+        var sessionFile = data.NewestSessionFile;
+        AppLog.Write(ContextWindowSource, ex, $"Failed to read newest session file '{sessionFile}'.");
+
+        if (sessionFile is not null && !File.Exists(sessionFile))
+            ClearNewestSessionPointer(data);
+
+        return ContextWindowData.Empty;
+    }
+
+    private static void ClearNewestSessionPointer(ProjectData data)
+    {
+        data.NewestSessionFile = null;
+        // Reset the high-water mark too, otherwise no remaining file older than the vanished one
+        // could ever claim the pointer again.
+        data.NewestSessionModTime = default;
+    }
+
     private static JsonlEntry? ReadLastAssistantEntryFromFile(string filePath)
     {
         var lines = ReadTailLines(filePath);
@@ -858,14 +842,22 @@ public sealed class JsonlService : IJsonlService, IDisposable
             + (usage.CacheCreationInputTokens ?? 0);
     }
 
+    /// <summary>
+    /// True when <paramref name="cwd"/> names a project directory that still exists. Called from
+    /// <see cref="RebuildSessionsList"/> while <c>_sessionsLock</c> is held, so every case that
+    /// cannot be answered without a blocking filesystem round-trip is rejected up front.
+    /// </summary>
     private static bool IsValidProjectDirectory(string cwd)
     {
         if (string.IsNullOrEmpty(cwd))
             return false;
+        // A relative cwd would resolve against this process's working directory, not the one the
+        // JSONL was written from, so Directory.Exists could not answer the question being asked.
         if (!Path.IsPathRooted(cwd))
             return false;
-        // UNC paths (\\server\share or //server/share) cause Directory.Exists to hang
-        // when the server is unreachable — short-circuit before filesystem call
+        // UNC paths (\\server\share or //server/share) make Directory.Exists block on SMB name
+        // resolution for tens of seconds when the host is unreachable — short-circuit before the
+        // filesystem call rather than stall every locked read behind it.
         if (cwd.StartsWith(@"\\", StringComparison.Ordinal) || cwd.StartsWith("//", StringComparison.Ordinal))
             return false;
         return Directory.Exists(cwd);
@@ -891,9 +883,9 @@ public sealed class JsonlService : IJsonlService, IDisposable
                 };
             })
             // DROPDOWN-03: keep when Cwd is empty (DisplayName already resolved via fallback in
-            // ParseFileIntoProject) OR when the Cwd path still exists on disk.
-            // Drop only when Cwd is non-empty AND the directory was deleted.
-            .Where(s => s is not null && (string.IsNullOrEmpty(s.Cwd) || Directory.Exists(s.Cwd)))
+            // ParseFileIntoProject) OR when the Cwd path is a project directory that still exists.
+            // Drop only when Cwd is non-empty AND IsValidProjectDirectory rejects it.
+            .Where(s => s is not null && (string.IsNullOrEmpty(s.Cwd) || IsValidProjectDirectory(s.Cwd)))
             .OrderByDescending(s => s!.LastActivity)
             .ToList()!;
     }
@@ -917,10 +909,37 @@ public sealed class JsonlService : IJsonlService, IDisposable
     }
 
     /// <summary>
+    /// Sums the deduplicated input and output tokens recorded for the given project straight from
+    /// <see cref="ProjectData.EntryLog"/>, the single source of truth for aggregation. Lets the
+    /// deduplication and supersede tests assert token arithmetic without inheriting the
+    /// wall-clock cutoffs that <see cref="GetStatistics"/> applies.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    internal (long InputTokens, long OutputTokens) GetTokenSummary(string projectDirName)
+    {
+        lock (_sessionsLock)
+        {
+            if (!_projectData.TryGetValue(projectDirName, out var data))
+                return (0L, 0L);
+
+            long inputTokens = 0;
+            long outputTokens = 0;
+
+            foreach (var item in data.EntryLog)
+            {
+                inputTokens += item.InputTokens;
+                outputTokens += item.OutputTokens;
+            }
+
+            return (inputTokens, outputTokens);
+        }
+    }
+
+    /// <summary>
     /// Triggers an incremental re-parse of the given files, exactly as the FileSystemWatcher
-    /// would do after a debounce window. Used by JsonlServiceColdStartTests to simulate a
-    /// second read pass after new lines have been appended to a JSONL file, without triggering
-    /// a full forceFullRead scan that would re-parse already-counted entries.
+    /// would do after a debounce window — same per-file guard, same single rebuild afterwards.
+    /// Used to simulate a second read pass after new lines have been appended to a JSONL file,
+    /// without triggering a full forceFullRead scan that would re-parse already-counted entries.
     /// </summary>
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     internal async Task ProcessFilesForTestAsync(IEnumerable<string> filePaths)
@@ -930,7 +949,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
             lock (_sessionsLock)
             {
                 foreach (var filePath in filePaths)
-                    ProcessSingleFile(filePath);
+                    ProcessSingleFileGuarded(filePath);
                 RebuildSessionsList();
             }
         });
@@ -955,6 +974,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
         watcher.Changed += OnFileChanged;
         watcher.Created += OnFileChanged;
+        watcher.Deleted += OnFileDeleted;
         watcher.Error += OnWatcherError;
         watcher.EnableRaisingEvents = true;
 
@@ -989,6 +1009,40 @@ public sealed class JsonlService : IJsonlService, IDisposable
         }
     }
 
+    /// <summary>
+    /// Drops every reference to a JSONL file the watcher reports as deleted: the cached read
+    /// position, which a file recreated under the same name would otherwise resume from, and the
+    /// per-project newest-file pointer, which would otherwise name a vanished path for the whole
+    /// process lifetime. Deleting a directory reports the directory rather than each file it held,
+    /// so <see cref="GetContextWindow"/> keeps its own guard for what this handler cannot see.
+    /// </summary>
+    private void OnFileDeleted(object sender, FileSystemEventArgs e)
+    {
+        try
+        {
+            if (!IsPathWithinProjectsDirectory(e.FullPath))
+                return;
+
+            lock (_sessionsLock)
+            {
+                _filePositions.Remove(e.FullPath);
+
+                foreach (var data in _projectData.Values)
+                {
+                    if (string.Equals(data.NewestSessionFile, e.FullPath, StringComparison.OrdinalIgnoreCase))
+                        ClearNewestSessionPointer(data);
+                }
+            }
+
+            RaiseDataUpdated();
+        }
+        catch (Exception ex)
+        {
+            // An exception escaping a FileSystemWatcher callback terminates the process.
+            AppLog.Write(FileDeletedSource, ex, $"Failed to handle deletion of '{e.FullPath}'.");
+        }
+    }
+
     private void ProcessPendingFileChanges()
     {
         // Skip if initial scan is still running — avoid double-processing
@@ -1008,7 +1062,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
             {
                 foreach (var filePath in filesToProcess)
                 {
-                    ProcessSingleFile(filePath);
+                    ProcessSingleFileGuarded(filePath);
                 }
 
                 RebuildSessionsList();
@@ -1023,29 +1077,46 @@ public sealed class JsonlService : IJsonlService, IDisposable
         }
     }
 
+    /// <summary>
+    /// One unreadable file must not take the rest of the batch — nor the refresh that follows it —
+    /// down with it, because the pending set was drained and cleared before any file was read and a
+    /// skipped file gets no second chance in this pass. Its stored read position was never
+    /// advanced, so the next write anywhere under the projects directory picks the lines up.
+    /// </summary>
+    private void ProcessSingleFileGuarded(string filePath)
+    {
+        try
+        {
+            ProcessSingleFile(filePath);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(FileChangeSource, ex, $"Skipped '{filePath}'.");
+        }
+    }
+
     private void ProcessSingleFile(string filePath)
     {
         if (!IsPathWithinProjectsDirectory(filePath))
             return;
 
-        var isSubagent = IsSubagentFile(filePath);
+        // Subagent files ({projectDir}/{sessionUUID}/subagents/agent-*.jsonl) are deliberately not
+        // registered here. Their content is read on demand by FindSubagentFilesForNewestSession,
+        // which re-globs the directory on every GetContextWindow call, so the only effect of
+        // walking up from one was a _projectData entry keyed on the session UUID — a phantom
+        // session in the picker. The caller still refreshes and raises DataUpdated afterwards, so
+        // the subagent bars keep tracking subagent writes.
+        if (IsSubagentFile(filePath))
+            return;
 
-        // Subagent files live at: {projectDir}/{sessionUUID}/subagents/agent-*.jsonl
-        // Non-subagent session files live at: {projectDir}/{sessionUUID}.jsonl
-        // We need to walk up to the actual project directory in both cases.
-        string? projectDirName;
-        if (isSubagent)
-        {
-            // Walk up: subagents/ -> sessionDir -> projectDir
-            var subagentsDir = Path.GetDirectoryName(filePath);
-            var sessionDir = subagentsDir != null ? Path.GetDirectoryName(subagentsDir) : null;
-            projectDirName = sessionDir != null ? Path.GetFileName(sessionDir) : null;
-        }
-        else
-        {
-            var projectDir = Path.GetDirectoryName(filePath);
-            projectDirName = projectDir != null ? Path.GetFileName(projectDir) : null;
-        }
+        // A watcher event can name a file that was deleted before the debounce window elapsed.
+        // Returning here keeps the guarded catch below for the genuine race and, more importantly,
+        // stops a vanished file from registering an empty ProjectData for its project.
+        if (!File.Exists(filePath))
+            return;
+
+        var projectDir = Path.GetDirectoryName(filePath);
+        var projectDirName = projectDir != null ? Path.GetFileName(projectDir) : null;
 
         if (string.IsNullOrEmpty(projectDirName))
             return;
@@ -1056,16 +1127,13 @@ public sealed class JsonlService : IJsonlService, IDisposable
             _projectData[projectDirName] = data;
         }
 
-        if (!isSubagent)
-        {
-            ParseFileIntoProject(filePath, data);
+        ParseFileIntoProject(filePath, data);
 
-            var modTime = File.GetLastWriteTimeUtc(filePath);
-            if (modTime > data.NewestSessionModTime)
-            {
-                data.NewestSessionModTime = new DateTimeOffset(modTime, TimeSpan.Zero);
-                data.NewestSessionFile = filePath;
-            }
+        var modTime = File.GetLastWriteTimeUtc(filePath);
+        if (modTime > data.NewestSessionModTime)
+        {
+            data.NewestSessionModTime = new DateTimeOffset(modTime, TimeSpan.Zero);
+            data.NewestSessionFile = filePath;
         }
     }
 

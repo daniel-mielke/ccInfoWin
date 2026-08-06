@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Models;
@@ -15,18 +15,44 @@ namespace CCInfoWindows.Tests.Services;
 /// </summary>
 public class JsonlServiceTests : IDisposable
 {
+    private const string CacheDirectoryName = "cache";
+
     private readonly string _tempDir;
+    private readonly string _cacheDir;
+    private readonly List<JsonlService> _services = [];
 
     public JsonlServiceTests()
     {
         _tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(_tempDir);
+        _cacheDir = Path.Combine(_tempDir, CacheDirectoryName);
+        Directory.CreateDirectory(_cacheDir);
     }
 
     public void Dispose()
     {
+        // Every service started a FileSystemWatcher on _tempDir; releasing them before the delete
+        // keeps the teardown from racing live watcher callbacks. Dispose is idempotent, so the
+        // tests that additionally wrap the instance in `using` are fine.
+        foreach (var service in _services)
+            service.Dispose();
+        _services.Clear();
+
         if (Directory.Exists(_tempDir))
             Directory.Delete(_tempDir, recursive: true);
+    }
+
+    /// <summary>
+    /// Every instance gets its cache inside this test's own temp directory. Without the override
+    /// JsonlService writes jsonl-cache.json to the real %LOCALAPPDATA%\CCInfoWindows, so running
+    /// the suite would overwrite the developer's live cache — an F.I.R.S.T. Independent violation
+    /// with an effect outside the test process.
+    /// </summary>
+    private JsonlService BuildService(IPricingService? pricingService = null)
+    {
+        var service = new JsonlService(_tempDir, _cacheDir, pricingService);
+        _services.Add(service);
+        return service;
     }
 
     // -------------------------------------------------------------------------
@@ -135,7 +161,7 @@ public class JsonlServiceTests : IDisposable
             BuildAssistantEntry(SessionId, "uuid-2", "req-2", inputTokens: 5000, outputTokens: 200)
         ]);
 
-        var service = new JsonlService(_tempDir);
+        var service = BuildService();
         await service.InitializeAsync();
 
         var ctx = service.GetContextWindow(projectDirName);
@@ -158,7 +184,7 @@ public class JsonlServiceTests : IDisposable
             BuildSidechainAssistantEntry(SessionId, "uuid-2", "req-2", inputTokens: 99000, outputTokens: 10)
         ]);
 
-        var service = new JsonlService(_tempDir);
+        var service = BuildService();
         await service.InitializeAsync();
 
         var ctx = service.GetContextWindow(projectDirName);
@@ -170,7 +196,7 @@ public class JsonlServiceTests : IDisposable
     [Fact]
     public async Task GetContextWindow_UnknownSession_ReturnsEmpty()
     {
-        var service = new JsonlService(_tempDir);
+        var service = BuildService();
         await service.InitializeAsync();
 
         var ctx = service.GetContextWindow("nonexistent-session-id");
@@ -179,8 +205,98 @@ public class JsonlServiceTests : IDisposable
         Assert.Equal(ContextWindowData.Empty.MaxTokens, ctx.MaxTokens);
     }
 
+    /// <summary>
+    /// The newest-session-file pointer is captured during the scan, so deleting that file leaves it
+    /// naming a path that is gone. Before the guard the next refresh tick threw FileNotFoundException
+    /// out of GetContextWindow, App.OnUnhandledException swallowed it as handled, and — because the
+    /// pointer was never cleared — every later tick repeated the throw for the process lifetime,
+    /// adding a stack trace to crash.log each time.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_NewestSessionFileDeleted_ReturnsEmptyAndDoesNotThrow()
+    {
+        const string SessionId = "del1aaaa-0000-0000-0000-000000000070";
+        var projectDir = CreateProjectSessionDir(SessionId);
+        var projectDirName = Path.GetFileName(projectDir);
+        var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
+
+        await File.WriteAllLinesAsync(jsonlFile,
+        [
+            BuildAssistantEntry(SessionId, "uuid-1", "req-1", inputTokens: 4000, outputTokens: 100)
+        ]);
+
+        var service = BuildService();
+        await service.InitializeAsync();
+        Assert.Equal(4000L, service.GetContextWindow(projectDirName).TotalTokens);
+
+        // Stop the watcher first: the deletion must be survivable by GetContextWindow alone, which
+        // is the only line of defence when a whole directory is removed or the app was not running.
+        service.Stop();
+        File.Delete(jsonlFile);
+
+        Assert.Equal(ContextWindowData.Empty.TotalTokens, service.GetContextWindow(projectDirName).TotalTokens);
+
+        // Recreating the file must NOT resurrect the pointer — proof it was cleared rather than
+        // merely tolerated, which is what stops the dead read being retried on every tick.
+        await File.WriteAllLinesAsync(jsonlFile,
+        [
+            BuildAssistantEntry(SessionId, "uuid-2", "req-2", inputTokens: 7000, outputTokens: 50)
+        ]);
+        Assert.Equal(ContextWindowData.Empty.TotalTokens, service.GetContextWindow(projectDirName).TotalTokens);
+
+        // ...and one processed write re-establishes it, so the blank state is transient.
+        await service.ProcessFilesForTestAsync([jsonlFile]);
+        Assert.Equal(7000L, service.GetContextWindow(projectDirName).TotalTokens);
+    }
+
+    /// <summary>
+    /// The debounce batch drains and clears the pending set before reading anything, so a file that
+    /// cannot be opened must not cost the files behind it in iteration order. The locked file is
+    /// first in the batch and stays unread (its appended line is not counted) while the second file
+    /// is parsed normally.
+    /// </summary>
+    [Fact]
+    public async Task ProcessFilesForTest_UnreadableFileFirstInBatch_LaterFilesStillParse()
+    {
+        const string LockedSessionId = "lck1aaaa-0000-0000-0000-000000000071";
+        const string ReadableSessionId = "lck2aaaa-0000-0000-0000-000000000072";
+
+        var lockedDir = CreateProjectSessionDir(LockedSessionId);
+        var lockedDirName = Path.GetFileName(lockedDir);
+        var lockedFile = Path.Combine(lockedDir, $"{LockedSessionId}.jsonl");
+        await File.WriteAllLinesAsync(lockedFile,
+        [
+            BuildAssistantEntry(LockedSessionId, "uuid-locked-1", "req-locked-1", outputTokens: 10)
+        ]);
+
+        var service = BuildService();
+        await service.InitializeAsync();
+        service.Stop();
+
+        // A line the batch would pick up if it could open the file, and a second project that only
+        // exists from now on — so both observations depend solely on this one batch.
+        await File.AppendAllTextAsync(lockedFile,
+            BuildAssistantEntry(LockedSessionId, "uuid-locked-2", "req-locked-2", outputTokens: 20) + "\n");
+
+        var readableDir = CreateProjectSessionDir(ReadableSessionId);
+        var readableDirName = Path.GetFileName(readableDir);
+        var readableFile = Path.Combine(readableDir, $"{ReadableSessionId}.jsonl");
+        await File.WriteAllLinesAsync(readableFile,
+        [
+            BuildAssistantEntry(ReadableSessionId, "uuid-readable-1", "req-readable-1", outputTokens: 30)
+        ]);
+
+        using (new FileStream(lockedFile, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            await service.ProcessFilesForTestAsync([lockedFile, readableFile]);
+        }
+
+        Assert.Equal(10L, service.GetTokenSummary(lockedDirName).OutputTokens);
+        Assert.Equal(30L, service.GetTokenSummary(readableDirName).OutputTokens);
+    }
+
     // -------------------------------------------------------------------------
-    // GetTokenSummary (output_tokens sum with dedup by uuid+requestId)
+    // GetTokenSummary (output_tokens sum with dedup by message.id + requestId)
     // -------------------------------------------------------------------------
 
     [Fact]
@@ -198,7 +314,7 @@ public class JsonlServiceTests : IDisposable
             BuildAssistantEntry(SessionId, "uuid-3", "req-3", outputTokens: 300)
         ]);
 
-        var service = new JsonlService(_tempDir);
+        var service = BuildService();
         await service.InitializeAsync();
 
         var summary = service.GetTokenSummary(projectDirName);
@@ -223,7 +339,7 @@ public class JsonlServiceTests : IDisposable
             BuildAssistantEntry(SessionId, "uuid-2", "req-1", outputTokens: 500, messageId: SharedMessageId)
         ]);
 
-        var service = new JsonlService(_tempDir);
+        var service = BuildService();
         await service.InitializeAsync();
 
         var summary = service.GetTokenSummary(projectDirName);
@@ -267,7 +383,7 @@ public class JsonlServiceTests : IDisposable
 
         await File.WriteAllLinesAsync(jsonlFile, lines);
 
-        var service = new JsonlService(_tempDir, pricingService: BuildNullPricingService());
+        var service = BuildService(BuildNullPricingService());
         await service.InitializeAsync();
 
         var summary = service.GetTokenSummary(projectDirName);
@@ -305,7 +421,7 @@ public class JsonlServiceTests : IDisposable
             BuildAssistantEntry(SessionId, "uuid-final", "req-1", outputTokens: FinalOutputTokens, messageId: SharedMessageId)
         ]);
 
-        var service = new JsonlService(_tempDir);
+        var service = BuildService();
         await service.InitializeAsync();
 
         var summary = service.GetTokenSummary(projectDirName);
@@ -332,7 +448,7 @@ public class JsonlServiceTests : IDisposable
             BuildAssistantEntry(SessionId, "uuid-2", SharedRequestId, outputTokens: 200, messageId: "msg_second")
         ]);
 
-        var service = new JsonlService(_tempDir);
+        var service = BuildService();
         await service.InitializeAsync();
 
         var summary = service.GetTokenSummary(projectDirName);
@@ -354,7 +470,7 @@ public class JsonlServiceTests : IDisposable
             BuildSidechainAssistantEntry(SessionId, "uuid-2", "req-2", outputTokens: 9999)
         ]);
 
-        var service = new JsonlService(_tempDir);
+        var service = BuildService();
         await service.InitializeAsync();
 
         var summary = service.GetTokenSummary(projectDirName);
@@ -365,7 +481,7 @@ public class JsonlServiceTests : IDisposable
     [Fact]
     public async Task GetTokenSummary_UnknownSession_ReturnsEmpty()
     {
-        var service = new JsonlService(_tempDir);
+        var service = BuildService();
         await service.InitializeAsync();
 
         var summary = service.GetTokenSummary("nonexistent-session-id");
@@ -397,7 +513,7 @@ public class JsonlServiceTests : IDisposable
         CreateSessionFile(Session1, cwd: cwd1);
         CreateSessionFile(Session2, cwd: cwd2);
 
-        var service = new JsonlService(_tempDir);
+        var service = BuildService();
         await service.InitializeAsync();
 
         Assert.Equal(2, service.Sessions.Count);
@@ -415,7 +531,7 @@ public class JsonlServiceTests : IDisposable
 
         CreateSessionFile(SessionId, cwd: cwd);
 
-        var service = new JsonlService(_tempDir);
+        var service = BuildService();
         await service.InitializeAsync();
 
         var session = service.Sessions.First();
@@ -442,7 +558,7 @@ public class JsonlServiceTests : IDisposable
         CreateSessionFile(OlderSession, cwd: cwd, timestamp: olderTime);
         CreateSessionFile(NewerSession, cwd: cwd, timestamp: newerTime);
 
-        var service = new JsonlService(_tempDir);
+        var service = BuildService();
         await service.InitializeAsync();
 
         Assert.Equal(newerDirName, service.Sessions[0].Id);
@@ -469,20 +585,43 @@ public class JsonlServiceTests : IDisposable
 
         Directory.Delete(realCwdB, recursive: true);
 
-        var service = new JsonlService(_tempDir);
+        var service = BuildService();
         await service.InitializeAsync();
 
         Assert.Single(service.Sessions);
         Assert.Contains(service.Sessions, s => s.Id.Contains("aaa00001"[..8]));
     }
 
+    /// <summary>
+    /// UNC paths are rejected before the filesystem call: Directory.Exists blocks on SMB name
+    /// resolution for tens of seconds when the host is unreachable, and it runs while the sessions
+    /// lock is held.
+    /// </summary>
     [Fact]
     public async Task RebuildSessionsList_ExcludesUncPaths()
     {
         const string SessionId = "ccc00003-0000-0000-0000-000000000003";
         CreateSessionFile(SessionId, cwd: @"\\server\share\project");
 
-        var service = new JsonlService(_tempDir);
+        var service = BuildService();
+        await service.InitializeAsync();
+
+        Assert.Empty(service.Sessions);
+    }
+
+    /// <summary>
+    /// A relative cwd cannot be validated: Directory.Exists would resolve it against the test host's
+    /// working directory instead of the one the JSONL was written from. "." is the fixture precisely
+    /// because it exists under that wrong base — a validity check that reached the filesystem would
+    /// therefore keep the session.
+    /// </summary>
+    [Fact]
+    public async Task RebuildSessionsList_ExcludesRelativeCwd()
+    {
+        const string SessionId = "fff00006-0000-0000-0000-000000000006";
+        CreateSessionFile(SessionId, cwd: ".");
+
+        var service = BuildService();
         await service.InitializeAsync();
 
         Assert.Empty(service.Sessions);
@@ -497,7 +636,7 @@ public class JsonlServiceTests : IDisposable
         const string SessionId = "ddd00004-0000-0000-0000-000000000004";
         CreateSessionFile(SessionId, cwd: "");
 
-        var service = new JsonlService(_tempDir);
+        var service = BuildService();
         await service.InitializeAsync();
 
         // The project dir is "project-ddd00004" -- DecodeProjectDirectory extracts "ddd00004".
@@ -533,7 +672,7 @@ public class JsonlServiceTests : IDisposable
             BuildAssistantEntry(SessionId, "uuid-m", "req-m", inputTokens: 1000, outputTokens: 10, timestamp: recentTime)
         ]);
 
-        var service = new JsonlService(_tempDir);
+        var service = BuildService();
         await service.InitializeAsync();
 
         var projectDirName = Path.GetFileName(projectDir);
@@ -573,18 +712,16 @@ public class JsonlServiceTests : IDisposable
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task Cache_PersistsToLocalAppDataDirectory()
+    public async Task Cache_PersistsToConfiguredCacheDirectory()
     {
         const string SessionId = "aaaaaaaa-0000-0000-0000-000000000030";
-        var cacheDir = Path.Combine(_tempDir, "cache");
-        Directory.CreateDirectory(cacheDir);
 
         CreateSessionFile(SessionId);
 
-        var service = new JsonlService(_tempDir, cacheDir);
+        var service = BuildService();
         await service.InitializeAsync();
 
-        Assert.True(File.Exists(Path.Combine(cacheDir, "jsonl-cache.json")));
+        Assert.True(File.Exists(Path.Combine(_cacheDir, "jsonl-cache.json")));
     }
 
     /// <summary>
@@ -599,11 +736,9 @@ public class JsonlServiceTests : IDisposable
     public async Task LoadCache_UnstampedLegacyFile_IsDiscardedAndRestamped()
     {
         const string SessionId = "cac1aaaa-0000-0000-0000-000000000060";
-        var cacheDir = Path.Combine(_tempDir, "cache");
-        Directory.CreateDirectory(cacheDir);
         var ghostPath = VanishedJsonlPath();
 
-        WriteCacheFile(cacheDir, JsonSerializer.Serialize(new
+        WriteCacheFile(_cacheDir, JsonSerializer.Serialize(new
         {
             filePositions = BuildGhostPositions(ghostPath)
         }));
@@ -611,10 +746,10 @@ public class JsonlServiceTests : IDisposable
         CreateSessionFile(SessionId);
         var sessionFile = Path.Combine(_tempDir, "project-" + SessionId[..8], $"{SessionId}.jsonl");
 
-        using var service = new JsonlService(_tempDir, cacheDir);
+        using var service = BuildService();
         await service.InitializeAsync();
 
-        var saved = ReadCacheFile(cacheDir);
+        var saved = ReadCacheFile(_cacheDir);
         Assert.Equal(JsonlCache.CurrentSchemaVersion, saved.SchemaVersion);
         Assert.DoesNotContain(ghostPath, saved.FilePositions.Keys);
         Assert.Contains(sessionFile, saved.FilePositions.Keys);
@@ -629,11 +764,9 @@ public class JsonlServiceTests : IDisposable
     public async Task LoadCache_CurrentSchemaVersion_IsAdopted()
     {
         const string SessionId = "cac2aaaa-0000-0000-0000-000000000061";
-        var cacheDir = Path.Combine(_tempDir, "cache");
-        Directory.CreateDirectory(cacheDir);
         var ghostPath = VanishedJsonlPath();
 
-        WriteCacheFile(cacheDir, JsonSerializer.Serialize(new
+        WriteCacheFile(_cacheDir, JsonSerializer.Serialize(new
         {
             schemaVersion = JsonlCache.CurrentSchemaVersion,
             filePositions = BuildGhostPositions(ghostPath)
@@ -641,10 +774,10 @@ public class JsonlServiceTests : IDisposable
 
         CreateSessionFile(SessionId);
 
-        using var service = new JsonlService(_tempDir, cacheDir);
+        using var service = BuildService();
         await service.InitializeAsync();
 
-        var saved = ReadCacheFile(cacheDir);
+        var saved = ReadCacheFile(_cacheDir);
         Assert.Equal(JsonlCache.CurrentSchemaVersion, saved.SchemaVersion);
         Assert.Contains(ghostPath, saved.FilePositions.Keys);
     }
@@ -703,7 +836,7 @@ public class JsonlServiceTests : IDisposable
             BuildAssistantEntry(SessionId, "uuid-sub-1", "req-sub-1", inputTokens: 8000, outputTokens: 100)
         ]);
 
-        var service = new JsonlService(_tempDir);
+        var service = BuildService();
         await service.InitializeAsync();
 
         var ctx = service.GetContextWindow(projectDirName);
@@ -733,7 +866,7 @@ public class JsonlServiceTests : IDisposable
         ]);
 
         var pricingService = BuildNullPricingService();
-        var service = new JsonlService(_tempDir, pricingService: pricingService);
+        var service = BuildService(pricingService);
         await service.InitializeAsync();
 
         var stats = service.GetStatistics(TimePeriod.Session, projectDirName);
@@ -751,7 +884,7 @@ public class JsonlServiceTests : IDisposable
         var projectDir = CreateProjectSessionDir(SessionId);
         var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
 
-        var recentTime = DateTimeOffset.UtcNow.AddHours(-2);
+        var recentTime = TodayLocalTimestamp(minute: 1);
         var oldTime = DateTimeOffset.UtcNow.AddDays(-5);
 
         await File.WriteAllLinesAsync(jsonlFile,
@@ -761,7 +894,7 @@ public class JsonlServiceTests : IDisposable
         ]);
 
         var pricingService = BuildNullPricingService();
-        var service = new JsonlService(_tempDir, pricingService: pricingService);
+        var service = BuildService(pricingService);
         await service.InitializeAsync();
 
         var stats = service.GetStatistics(TimePeriod.Today);
@@ -780,16 +913,17 @@ public class JsonlServiceTests : IDisposable
         var projectDir2 = CreateProjectSessionDir(Session2);
 
         // Same message.id+requestId under two different project dirs — must only count once
+        var today = TodayLocalTimestamp(minute: 1);
         var json1 = BuildAssistantEntry(Session1, "uuid-1", "shared-req", messageId: SharedMessageId,
-            inputTokens: 500, outputTokens: 100, timestamp: DateTimeOffset.UtcNow.AddHours(-1));
+            inputTokens: 500, outputTokens: 100, timestamp: today);
         var json2 = BuildAssistantEntry(Session2, "uuid-2", "shared-req", messageId: SharedMessageId,
-            inputTokens: 500, outputTokens: 100, timestamp: DateTimeOffset.UtcNow.AddHours(-1));
+            inputTokens: 500, outputTokens: 100, timestamp: today);
 
         await File.WriteAllTextAsync(Path.Combine(projectDir1, $"{Session1}.jsonl"), json1 + "\n");
         await File.WriteAllTextAsync(Path.Combine(projectDir2, $"{Session2}.jsonl"), json2 + "\n");
 
         var pricingService = BuildNullPricingService();
-        var service = new JsonlService(_tempDir, pricingService: pricingService);
+        var service = BuildService(pricingService);
         await service.InitializeAsync();
 
         var stats = service.GetStatistics(TimePeriod.Today);
@@ -818,7 +952,7 @@ public class JsonlServiceTests : IDisposable
         ]);
 
         var pricingService = BuildNullPricingService();
-        var service = new JsonlService(_tempDir, pricingService: pricingService);
+        var service = BuildService(pricingService);
         await service.InitializeAsync();
 
         var stats = service.GetStatistics(TimePeriod.Session, projectDirName);
@@ -835,6 +969,18 @@ public class JsonlServiceTests : IDisposable
     {
         var now = DateTimeOffset.Now;
         return new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, minute, 0, now.Offset);
+    }
+
+    /// <summary>
+    /// A local timestamp just after today's LOCAL midnight, which is the cutoff
+    /// BuildTimePeriodStatistics applies for TimePeriod.Today. Anchoring the fixture to
+    /// <c>UtcNow.AddHours(-n)</c> instead put it before that cutoff whenever the test ran within
+    /// n hours of local midnight east of UTC, so these tests failed between 00:00 and 02:00.
+    /// </summary>
+    private static DateTimeOffset TodayLocalTimestamp(int minute)
+    {
+        var now = DateTimeOffset.Now;
+        return new DateTimeOffset(now.Date, now.Offset).AddMinutes(minute);
     }
 
     private static IPricingService BuildNullPricingService()

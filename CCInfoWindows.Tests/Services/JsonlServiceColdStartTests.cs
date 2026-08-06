@@ -11,16 +11,28 @@ namespace CCInfoWindows.Tests.Services;
 /// </summary>
 public class JsonlServiceColdStartTests : IDisposable
 {
+    private const string CacheDirectoryName = "cache";
+
     private readonly string _tempDir;
+    private readonly string _cacheDir;
+    private readonly List<JsonlService> _services = [];
 
     public JsonlServiceColdStartTests()
     {
         _tempDir = Path.Combine(Path.GetTempPath(), "cs-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempDir);
+        _cacheDir = Path.Combine(_tempDir, CacheDirectoryName);
+        Directory.CreateDirectory(_cacheDir);
     }
 
     public void Dispose()
     {
+        // The in-test Stop() calls do not run when an assertion fails, and a live FileSystemWatcher
+        // on _tempDir would then race the delete below and mask the real failure.
+        foreach (var service in _services)
+            service.Dispose();
+        _services.Clear();
+
         if (Directory.Exists(_tempDir))
             Directory.Delete(_tempDir, recursive: true);
     }
@@ -30,11 +42,10 @@ public class JsonlServiceColdStartTests : IDisposable
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// When no JSONL entry carries a cwd field, JsonlService must derive a Cwd surrogate
-    /// from the encoded project directory name via SessionNameHelper.DecodeProjectDirectory.
-    /// The session must appear in Sessions with the correct DisplayName.
-    /// Fails on unmodified JsonlService because empty Cwd causes IsValidProjectDirectory to
-    /// return false, dropping the session entirely.
+    /// When no JSONL entry carries a cwd field, JsonlService must derive a display name from the
+    /// encoded project directory name via SessionNameHelper.DecodeProjectDirectory, and the session
+    /// must appear in Sessions under it. The validity filter in RebuildSessionsList only judges a
+    /// NON-empty Cwd; an empty one is kept precisely because there is nothing to judge.
     /// </summary>
     [Fact]
     public async Task ParseFileIntoProject_NoEntryHasCwd_FallsBackToDecodedProjectDirName()
@@ -60,10 +71,10 @@ public class JsonlServiceColdStartTests : IDisposable
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// A project whose entries carry no cwd must remain in the Sessions list
-    /// when a display name can still be derived from the projectDirName.
-    /// Fails on unmodified JsonlService because empty Cwd causes the
-    /// IsValidProjectDirectory call-site to drop the session.
+    /// A project whose entries carry no cwd must remain in the Sessions list when a display name can
+    /// still be derived from the projectDirName. Pre-DROPDOWN-03 the filter was
+    /// <c>IsValidProjectDirectory(s.Cwd)</c> alone, which returned false for an empty Cwd and dropped
+    /// the session; the empty-Cwd clause in front of it is what this test locks.
     /// </summary>
     [Fact]
     public async Task RebuildSessionsList_EmptyCwd_KeepsSessionWhenDisplayNameDerivable()
@@ -299,6 +310,17 @@ public class JsonlServiceColdStartTests : IDisposable
         File.AppendAllText(filePath, line + "\n");
     }
 
-    private static JsonlService BuildService(string projectsRoot)
-        => new JsonlService(projectsDirectoryOverride: projectsRoot);
+    /// <summary>
+    /// The cache override is mandatory, not cosmetic: without it JsonlService writes
+    /// jsonl-cache.json to the real %LOCALAPPDATA%\CCInfoWindows and the suite overwrites the
+    /// developer's live cache.
+    /// </summary>
+    private JsonlService BuildService(string projectsRoot)
+    {
+        var service = new JsonlService(
+            projectsDirectoryOverride: projectsRoot,
+            cacheDirectoryOverride: _cacheDir);
+        _services.Add(service);
+        return service;
+    }
 }

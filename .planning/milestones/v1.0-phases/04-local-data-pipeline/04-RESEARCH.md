@@ -12,7 +12,7 @@
 ### Locked Decisions
 - **Tolerant JSONL parsing**: unknown fields ignored, missing fields get defaults — System.Text.Json with `JsonIgnoreCondition.WhenWritingNull` / `PropertyNameCaseInsensitive`
 - **Read last ~1 MB of each JSONL file** — seek to end, read backwards; no full-file parse
-- **Deduplication by `uuid` (messageId) and `requestId`** to prevent double-counting (TOKS-04)
+- **Deduplication by `message.id` and `requestId`** to prevent double-counting (TOKS-04). *(Corrected 2026-08-06: this line originally read "`uuid` (messageId)". `uuid` is NOT the message id — it is unique per JSONL LINE, and one assistant message spans several lines, so keying on it deduplicates nothing. `message.id` is the message identity; `uuid` survives only as a fallback for lines that carry no `message.id`.)*
 - **Single FileSystemWatcher** on `%USERPROFILE%\.claude\projects\` with `IncludeSubdirectories = true`
 - **NotifyFilters**: `LastWrite | FileName | Size`
 - **300ms debounce timer** to prevent double-triggers
