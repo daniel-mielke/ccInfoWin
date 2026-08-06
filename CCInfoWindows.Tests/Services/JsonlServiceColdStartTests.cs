@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Services;
+using CCInfoWindows.Tests.Helpers;
 
 namespace CCInfoWindows.Tests.Services;
 
@@ -120,24 +121,24 @@ public class JsonlServiceColdStartTests : IDisposable
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Lines appended to a JSONL file between the first full read and the second
-    /// incremental read must NOT be silently dropped.
-    /// This test verifies that stream.Position (not stream.Length) is used as the
-    /// end-position after a full read, so the subsequent incremental read correctly
-    /// picks up lines written after the initial parse completes.
-    /// The sequential append-then-refresh pattern exercises the most common
-    /// real-world form of the race: Claude Code appends entries while CCInfoWindows
-    /// is between two refresh cycles.
+    /// The plumbing half: whatever offset the cold-start read stored, the incremental read that follows
+    /// resumes from it and adds the lines appended in between. Both appends happen strictly between the
+    /// two passes, so <c>stream.Position</c> and <c>stream.Length</c> name the same offset here and this
+    /// test cannot distinguish them — the race itself is covered by
+    /// <see cref="ReadLinesToEnd_FileGrowsAsTheReaderReachesEndOfFile_ReturnsTheConsumedOffsetNotTheGrownLength"/>.
+    /// Renamed from ReadFileSlice_LinesWrittenDuringRace_AreNotSilentlyDropped, which claimed the race.
     /// </summary>
     [Fact]
-    public async Task ReadFileSlice_LinesWrittenDuringRace_AreNotSilentlyDropped()
+    public async Task ProcessFilesForTest_LinesAppendedBetweenTwoPasses_ArePickedUpByTheIncrementalRead()
     {
         const string ProjectDirName = "R--race";
+        const int LinesBeforeFirstPass = 3;
+        const int LinesAppendedBetweenPasses = 2;
+
         var projectDir = CreateProjectSubdir(_tempDir, ProjectDirName);
         var sessionFile = Path.Combine(projectDir, "race.jsonl");
 
-        // Write 3 lines before first refresh
-        for (var i = 0; i < 3; i++)
+        for (var i = 0; i < LinesBeforeFirstPass; i++)
             WriteAssistantJsonlLine(sessionFile, "sess-r", cwd: null, outputTokens: 1);
 
         var svc = BuildService(_tempDir);
@@ -145,24 +146,64 @@ public class JsonlServiceColdStartTests : IDisposable
         // First full read (arms the file-position marker)
         await svc.InitializeAsync();
 
-        // Append 2 more lines AFTER first read -- simulates Claude Code writing during
-        // the window between two refresh cycles. Both stream.Length and stream.Position
-        // should equal the end of the 3-line content here, so the incremental read
-        // starting from that position should pick up the 2 new lines.
-        for (var i = 0; i < 2; i++)
+        for (var i = 0; i < LinesAppendedBetweenPasses; i++)
             WriteAssistantJsonlLine(sessionFile, "sess-r", cwd: null, outputTokens: 1);
 
-        // Second incremental read via test seam -- mirrors the FileSystemWatcher debounce
-        // path (incremental, not forceFullRead). Must pick up the 2 new lines.
+        // Mirrors the FileSystemWatcher debounce path (incremental, not forceFullRead).
         await svc.ProcessFilesForTestAsync([sessionFile]);
 
-        // Total token output == 5 (5 lines x outputTokens=1 each), confirming all 5 entries parsed
         var session = svc.Sessions.SingleOrDefault(s => s.Id == ProjectDirName);
         Assert.NotNull(session);
 
-        // Use the internal test seam to verify total entry count
-        Assert.Equal(5, GetEntryCountForProject(svc, ProjectDirName));
+        Assert.Equal(
+            LinesBeforeFirstPass + LinesAppendedBetweenPasses,
+            GetEntryCountForProject(svc, ProjectDirName));
         svc.Stop();
+    }
+
+    /// <summary>
+    /// The DROPDOWN-06 race itself, at the only instant it is observable: the bytes land after the reader
+    /// has reported end-of-file and before the resume offset is captured. From that point on
+    /// <c>stream.Position</c> (the bytes this pass consumed) and <c>stream.Length</c> (the file as it now
+    /// is) disagree, and only Position can resume without skipping the appended lines.
+    ///
+    /// Appending after the pass has finished — what the sibling test above does — cannot reproduce it,
+    /// because both values then name the same offset; appending while lines are still being consumed
+    /// cannot either, because the reader picks the new bytes up in the same pass. Hence the stream seam:
+    /// <see cref="ControllableStreamProxy"/> injects at exactly the EOF boundary.
+    /// </summary>
+    [Fact]
+    public void ReadLinesToEnd_FileGrowsAsTheReaderReachesEndOfFile_ReturnsTheConsumedOffsetNotTheGrownLength()
+    {
+        const int LinesBeforeTheRead = 3;
+        const int LinesAppendedAtEndOfFile = 2;
+
+        var sessionFile = Path.Combine(_tempDir, "midread.jsonl");
+        for (var i = 0; i < LinesBeforeTheRead; i++)
+            WriteAssistantJsonlLine(sessionFile, "sess-m", cwd: null, outputTokens: 1);
+
+        var consumedBytes = new FileInfo(sessionFile).Length;
+
+        // Ownership passes to the proxy, which disposes the inner stream — hence no second using here.
+        var stream = new FileStream(sessionFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var proxy = new ControllableStreamProxy(stream)
+        {
+            OnEndOfStream = () =>
+            {
+                for (var i = 0; i < LinesAppendedAtEndOfFile; i++)
+                    WriteAssistantJsonlLine(sessionFile, "sess-m", cwd: null, outputTokens: 1);
+            }
+        };
+
+        var (lines, endPosition) = JsonlService.ReadLinesToEnd(proxy);
+
+        Assert.Equal(LinesBeforeTheRead, lines.Count);
+        Assert.Equal(consumedBytes, endPosition);
+        // Guards the assertion above against passing vacuously: if the append were invisible to Length,
+        // Position and Length would agree and returning either would look correct.
+        Assert.True(
+            proxy.Length > endPosition,
+            $"the append must be visible to Length ({proxy.Length}) but not to the resume offset ({endPosition})");
     }
 
     // -------------------------------------------------------------------------

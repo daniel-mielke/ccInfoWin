@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Models;
@@ -27,6 +28,9 @@ public sealed class JsonlService : IJsonlService, IDisposable
     private const int MaxWatcherRestarts = 5;
     private const long MaxCacheFileSizeBytes = 10 * 1_048_576; // 10 MB
     private const int SubagentActivityWindowSeconds = 30; // Only show subagents active within this window
+
+    // StreamReader's own default. Named because the leaveOpen overload has no defaulted parameters.
+    private const int LineReaderBufferBytes = 1024;
 
     private static readonly JsonSerializerOptions CacheSerializerOptions = new() { WriteIndented = false };
 
@@ -499,19 +503,8 @@ public sealed class JsonlService : IJsonlService, IDisposable
     private static (List<string> Lines, long EndPosition) ReadAllLines(string filePath)
     {
         using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        using var reader = new StreamReader(stream);
-        var lines = new List<string>();
-        string? line;
-        while ((line = reader.ReadLine()) != null)
-        {
-            if (!string.IsNullOrWhiteSpace(line))
-                lines.Add(line);
-        }
-        // DROPDOWN-06: use stream.Position (bytes consumed by reader) not stream.Length.
-        // stream.Length reflects the file size at the moment of the call, which may have grown
-        // while we were reading. stream.Position is the byte offset after the last ReadLine,
-        // so a subsequent incremental read correctly picks up lines written after this drain.
-        return (lines, stream.Position);
+
+        return ReadLinesToEnd(stream);
     }
 
     /// <summary>
@@ -520,16 +513,40 @@ public sealed class JsonlService : IJsonlService, IDisposable
     /// </summary>
     public static (List<string> Lines, long NewPosition) ReadIncrementalLines(string filePath, long startPosition)
     {
-        var lines = new List<string>();
-
         using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
 
         if (startPosition >= stream.Length)
-            return (lines, stream.Length);
+            return ([], stream.Length);
 
         stream.Seek(startPosition, SeekOrigin.Begin);
 
-        using var reader = new StreamReader(stream);
+        return ReadLinesToEnd(stream);
+    }
+
+    /// <summary>
+    /// Drains every remaining line from <paramref name="stream"/>, skipping blank ones, and returns the
+    /// offset the next incremental read has to resume from. Shared by the full and the incremental read
+    /// so both can only ever derive that offset one way.
+    ///
+    /// DROPDOWN-06: the offset is <c>stream.Position</c> — the bytes this pass actually consumed — and
+    /// never <c>stream.Length</c>. Claude Code appends while the file is being read, and Length is
+    /// re-queried from the OS on every access (the handle grants FileShare.Write, so .NET cannot cache
+    /// it), so a Length read after the reader reached EOF already counts bytes this pass never saw.
+    /// Storing that as the resume offset skips those lines permanently.
+    ///
+    /// The stream is left open: the caller owns it, which is also what lets a test compare the returned
+    /// offset against the grown Length afterwards.
+    /// </summary>
+    internal static (List<string> Lines, long EndPosition) ReadLinesToEnd(Stream stream)
+    {
+        using var reader = new StreamReader(
+            stream,
+            Encoding.UTF8,
+            detectEncodingFromByteOrderMarks: true,
+            LineReaderBufferBytes,
+            leaveOpen: true);
+
+        var lines = new List<string>();
         string? line;
         while ((line = reader.ReadLine()) != null)
         {
@@ -537,7 +554,6 @@ public sealed class JsonlService : IJsonlService, IDisposable
                 lines.Add(line);
         }
 
-        // DROPDOWN-06: same as ReadAllLines -- use stream.Position not stream.Length.
         return (lines, stream.Position);
     }
 

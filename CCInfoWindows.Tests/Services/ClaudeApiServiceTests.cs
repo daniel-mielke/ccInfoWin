@@ -11,6 +11,11 @@ namespace CCInfoWindows.Tests.Services;
 /// <summary>
 /// Unit tests for ClaudeApiService with retry, caching, and auth error handling.
 /// Uses Mock of IWebViewBridge to simulate API responses without network access.
+///
+/// The collection membership is load-bearing, not decoration: the 401 case sends
+/// AuthStateChangedMessage(false) on the process-global WeakReferenceMessenger.Default, and xUnit runs
+/// collections in parallel. Outside the collection that Send reaches live ViewModels under test in
+/// another collection and drives their navigation, breaking their Times.Once assertions at random.
 /// </summary>
 [Collection("WeakReferenceMessenger")]
 public class ClaudeApiServiceTests : IDisposable
@@ -31,6 +36,9 @@ public class ClaudeApiServiceTests : IDisposable
 
     public void Dispose()
     {
+        // The single unregister point, and the reason no test body needs a try/finally of its own: xUnit
+        // runs Dispose after every test, failed ones included, so a registration cannot survive a failed
+        // assertion and start receiving another test's messages.
         WeakReferenceMessenger.Default.UnregisterAll(this);
 
         if (Directory.Exists(_cacheDir))
@@ -96,8 +104,6 @@ public class ClaudeApiServiceTests : IDisposable
         Assert.Null(result);
         Assert.True(authMessageReceived);
         Assert.False(authState);
-
-        WeakReferenceMessenger.Default.UnregisterAll(this);
     }
 
     [Fact]
@@ -124,8 +130,6 @@ public class ClaudeApiServiceTests : IDisposable
         Assert.Equal(0.5, result!.FiveHour!.Utilization);
         Assert.Equal(0, authMessages);
         _bridgeMock.Verify(b => b.FetchJsonAsync(It.IsAny<string>()), Times.Once);
-
-        WeakReferenceMessenger.Default.UnregisterAll(this);
     }
 
     [Fact]
