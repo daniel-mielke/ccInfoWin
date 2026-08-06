@@ -331,7 +331,12 @@ public class SessionNameStoreTests : IDisposable
             // the blocked thread below can never drain.
             Assert.True(store.Save());
 
+            // xUnit1031 (no blocking task operations) cannot be honoured here -- see the history-service twin:
+            // the pump installed above is never drained, so an await either hangs this test or resumes the
+            // context restore on a pooled thread and leaks the pump onto an xUnit worker.
+#pragma warning disable xUnit1031
             Assert.True(pending.Wait(PendingWriteTimeout), "the async write never completed");
+#pragma warning restore xUnit1031
             Assert.Equal(0, pump.PostCount);
         }
         finally

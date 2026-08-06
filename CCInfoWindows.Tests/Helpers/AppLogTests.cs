@@ -6,9 +6,32 @@ using CCInfoWindows.Helpers;
 namespace CCInfoWindows.Tests.Helpers;
 
 /// <summary>
+/// Keeps the whole test assembly's diagnostics out of the maintainer's real
+/// %LOCALAPPDATA%\CCInfoWindows\app.log.
+///
+/// Why a module initializer and not a per-class fixture: production code logs handled failures through the plain
+/// AppLog.Write, not through the directory seam AppLogTests uses — JsonlService records a dropped cwd for every
+/// project whose entries carry none, which is most of the JSONL corpus. Redirecting per test class would need the
+/// redirect in every class that instantiates a service, and xUnit runs collections in parallel by default, so one
+/// class's teardown would clear another class's redirect mid-run. Installed once, before any test body runs,
+/// neither problem exists.
+///
+/// The target is a stable path rather than a per-run GUID: xUnit 2.9 has no assembly teardown hook, so a unique
+/// directory per run would accumulate. AppLog's own 1 MiB cap and single roll bound this one at ~2 MiB forever,
+/// and keeping it lets a failing test's production diagnostics be read afterwards.
+/// </summary>
+internal static class TestLogSinkRedirect
+{
+    internal static readonly string SinkDirectory = Path.Combine(Path.GetTempPath(), "ccinfo-tests", "app-log");
+
+    [ModuleInitializer]
+    internal static void Install() => AppLog.TryRedirectToDirectory(SinkDirectory);
+}
+
+/// <summary>
 /// Covers the AppLog contract: append, single roll at the cap, never throw, one line per entry under concurrency,
-/// and no credentials on disk. Every test drives the internal directory seam, so nothing here touches the real
-/// %LOCALAPPDATA% log.
+/// no credentials on disk, and the one-shot directory redirect. Every file-level test drives the internal
+/// directory seam against a private temp directory, so nothing here touches the real %LOCALAPPDATA% log.
 /// </summary>
 public class AppLogTests : IDisposable
 {
@@ -16,8 +39,11 @@ public class AppLogTests : IDisposable
     private const long RollOnEveryWriteCap = 1;
     private const long OneMebibyte = 1024L * 1024L;
     private const string TestSource = "AppLogTests.Case";
+    private const string AppLogFileName = "AppLog.cs";
     // ANSI escape (0x1B) written as a code point so the source file stays pure ASCII.
     private const char EscapeCharacter = (char)0x1B;
+
+    private static readonly string RedirectMemberName = nameof(AppLog.TryRedirectToDirectory);
 
     private static readonly Regex EntryLinePattern = new(@"^\[[^\]]+\] \[[^\]]+\] .+$");
 
@@ -35,7 +61,8 @@ public class AppLogTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_tempDirectory, recursive: true); } catch { }
+        try { Directory.Delete(_tempDirectory, recursive: true); }
+        catch (IOException) { /* another handle still open on a temp file; the OS reclaims it */ }
     }
 
     [Fact]
@@ -46,6 +73,79 @@ public class AppLogTests : IDisposable
             "CCInfoWindows");
 
         Assert.Equal(expected, AppLog.DefaultLogDirectory);
+    }
+
+    // --- The one-shot directory redirect (F.I.R.S.T. Independent: the suite must not write to the real log) ---
+
+    [Fact]
+    public void ResolveLogDirectory_WithoutARedirect_IsTheDefaultDirectory()
+    {
+        // The fallback branch cannot be reached through ActiveLogDirectory once the module initializer has
+        // installed the redirect, which is exactly why the rule is a separate pure method.
+        Assert.Equal(AppLog.DefaultLogDirectory, AppLog.ResolveLogDirectory(null));
+    }
+
+    [Fact]
+    public void ResolveLogDirectory_WithARedirect_PrefersTheRedirect()
+    {
+        Assert.Equal(_tempDirectory, AppLog.ResolveLogDirectory(_tempDirectory));
+    }
+
+    [Fact]
+    public void ActiveLogDirectory_IsRedirectedAwayFromTheRealLogForTheWholeRun()
+    {
+        Assert.Equal(TestLogSinkRedirect.SinkDirectory, AppLog.ActiveLogDirectory);
+        Assert.NotEqual(AppLog.DefaultLogDirectory, AppLog.ActiveLogDirectory);
+    }
+
+    [Fact]
+    public void Write_ThroughTheProductionEntryPoint_LandsInTheRedirectedDirectoryOnly()
+    {
+        // Unique per run: the sink is shared with every other test class's incidental logging, so the assertion
+        // has to be "my entry is in there", never "this is the only entry".
+        var marker = "redirect-probe-" + Guid.NewGuid();
+
+        AppLog.Write(TestSource, marker);
+
+        Assert.Contains(marker, ReadEntireSink(TestLogSinkRedirect.SinkDirectory));
+
+        // The regression this seam exists for: the entry must not have reached the maintainer's real log.
+        var realLog = Path.Combine(AppLog.DefaultLogDirectory, "app.log");
+        if (File.Exists(realLog))
+        {
+            Assert.DoesNotContain(marker, ReadWhileWritersAppend(realLog));
+        }
+    }
+
+    [Fact]
+    public void TryRedirectToDirectory_WhenOneIsAlreadyInstalled_IsRejected()
+    {
+        Assert.False(AppLog.TryRedirectToDirectory(_tempDirectory));
+        Assert.Equal(TestLogSinkRedirect.SinkDirectory, AppLog.ActiveLogDirectory);
+    }
+
+    [Fact]
+    public void TryRedirectToDirectory_WithABlankTarget_FailsLoudly()
+    {
+        // Install-time configuration, so it is outside the never-throw contract that covers Write: silently
+        // keeping the real log would be the worse outcome.
+        Assert.Throws<ArgumentException>(() => AppLog.TryRedirectToDirectory("   "));
+    }
+
+    [Fact]
+    public void RedirectSeam_HasNoProductionCaller()
+    {
+        // internal + InternalsVisibleTo makes the seam visible to the tests, but it does not stop the app
+        // assembly from calling it. Only a source scan can.
+        var callers = ProductionSourceFiles.All()
+            .Where(file => !string.Equals(file.Name, AppLogFileName, StringComparison.OrdinalIgnoreCase))
+            .Where(file => file.Text.Contains(RedirectMemberName, StringComparison.Ordinal))
+            .Select(file => file.Name)
+            .ToList();
+
+        Assert.True(
+            callers.Count == 0,
+            $"{RedirectMemberName} is a test-only seam but is referenced by: {string.Join(", ", callers)}");
     }
 
     [Fact]
@@ -341,6 +441,26 @@ public class AppLogTests : IDisposable
         var line = Assert.Single(File.ReadAllLines(_logPath));
 
         Assert.Contains("[Unknown]", line);
+    }
+
+    /// <summary>Concatenates the sink's current file and its roll generation, so a roll cannot hide an entry.</summary>
+    private static string ReadEntireSink(string directory)
+    {
+        if (!Directory.Exists(directory)) return string.Empty;
+
+        return string.Concat(Directory.EnumerateFiles(directory, "app.log*").Select(ReadWhileWritersAppend));
+    }
+
+    /// <summary>
+    /// Reads a log file the way a tail does. The shared sink is appended to by production code running in other
+    /// xUnit collections, and File.ReadAllText requests FileShare.Read — which collides with AppLog's writer and
+    /// would turn a coincidence of timing into a failed test.
+    /// </summary>
+    private static string ReadWhileWritersAppend(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

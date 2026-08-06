@@ -32,10 +32,6 @@ public class UsageHistoryService : IUsageHistoryService
     /// </summary>
     private static readonly TimeSpan SyncWriteLockTimeout = TimeSpan.FromSeconds(2);
 
-    private static readonly string DefaultDirectory = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "CCInfoWindows");
-
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true
@@ -51,7 +47,7 @@ public class UsageHistoryService : IUsageHistoryService
     // D-04: updated AFTER each successful write; null after ClearHistory
     private UsageHistory? _lastSavedSnapshot;
 
-    public UsageHistoryService() : this(DefaultDirectory)
+    public UsageHistoryService() : this(AppPaths.DataDirectory)
     {
     }
 

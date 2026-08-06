@@ -18,10 +18,6 @@ public class NotificationStateStore : INotificationStateStore
 {
     private const string FileName = "notification-state.json";
 
-    private static readonly string DefaultDirectory = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "CCInfoWindows");
-
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     private readonly string _directory;
@@ -30,7 +26,7 @@ public class NotificationStateStore : INotificationStateStore
 
     private string FilePath => Path.Combine(_directory, FileName);
 
-    public NotificationStateStore() : this(DefaultDirectory) { }
+    public NotificationStateStore() : this(AppPaths.DataDirectory) { }
 
     public NotificationStateStore(string directoryOverride)
     {

@@ -33,10 +33,6 @@ public class SessionNameStore : ISessionNameStore
     /// </summary>
     private static readonly TimeSpan SyncWriteLockTimeout = TimeSpan.FromSeconds(2);
 
-    private static readonly string DefaultDirectory = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "CCInfoWindows");
-
     // UnsafeRelaxedJsonEscaping: keep emoji/CJK readable in the file (PITFALLS A2-P2)
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -64,7 +60,7 @@ public class SessionNameStore : ISessionNameStore
 
     public event EventHandler<SessionNameChangedEventArgs>? NameChanged;
 
-    public SessionNameStore() : this(DefaultDirectory) { }
+    public SessionNameStore() : this(AppPaths.DataDirectory) { }
 
     public SessionNameStore(string directoryOverride)
     {

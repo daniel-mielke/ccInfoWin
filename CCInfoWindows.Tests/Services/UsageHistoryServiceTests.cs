@@ -327,7 +327,14 @@ public sealed class UsageHistoryServiceTests : IDisposable
             // continuation is queued to a pump nobody can drain and this never returns.
             _sut.SaveHistory(closingSnapshot);
 
+            // xUnit1031 (no blocking task operations) cannot be honoured here: this test method must stay
+            // synchronous. It installs a SynchronizationContext that is deliberately never drained, so awaiting
+            // while that context is current would hang the test itself, and awaiting with ConfigureAwait(false)
+            // would resume the finally block on a pooled thread -- leaving the undrainable pump installed on the
+            // xUnit worker thread for whatever test runs there next. A bounded Wait is the only correct join.
+#pragma warning disable xUnit1031
             Assert.True(pending.Wait(PendingWriteTimeout), "the async write never completed");
+#pragma warning restore xUnit1031
             Assert.Equal(0, pump.PostCount);
             Assert.Same(closingSnapshot, _sut.PeekLastSnapshot());
         }
@@ -393,9 +400,13 @@ public sealed class UsageHistoryServiceTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_tempDirectory))
+        try
         {
-            Directory.Delete(_tempDirectory, recursive: true);
+            if (Directory.Exists(_tempDirectory))
+            {
+                Directory.Delete(_tempDirectory, recursive: true);
+            }
         }
+        catch (IOException) { /* another handle still open on a temp file; the OS reclaims it */ }
     }
 }
