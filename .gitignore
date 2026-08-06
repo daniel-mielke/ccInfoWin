@@ -1,6 +1,7 @@
 # GSD planning docs are tracked (see CLAUDE.md "Workflows").
 # Only machine-local GSD scratch state stays out:
 .planning/config.json
+.planning/reviews/
 
 # .claude/ stays fully local: agents, permissions, worktrees, reference PDFs
 .claude/
