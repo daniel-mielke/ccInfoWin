@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Messages;
 using CCInfoWindows.Models;
@@ -28,6 +29,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IJsonlService _jsonlService;               // Phase 26 / SessionRenameItems source
     private readonly IDispatcherQueue _dispatcherQueue;         // Phase 26 / G-1
     private readonly IClaudeApiService _apiService;             // ORGID-01 / D-OG-01
+    private readonly IWebViewBridge _bridge;                    // Finding 18 / logout must unbind the API bridge
 
     // D-09: 1-minute UI-thread-bound timer. Owned by SettingsViewModel; lifecycle driven by SettingsView code-behind (D-10).
     private readonly IUsageNotificationService _usageNotificationService;
@@ -372,7 +374,8 @@ public partial class SettingsViewModel : ObservableObject
         IJsonlService jsonlService,
         IDispatcherQueue dispatcherQueue,
         IClaudeApiService apiService,   // ORGID-01 — new parameter
-        IUsageNotificationService usageNotificationService)
+        IUsageNotificationService usageNotificationService,
+        IWebViewBridge bridge)          // Finding 18 — logout is the only reachable one, so it owns the bridge reset
     {
         _settingsService = settingsService;
         _credentialService = credentialService;
@@ -384,6 +387,7 @@ public partial class SettingsViewModel : ObservableObject
         _dispatcherQueue = dispatcherQueue;
         _apiService = apiService;
         _usageNotificationService = usageNotificationService;
+        _bridge = bridge;
     }
 
     /// <summary>
@@ -454,6 +458,7 @@ public partial class SettingsViewModel : ObservableObject
         try
         {
             await LanguageSwitcher(languageCode);
+            ApplyUiCulture(languageCode);
 
             var settings = _settingsService.LoadSettings();
             settings.Language = languageCode;
@@ -472,6 +477,33 @@ public partial class SettingsViewModel : ObservableObject
                 $"language switch to {languageCode} failed");
             RevertLanguageSelection();
             ShowError("SettingsLanguageChangeFailed", "The display language could not be changed.");
+        }
+    }
+
+    /// <summary>
+    /// Points <see cref="CultureInfo.CurrentUICulture"/> at the language the localizer just applied.
+    /// WinUI3Localizer only swaps resw values, so without this the resw-supplied date patterns render
+    /// with the OS language's day and month names — CountdownFormatter.FormatResetDate and
+    /// MainViewModel's next-window label both format through CurrentUICulture.
+    ///
+    /// CurrentCulture is deliberately NOT changed: number, currency and regional date formatting is an
+    /// OS user setting that a display-language choice must not override, and every numeric formatter
+    /// here (CostFormatter, TokenFormatter) is already pinned to InvariantCulture. App does the same at
+    /// startup. The local catch keeps a globalization failure from being reported to the user as a
+    /// failed language switch — the switch itself already succeeded.
+    /// </summary>
+    private static void ApplyUiCulture(string languageCode)
+    {
+        try
+        {
+            var culture = CultureInfo.GetCultureInfo(languageCode);
+            CultureInfo.DefaultThreadCurrentUICulture = culture;
+            CultureInfo.CurrentUICulture = culture;
+        }
+        catch (CultureNotFoundException ex)
+        {
+            AppLog.Write($"{nameof(SettingsViewModel)}.{nameof(ApplyUiCulture)}", ex,
+                $"'{languageCode}' is not a culture this system knows");
         }
     }
 
@@ -539,21 +571,34 @@ public partial class SettingsViewModel : ObservableObject
         WeakReferenceMessenger.Default.Send(new ResetWindowSizeMessage());
     }
 
-    // Direct logout sequence — D-13 honored by calling ClearHistory() FIRST.
-    // The MainViewModel Logout()/IRecipient<LogoutRequestedMessage> routing
-    // (Plan 21-03) was reverted because MainViewModel is registered AddTransient
-    // (App.xaml.cs:164); WeakReferenceMessenger silently drops the registration
-    // when the MainViewModel instance is GC-collected after navigating away
-    // from MainView. The unit tests passed only because of GC.KeepAlive.
-    // Production behavior: the message had no live recipient and the user could
-    // not log out at all. Reverting to the duplicated-but-working pattern.
+    /// <summary>
+    /// The one reachable logout (bound at Views/SettingsView.xaml). Direct calls rather than a
+    /// LogoutRequestedMessage round-trip: MainViewModel is AddTransient, and WeakReferenceMessenger
+    /// silently drops a GC'd recipient, so the message had no live recipient in production and the
+    /// user could not log out at all (D-13). Finding 18 deleted the more complete duplicate that used
+    /// to live in MainViewModel and moved the bridge reset here.
+    ///
+    /// The order is load-bearing, not stylistic:
+    ///   1. ClearHistory FIRST — the D-13 ordering trap. A save racing the credential clear
+    ///      re-persists usage-history.json after deletion and leaks the previous account's usage.
+    ///   2. Reset the bridge — drains in-flight fetches and unbinds the CoreWebView2, so no reply can
+    ///      land later and re-create the snapshot cleared in step 4. It also has to happen before the
+    ///      navigation below: LoginView's WebView2 init deletes the claude.ai cookies from the shared
+    ///      user data folder, which is what actually ends the browser-side session.
+    ///   3. ClearCredentials — no new authenticated request can start after this point.
+    ///   4. ClearCache — usage_cache.json outlived the session and rendered the previous account's
+    ///      figures on the next login (finding 18).
+    ///   5. CancelAll — stops the reset countdowns and wipes notification-state.json, so the next
+    ///      account does not inherit armed 80/95 % thresholds for a window it never used.
+    /// </summary>
     [RelayCommand]
     private void Logout()
     {
-        _historyService.ClearHistory();                                              // D-13 ordering trap mitigation — must come FIRST
+        _historyService.ClearHistory();
+        _bridge.Reset();
         _credentialService.ClearCredentials();
-        _apiService.ClearCache();                                                    // usage_cache.json outlived the session and rendered on the next login
-        _usageNotificationService.CancelAll();                                       // direct DI, not a message (D-13)
+        _apiService.ClearCache();
+        _usageNotificationService.CancelAll();
         WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
         _navigationService.NavigateTo<LoginView>();
     }

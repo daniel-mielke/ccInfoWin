@@ -66,6 +66,7 @@ public class SettingsViewModelTests
 
         var apiService = apiServiceMock ?? new Mock<IClaudeApiService>();
         var usageNotifications = new Mock<IUsageNotificationService>();
+        var bridge = new Mock<IWebViewBridge>();
 
         return new SettingsViewModel(
             settingsService.Object,
@@ -77,7 +78,8 @@ public class SettingsViewModelTests
             jsonl.Object,
             dispatcher.Object,
             apiService.Object,   // ORGID-01
-            usageNotifications.Object);
+            usageNotifications.Object,
+            bridge.Object);      // Finding 18
     }
 
     // ─── Existing tab visibility tests (indexes shifted: About is now 4) ──────────

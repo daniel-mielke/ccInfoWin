@@ -61,6 +61,7 @@ public partial class MainViewModel : ObservableObject,
     private const string SessionNameLogSource = "MainViewModel.SaveCustomName";
     private const string NextWindowLogSource = "MainViewModel.NextWindowLabel";
     private const string ExportLogSource = "MainViewModel.ExportChart";
+    private const string ContextWindowLogSource = "MainViewModel.UpdateSessionData";
 
     // Single-segment resw uids, plus the text used when the dictionary cannot answer. The rename
     // failure shares SettingsViewModel's key deliberately: same failure, same sentence, one
@@ -78,7 +79,6 @@ public partial class MainViewModel : ObservableObject,
     private readonly IJsonlService _jsonlService;
     private readonly IPricingService _pricingService;
     private readonly IUpdateService _updateService;
-    private readonly IWebViewBridge _bridge;
     private readonly IUsageNotificationService _usageNotificationService;
     private readonly ISessionNameStore _sessionNameStore;   // RENAME-07 / Phase 26
 
@@ -341,9 +341,15 @@ public partial class MainViewModel : ObservableObject,
     private bool _isRefreshingSessionList;
 
     /// <summary>
-    /// One-shot flag for D-01 auto-reauth routing. Reset at constructor default, on the
-    /// PollUsageAsync HTTP 200 success path, and by the Logout command. A successful login does not
-    /// need to reset it: the post-login dashboard is a brand-new transient ViewModel.
+    /// Monotonic id of the newest context-window read. Only the newest read may paint the panels; see
+    /// <see cref="ApplyContextWindow"/>.
+    /// </summary>
+    private int _contextWindowRequest;
+
+    /// <summary>
+    /// One-shot flag for D-01 auto-reauth routing. Reset at constructor default and on the
+    /// PollUsageAsync HTTP 200 success path. Neither logout nor a successful login needs to reset it:
+    /// both navigate away, and the next dashboard is a brand-new transient ViewModel.
     /// </summary>
     private bool _autoReauthAttempted;
 
@@ -392,7 +398,6 @@ public partial class MainViewModel : ObservableObject,
         IJsonlService jsonlService,
         IPricingService pricingService,
         IUpdateService updateService,
-        IWebViewBridge bridge,
         IUsageNotificationService usageNotificationService,
         IDispatcherQueue dispatcherQueue,
         ISessionNameStore sessionNameStore,   // Phase 26 / RENAME-07
@@ -407,7 +412,6 @@ public partial class MainViewModel : ObservableObject,
         _jsonlService = jsonlService;
         _pricingService = pricingService;
         _updateService = updateService;
-        _bridge = bridge;
         _usageNotificationService = usageNotificationService;
         _dispatcherQueue = dispatcherQueue;
         _sessionNameStore = sessionNameStore;
@@ -473,22 +477,18 @@ public partial class MainViewModel : ObservableObject,
             InvalidateChart();
         }
 
-        // Start JSONL service for local session data
+        // Attach to the JSONL service the app host already started (finding 29). IJsonlService is a
+        // singleton owning a FileSystemWatcher and a debounce timer, and this ViewModel is transient:
+        // driving its lifecycle from MainView's visual-tree membership tore the watcher down on every
+        // Settings round-trip and paid a full forced re-scan on the way back.
+        //
+        // Subscribe BEFORE sampling IsScanning so a scan that finishes in between cannot be missed,
+        // and note that no scan is requested here: RefreshSessionList below reads whatever snapshot
+        // the host's scan has already published, and DataUpdated delivers the rest.
         _dataUpdatedHandler = (s, e) => _dispatcherQueue.TryEnqueue(RefreshSessionList);
         _jsonlService.DataUpdated += _dataUpdatedHandler;
 
         IsJsonlScanning = _jsonlService.IsScanning;
-
-        try
-        {
-            await _jsonlService.InitializeAsync();
-        }
-        catch (Exception ex)
-        {
-            // Background scan failure should not block the dashboard, but "the dropdown is empty
-            // and the chart has nothing in it" is undiagnosable without the exception on disk.
-            AppLog.Write(StartupLogSource, ex, "JSONL initialization failed");
-        }
 
         // Load pricing in background — non-blocking, fallback activates on failure.
         // PRICING-01..03 (D-PR-01, D-PR-03): surface failures via IsPricingError; clear on subsequent success.
@@ -532,8 +532,11 @@ public partial class MainViewModel : ObservableObject,
         IsUpdatingFromCache = false;
 #endif
 
+        // One stateless check so the banner can appear on the dashboard the user just opened. The
+        // hourly PeriodicTimer is started once by the app host (finding 29): restarting it from a
+        // transient ViewModel meant a user who opened Settings more often than hourly never
+        // completed an update check.
         await _updateService.CheckForUpdateAsync();
-        _updateService.StartPeriodicCheck();
     }
 
     /// <summary>
@@ -993,7 +996,14 @@ public partial class MainViewModel : ObservableObject,
     }
 
     /// <summary>
-    /// Stops polling and countdown timers and the JSONL service. Call from MainView.Unloaded event.
+    /// Releases everything this ViewModel owns: its two timers and its event subscriptions. Call from
+    /// MainView.Unloaded.
+    ///
+    /// Deliberately does NOT stop IJsonlService or IUpdateService (finding 29). Both are singletons
+    /// owning process-wide resources; stopping them here disposed the file watcher and the hourly
+    /// update timer every time the user opened Settings, and — while a bootstrap was still in flight
+    /// — could stop services a newer MainView was already using. The app host starts them at launch
+    /// and stops them in MainWindow.OnClosing.
     /// </summary>
     public void StopTimers()
     {
@@ -1004,8 +1014,6 @@ public partial class MainViewModel : ObservableObject,
             _jsonlService.DataUpdated -= _dataUpdatedHandler;
             _dataUpdatedHandler = null;
         }
-        _jsonlService.Stop();
-        _updateService.StopPeriodicCheck();
         // IUpdateService is a singleton and a .NET event holds a STRONG reference, so without this
         // every Settings round-trip left a whole transient ViewModel rooted for the process lifetime,
         // pinning its Sessions / SortedSessions / SubagentContexts / UsageHistoryPoints (finding 7).
@@ -1260,6 +1268,10 @@ public partial class MainViewModel : ObservableObject,
 
     private void ClearSessionData()
     {
+        // Invalidates any context-window read still in flight — otherwise its apply would repaint the
+        // panels this method just cleared.
+        _contextWindowRequest++;
+
         ContextUtilization = 0;
         ContextPercentage = 0;
         ContextPercentageText = "--";
@@ -1361,9 +1373,52 @@ public partial class MainViewModel : ObservableObject,
         StatisticsCost = CostFormatter.FormatCost(stats.TotalCostUsd, stats.HasEstimatedCosts);
     }
 
+    /// <summary>
+    /// Refreshes the KONTEXTFENSTER panels for a session. The read itself runs off the UI thread:
+    /// GetContextWindow takes no lock since finding 28, but it is still a tail read of up to 1 MB plus
+    /// a subagent directory glob plus JSON deserialization — tens of milliseconds on a large corpus,
+    /// on every DataUpdated batch. Same shape as <see cref="AggregateStatisticsAsync"/>: read in
+    /// Task.Run, apply through the dispatcher.
+    /// </summary>
     private void UpdateSessionData(SessionInfo session)
     {
-        var context = _jsonlService.GetContextWindow(session.Id);
+        PendingContextWindowRead = ReadAndApplyContextWindowAsync(session.Id, ++_contextWindowRequest);
+    }
+
+    /// <summary>
+    /// Testability seam — the in-flight context-window read, so a test can await the apply instead of
+    /// waiting on the clock. <see cref="Task.CompletedTask"/> until the first session is selected.
+    /// </summary>
+    internal Task PendingContextWindowRead { get; private set; } = Task.CompletedTask;
+
+    private async Task ReadAndApplyContextWindowAsync(string sessionId, int request)
+    {
+        ContextWindowData context;
+        try
+        {
+            context = await Task.Run(() => _jsonlService.GetContextWindow(sessionId));
+        }
+        catch (Exception ex)
+        {
+            // GetContextWindow degrades to Empty for the file races it expects, so anything arriving
+            // here is unexpected — and this task is not awaited by the UI, so without the catch the
+            // failure would surface as an unobserved task exception with no context.
+            AppLog.Write(ContextWindowLogSource, ex, "reading the session context window failed");
+            context = ContextWindowData.Empty;
+        }
+
+        _dispatcherQueue.TryEnqueue(() => ApplyContextWindow(request, context));
+    }
+
+    /// <summary>
+    /// Paints a context-window snapshot unless a newer request has superseded it: two DataUpdated
+    /// batches can be in flight at once and complete out of order, and panels cleared by
+    /// <see cref="ClearSessionData"/> must not be repainted by a read that started before the session
+    /// disappeared (finding 6). The counter is only ever incremented on the UI thread.
+    /// </summary>
+    private void ApplyContextWindow(int request, ContextWindowData context)
+    {
+        if (request != _contextWindowRequest) return;
 
         ContextUtilization = context.Utilization;
         ContextPercentage = Math.Min(context.Utilization * 100, 100);
@@ -1454,23 +1509,11 @@ public partial class MainViewModel : ObservableObject,
         Application.Current.Exit();
     }
 
-    [RelayCommand]
-    private void Logout()
-    {
-        _historyService.ClearHistory();
-        _credentialService.ClearCredentials();
-        _bridge.Reset();
-        // Direct call, not a message: transient VMs plus WeakReferenceMessenger silently drop
-        // exactly-once flows (D-13). Deliberately NOT hooked to HandleAuthStateChangedCore,
-        // because ClaudeApiService broadcasts AuthStateChangedMessage(false) on every 401 and a
-        // transient 401 must not wipe notification state; and not to StopTimers(), which also
-        // runs on MainView.Unloaded when navigating into Settings.
-        _usageNotificationService.CancelAll();
-        WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
-        IsSessionExpired = false;
-        _autoReauthAttempted = false;  // D-02: explicit reset on user-driven logout
-        _navigationService.NavigateTo<LoginView>();
-    }
+    // Finding 18: the Logout command that used to live here was bound in no XAML file. The only
+    // reachable logout is SettingsViewModel.Logout (Views/SettingsView.xaml), and keeping a
+    // more-complete-looking duplicate here meant a maintainer could fix a logout bug, watch
+    // MainViewModelAuthFlowTests go green, and ship a change no user could ever reach. The API bridge
+    // dependency went with it — the deleted command was this ViewModel's only use of it.
 
     [RelayCommand]
     private void ReLogin()

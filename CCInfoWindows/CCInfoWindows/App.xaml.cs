@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http;
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Services;
@@ -19,6 +20,7 @@ public partial class App : Application
     private const string LaunchLogSource = "App.OnLaunched";
     private const string UnhandledExceptionLogSource = "App.OnUnhandledException";
     private const string LocalizerLogSource = "App.InitializeLocalizerAsync";
+    private const string BackgroundServiceLogSource = "App.StartBackgroundServices";
     private const string DefaultLanguage = "en-US";
 
     public static IServiceProvider Services { get; private set; } = null!;
@@ -87,6 +89,7 @@ public partial class App : Application
             _window.Activate();
 
             ApplyPersistedTheme();
+            StartBackgroundServices();
             await RouteOnStartupAsync();
         }
         catch (Exception ex)
@@ -116,10 +119,10 @@ public partial class App : Application
         var settingsService = Services.GetRequiredService<ISettingsService>();
         var appSettings = settingsService.LoadSettings();
 
-        if (!string.IsNullOrEmpty(appSettings.Language))
-        {
-            await ApplyPersistedLanguageAsync(appSettings.Language);
-        }
+        // Called even for an empty persisted value: the language decides CurrentUICulture too, and
+        // leaving that on the OS language rendered the localizer's default-language date patterns with
+        // another language's day and month names.
+        await ApplyPersistedLanguageAsync(appSettings.Language);
     }
 
     /// <summary>
@@ -129,11 +132,14 @@ public partial class App : Application
     /// Exit() — one bad string would make the app refuse to start on every launch with no UI way back.
     /// This is the second layer behind SettingsService's allow-list, for callers that bypass it.
     /// </summary>
-    private static async Task ApplyPersistedLanguageAsync(string language)
+    private static async Task ApplyPersistedLanguageAsync(string? language)
     {
+        var requested = string.IsNullOrWhiteSpace(language) ? DefaultLanguage : language;
+
         try
         {
-            await Localizer.Get().SetLanguage(language);
+            await Localizer.Get().SetLanguage(requested);
+            ApplyUiCulture(requested);
         }
         catch (Exception ex)
         {
@@ -142,7 +148,72 @@ public partial class App : Application
             AppLog.Write(
                 LocalizerLogSource,
                 ex,
-                $"unsupported persisted language '{language}', falling back to {DefaultLanguage}");
+                $"unsupported persisted language '{requested}', falling back to {DefaultLanguage}");
+            ApplyUiCulture(DefaultLanguage);
+        }
+    }
+
+    /// <summary>
+    /// Points <see cref="CultureInfo.CurrentUICulture"/> at the language the localizer is showing.
+    /// WinUI3Localizer only swaps resw values, so without this the resw-supplied date patterns render
+    /// with the OS language's day and month names — CountdownFormatter.FormatResetDate and
+    /// MainViewModel's next-window label both format through CurrentUICulture.
+    ///
+    /// CurrentCulture is deliberately left on the OS regional setting: which language the UI speaks and
+    /// how the user wants numbers and dates formatted are independent Windows settings, and every
+    /// numeric formatter in this app is pinned to InvariantCulture anyway. SettingsViewModel repeats
+    /// this for the runtime language switch, which is the only other place the language changes.
+    /// </summary>
+    private static void ApplyUiCulture(string language)
+    {
+        try
+        {
+            var culture = CultureInfo.GetCultureInfo(language);
+            CultureInfo.DefaultThreadCurrentUICulture = culture;
+            CultureInfo.CurrentUICulture = culture;
+        }
+        catch (CultureNotFoundException ex)
+        {
+            AppLog.Write(LocalizerLogSource, ex, $"'{language}' is not a culture this system knows");
+        }
+    }
+
+    /// <summary>
+    /// Starts the two singletons that own process-wide resources — the JSONL file watcher and the
+    /// hourly update timer — exactly once per process (finding 29). They used to be started and
+    /// stopped by MainViewModel, a transient ViewModel whose lifetime is MainView's visual-tree
+    /// membership, so every Settings round-trip disposed the watcher and paid a full forced re-scan of
+    /// ~/.claude/projects on the way back, and a user who opened Settings more often than hourly never
+    /// completed an update check. MainWindow.OnClosing stops them again.
+    ///
+    /// Called after the window is activated and deliberately not awaited: the cold-start scan is
+    /// seconds of disk work on a large corpus, and a scan that blocks the first frame is worse than
+    /// one that runs beside it. The dashboard needs no scan of its own — it subscribes to DataUpdated
+    /// and reads the published snapshot.
+    /// </summary>
+    private static void StartBackgroundServices()
+    {
+        _ = StartJsonlWatcherAsync(Services.GetRequiredService<IJsonlService>());
+
+        // The first PeriodicTimer tick is an hour away, so this starts the schedule only; the
+        // dashboard runs its own one-shot check when it loads.
+        Services.GetRequiredService<IUpdateService>().StartPeriodicCheck();
+    }
+
+    /// <summary>
+    /// Runs the initial JSONL scan. Nothing awaits the returned task, so every failure has to be
+    /// caught here: an escaping exception would be an unobserved task exception, and "the session
+    /// dropdown is empty and the chart has nothing in it" is undiagnosable without it on disk.
+    /// </summary>
+    private static async Task StartJsonlWatcherAsync(IJsonlService jsonlService)
+    {
+        try
+        {
+            await jsonlService.InitializeAsync();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(BackgroundServiceLogSource, ex, "the initial JSONL scan failed");
         }
     }
 
@@ -220,7 +291,6 @@ public partial class App : Application
             sp.GetRequiredService<IJsonlService>(),
             sp.GetRequiredService<IPricingService>(),
             sp.GetRequiredService<IUpdateService>(),
-            sp.GetRequiredService<IWebViewBridge>(),
             sp.GetRequiredService<IUsageNotificationService>(),
             sp.GetRequiredService<IDispatcherQueue>(),
             sp.GetRequiredService<ISessionNameStore>()));   // Phase 26 / RENAME-07
@@ -234,7 +304,8 @@ public partial class App : Application
             sp.GetRequiredService<IJsonlService>(),
             sp.GetRequiredService<IDispatcherQueue>(),
             sp.GetRequiredService<IClaudeApiService>(),     // ORGID-01
-            sp.GetRequiredService<IUsageNotificationService>()));
+            sp.GetRequiredService<IUsageNotificationService>(),
+            sp.GetRequiredService<IWebViewBridge>()));     // Finding 18 — logout resets the bridge here now
 
         return services.BuildServiceProvider();
     }

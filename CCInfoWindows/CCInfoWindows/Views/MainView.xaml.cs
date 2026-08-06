@@ -172,9 +172,9 @@ public sealed partial class MainView : Page
                 // Teardown ran while InitializeAsync was still going, so its StopTimers() call found
                 // nothing to stop. Everything InitializeAsync just started would otherwise poll,
                 // persist history and raise threshold toasts for the rest of the process lifetime.
-                // StopTimers also stops the singleton JSONL and update services, which a newer MainView
-                // may already be using — the permanent zombie poller is the worse of the two, and the
-                // overlap disappears once service startup moves out of the transient ViewModel.
+                // Safe unconditionally since finding 29: StopTimers now only releases what this
+                // ViewModel owns, so a newer MainView's JSONL watcher and update schedule — started
+                // once by the app host — cannot be torn down by this instance's late teardown.
                 ViewModel.StopTimers();
             }
         }

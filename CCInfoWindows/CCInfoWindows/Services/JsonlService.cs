@@ -161,8 +161,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
         _projectsDirectory = projectsDirectoryOverride
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", "projects");
 
-        _cacheDirectory = cacheDirectoryOverride
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CCInfoWindows");
+        _cacheDirectory = cacheDirectoryOverride ?? AppPaths.DataDirectory;
 
         _pricingService = pricingService ?? new NullPricingService();
     }

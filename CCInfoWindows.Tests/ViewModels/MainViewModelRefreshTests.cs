@@ -35,7 +35,6 @@ public class MainViewModelRefreshTests
         var jsonlService = new Mock<IJsonlService>();
         jsonlService.Setup(s => s.Sessions).Returns([]);
         jsonlService.Setup(s => s.IsScanning).Returns(false);
-        jsonlService.Setup(s => s.InitializeAsync()).Returns(Task.CompletedTask);
 
         var pricingService = new Mock<IPricingService>();
         pricingService.Setup(s => s.EnsurePricesLoadedAsync()).Returns(Task.CompletedTask);
@@ -43,7 +42,6 @@ public class MainViewModelRefreshTests
         var updateService = new Mock<IUpdateService>();
         updateService.Setup(s => s.CheckForUpdateAsync()).Returns(Task.CompletedTask);
 
-        var bridge = new Mock<IWebViewBridge>();
         var burnRateService = new Mock<IUsageNotificationService>();
         var sessionNameStore = new Mock<ISessionNameStore>();
         sessionNameStore.Setup(s => s.GetCustomName(It.IsAny<string>())).Returns((string?)null);
@@ -57,7 +55,6 @@ public class MainViewModelRefreshTests
             jsonlService.Object,
             pricingService.Object,
             updateService.Object,
-            bridge.Object,
             burnRateService.Object,
             new FakeDispatcherQueue(),
             sessionNameStore.Object,
@@ -168,7 +165,10 @@ public class MainViewModelRefreshTests
             "Verify [NotifyPropertyChangedFor(nameof(CanRefresh))] is on the _isRefreshing field.");
     }
 
-    private static MainViewModel CreateSutWithNameStore(Mock<ISessionNameStore> sessionNameStore, Mock<IJsonlService> jsonlService)
+    private static MainViewModel CreateSutWithNameStore(
+        Mock<ISessionNameStore> sessionNameStore,
+        Mock<IJsonlService> jsonlService,
+        FakeDispatcherQueue? dispatcherQueue = null)
     {
         var apiMock = new Mock<IClaudeApiService>();
         apiMock.Setup(x => x.FetchUsageAsync(It.IsAny<CancellationToken>()))
@@ -188,7 +188,6 @@ public class MainViewModelRefreshTests
         var updateService = new Mock<IUpdateService>();
         updateService.Setup(s => s.CheckForUpdateAsync()).Returns(Task.CompletedTask);
 
-        var bridge = new Mock<IWebViewBridge>();
         var burnRateService = new Mock<IUsageNotificationService>();
 
         return new MainViewModel(
@@ -200,9 +199,8 @@ public class MainViewModelRefreshTests
             jsonlService.Object,
             pricingService.Object,
             updateService.Object,
-            bridge.Object,
             burnRateService.Object,
-            new FakeDispatcherQueue(),
+            dispatcherQueue ?? new FakeDispatcherQueue(),
             sessionNameStore.Object,
             _ => null!);   // headless brushFactory seam — SolidColorBrush requires WinRT COM
     }
@@ -242,7 +240,6 @@ public class MainViewModelRefreshTests
         var jsonlService = new Mock<IJsonlService>();
         jsonlService.Setup(s => s.Sessions).Returns([session]);
         jsonlService.Setup(s => s.IsScanning).Returns(false);
-        jsonlService.Setup(s => s.InitializeAsync()).Returns(Task.CompletedTask);
 
         var sut = CreateSutWithNameStore(sessionNameStore, jsonlService);
 
@@ -275,7 +272,6 @@ public class MainViewModelRefreshTests
         var jsonlService = new Mock<IJsonlService>();
         jsonlService.Setup(s => s.Sessions).Returns([session]);
         jsonlService.Setup(s => s.IsScanning).Returns(false);
-        jsonlService.Setup(s => s.InitializeAsync()).Returns(Task.CompletedTask);
 
         var sut = CreateSutWithNameStore(sessionNameStore, jsonlService);
 
@@ -287,24 +283,12 @@ public class MainViewModelRefreshTests
         Assert.Equal(AutoDerived, sut.SortedSessions.First().DisplayName);
     }
 
-    [Fact]
-    public void RefreshSessionList_ClearsTheSessionPanels_WhenTheSelectedSessionDisappears()
+    /// <summary>
+    /// One session, present until the caller empties the list, plus a populated context window and
+    /// statistics for it. Shared by the two session-panel tests below.
+    /// </summary>
+    private static Mock<IJsonlService> CreatePopulatedJsonlService(List<SessionInfo> sessions)
     {
-        // Finding 6: the "had a selection and it vanished" case used to drop the guard and return, so
-        // ClearSessionData never ran. The ComboBox went blank through its TwoWay null write-back while
-        // KONTEXTFENSTER kept rendering the gone session's percentage, model badge and autocompact
-        // warning, and STATISTIKEN kept its token counts.
-        var sessions = new List<SessionInfo>
-        {
-            new()
-            {
-                Id = "vanishing",
-                Cwd = "D:\\projects\\test",
-                DisplayName = "test",
-                LastActivity = DateTimeOffset.UtcNow
-            }
-        };
-
         var jsonlService = new Mock<IJsonlService>();
         jsonlService.Setup(s => s.Sessions).Returns(() => sessions);
         jsonlService.Setup(s => s.IsScanning).Returns(false);
@@ -319,15 +303,48 @@ public class MainViewModelRefreshTests
             .Setup(s => s.GetStatistics(It.IsAny<TimePeriod>(), It.IsAny<string?>()))
             .Returns(new StatisticsSummary { InputTokens = 4_200 });
 
+        return jsonlService;
+    }
+
+    private static List<SessionInfo> OneLiveSession() =>
+    [
+        new()
+        {
+            Id = "vanishing",
+            Cwd = "D:\\projects\\test",
+            DisplayName = "test",
+            LastActivity = DateTimeOffset.UtcNow
+        }
+    ];
+
+    private static Mock<ISessionNameStore> CreateNameStoreWithoutCustomNames()
+    {
         var sessionNameStore = new Mock<ISessionNameStore>();
         sessionNameStore.Setup(s => s.GetCustomName(It.IsAny<string>())).Returns((string?)null);
+        return sessionNameStore;
+    }
 
-        var sut = CreateSutWithNameStore(sessionNameStore, jsonlService);
+    [Fact]
+    public async Task RefreshSessionList_ClearsTheSessionPanels_WhenTheSelectedSessionDisappears()
+    {
+        // Finding 6: the "had a selection and it vanished" case used to drop the guard and return, so
+        // ClearSessionData never ran. The ComboBox went blank through its TwoWay null write-back while
+        // KONTEXTFENSTER kept rendering the gone session's percentage, model badge and autocompact
+        // warning, and STATISTIKEN kept its token counts.
+        //
+        // The context-window read moved off the UI thread (wave-4 follow-up to finding 28), so the
+        // panels are painted by the dispatcher continuation — hence the await on the read seam instead
+        // of the previous synchronous assertions.
+        var sessions = OneLiveSession();
+        var jsonlService = CreatePopulatedJsonlService(sessions);
+
+        var sut = CreateSutWithNameStore(CreateNameStoreWithoutCustomNames(), jsonlService);
         // Session tab keeps statistics on the synchronous path — the aggregating tabs hop through
         // Task.Run, which would race the assertions below.
         sut.SelectedTabIndex = (int)TimePeriod.Session;
 
         InvokeRefreshSessionList(sut);
+        await sut.PendingContextWindowRead;
 
         Assert.NotNull(sut.SelectedSession);
         Assert.True(sut.HasActiveSession);
@@ -337,12 +354,47 @@ public class MainViewModelRefreshTests
         // The visibility window narrows in Settings, or the project directory is deleted.
         sessions.Clear();
         InvokeRefreshSessionList(sut);
+        await sut.PendingContextWindowRead;
 
         Assert.Null(sut.SelectedSession);
         Assert.False(sut.HasActiveSession);
         Assert.False(sut.ShowAutocompactWarning);
         Assert.Equal("--", sut.ContextPercentageText);
         Assert.Equal(string.Empty, sut.ContextModelBadge);
+        Assert.Equal("\u2013", sut.StatisticsTotal);
+    }
+
+    [Fact]
+    public async Task ContextWindowRead_LandingAfterTheSessionVanished_LeavesTheClearedPanelsCleared()
+    {
+        // The read now runs in Task.Run and applies through the dispatcher, so a read started before
+        // the session disappeared can complete afterwards. Without the request-sequence guard its
+        // apply would repaint exactly the panels ClearSessionData had just emptied — finding 6 all
+        // over again, only intermittently.
+        //
+        // A queued FakeDispatcherQueue models "the apply has not run yet" without parking a thread:
+        // the read completes, its apply waits in the queue, the session vanishes, then Pump() lets the
+        // stale apply through.
+        var dispatcherQueue = new FakeDispatcherQueue { ExecuteInline = false };
+        var sessions = OneLiveSession();
+        var jsonlService = CreatePopulatedJsonlService(sessions);
+
+        var sut = CreateSutWithNameStore(CreateNameStoreWithoutCustomNames(), jsonlService, dispatcherQueue);
+        sut.SelectedTabIndex = (int)TimePeriod.Session;
+
+        InvokeRefreshSessionList(sut);
+        await sut.PendingContextWindowRead;
+
+        Assert.False(sut.HasActiveSession);   // the apply is queued, not yet run
+
+        sessions.Clear();
+        InvokeRefreshSessionList(sut);
+
+        Assert.Equal(1, dispatcherQueue.Pump());
+
+        Assert.False(sut.HasActiveSession);
+        Assert.False(sut.ShowAutocompactWarning);
+        Assert.Equal("--", sut.ContextPercentageText);
         Assert.Equal("\u2013", sut.StatisticsTotal);
     }
 

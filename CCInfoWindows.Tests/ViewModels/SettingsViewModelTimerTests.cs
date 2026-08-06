@@ -49,6 +49,7 @@ public class SettingsViewModelTimerTests
 
         var apiService = new Mock<IClaudeApiService>();
         var usageNotifications = new Mock<IUsageNotificationService>();
+        var bridge = new Mock<IWebViewBridge>();
 
         var sut = new SettingsViewModel(
             settingsService.Object,
@@ -60,7 +61,8 @@ public class SettingsViewModelTimerTests
             jsonlService.Object,
             dispatcherQueue.Object,
             apiService.Object,   // ORGID-01
-            usageNotifications.Object);
+            usageNotifications.Object,
+            bridge.Object);      // finding 18: logout unbinds the API bridge
 
         // Inject fake timer factory to avoid WinRT COM context requirement in tests.
         sut.TimerFactory = () => new FakeDispatcherTimer();

@@ -5,6 +5,13 @@ namespace CCInfoWindows.Services.Interfaces;
 
 /// <summary>
 /// Contract for reading and watching Claude Code JSONL session files.
+///
+/// Lifecycle belongs to the application host: App.StartBackgroundServices calls
+/// <see cref="InitializeAsync"/> once per process and MainWindow.OnClosing calls <see cref="Stop"/>.
+/// Everything else — ViewModels above all — is a reader: subscribe to <see cref="DataUpdated"/> and
+/// read <see cref="Sessions"/>. A transient ViewModel driving Start/Stop from a page's visual-tree
+/// membership disposed the watcher on every Settings round-trip and re-scanned the whole corpus on the
+/// way back (finding 29).
 /// </summary>
 public interface IJsonlService
 {

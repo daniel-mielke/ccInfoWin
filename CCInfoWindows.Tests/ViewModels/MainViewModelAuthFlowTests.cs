@@ -30,7 +30,6 @@ public class MainViewModelAuthFlowTests
         var pricingService = new Mock<IPricingService>();
         pricingService.Setup(s => s.EnsurePricesLoadedAsync()).Returns(Task.CompletedTask);
         var updateService = new Mock<IUpdateService>();
-        var bridge = new Mock<IWebViewBridge>();
         var burnRate = new Mock<IUsageNotificationService>();
         var sessionNameStore = new Mock<ISessionNameStore>();
         sessionNameStore.Setup(s => s.GetCustomName(It.IsAny<string>())).Returns((string?)null);
@@ -44,7 +43,6 @@ public class MainViewModelAuthFlowTests
             jsonlService.Object,
             pricingService.Object,
             updateService.Object,
-            bridge.Object,
             burnRate.Object,
             new FakeDispatcherQueue(),
             sessionNameStore.Object,
@@ -106,16 +104,21 @@ public class MainViewModelAuthFlowTests
     }
 
     [Fact]
-    public void Logout_ResetsAutoReauthFlag_NextFalseNavigatesAgain()
+    public void MainViewModel_ExposesNoLogoutCommand()
     {
+        // REPLACES Logout_ResetsAutoReauthFlag_NextFalseNavigatesAgain (finding 18). The command that
+        // test drove was bound in no XAML file: the only reachable logout is SettingsViewModel.Logout.
+        // Keeping the duplicate meant a maintainer could fix a logout bug here, watch this file go
+        // green, and ship a change no user could reach — so the guard is now the absence of the
+        // command. If a logout belongs on the dashboard, bind it in MainView.xaml and delete this test.
+        Assert.Null(typeof(MainViewModel).GetProperty("LogoutCommand"));
+
+        // The flag reset that test asserted is unnecessary: logout navigates away, and the dashboard
+        // that comes back is a new transient ViewModel whose _autoReauthAttempted starts false.
         var (vm, nav) = CreateViewModel();
 
-        vm.Receive(new AuthStateChangedMessage(false));   // 1st nav (auto-reauth)
-        vm.LogoutCommand.Execute(null);                   // 2nd nav (Logout itself)
+        vm.Receive(new AuthStateChangedMessage(false));
 
-        vm.Receive(new AuthStateChangedMessage(false));   // 3rd nav (flag was reset)
-
-        nav.Verify(n => n.NavigateTo<LoginView>(), Times.Exactly(3));
-        Assert.False(vm.IsSessionExpired);
+        nav.Verify(n => n.NavigateTo<LoginView>(), Times.Once);
     }
 }

@@ -17,9 +17,13 @@ namespace CCInfoWindows;
 /// </summary>
 public sealed partial class MainWindow : Window, IRecipient<ThemeChangedMessage>, IRecipient<ResetWindowSizeMessage>
 {
+    private const string ShutdownLogSource = "MainWindow.StopBackgroundServices";
+
     private readonly ISettingsService _settingsService;
     private readonly INavigationService _navigationService;
     private readonly IUsageHistoryService _historyService;
+    private readonly IJsonlService _jsonlService;
+    private readonly IUpdateService _updateService;
 
     public MainWindow()
     {
@@ -28,6 +32,8 @@ public sealed partial class MainWindow : Window, IRecipient<ThemeChangedMessage>
         _settingsService = App.Services.GetRequiredService<ISettingsService>();
         _navigationService = App.Services.GetRequiredService<INavigationService>();
         _historyService = App.Services.GetRequiredService<IUsageHistoryService>();
+        _jsonlService = App.Services.GetRequiredService<IJsonlService>();
+        _updateService = App.Services.GetRequiredService<IUpdateService>();
 
         ConfigureWindow();
         RestoreWindowState();
@@ -116,6 +122,34 @@ public sealed partial class MainWindow : Window, IRecipient<ThemeChangedMessage>
         if (snapshot != null)
         {
             _historyService.SaveHistory(snapshot);
+        }
+
+        StopBackgroundServices();
+    }
+
+    /// <summary>
+    /// Counterpart to App.StartBackgroundServices (finding 29): the window that owns the app's only UI
+    /// is the last place that can stop the two singletons owning process-wide resources. Runs after the
+    /// history flush so a failure here cannot cost the user their usage curve.
+    ///
+    /// The ServiceProvider is deliberately NOT disposed instead. Closing runs before the window is torn
+    /// down, and MainView's own teardown still resolves IWebViewBridge from the container, so disposing
+    /// it here would turn ordinary shutdown into ObjectDisposedException. Of the remaining disposable
+    /// singletons only UsageNotificationService does anything on Dispose — it stops its countdown
+    /// timers, which the process exit ends anyway.
+    /// </summary>
+    private void StopBackgroundServices()
+    {
+        try
+        {
+            _jsonlService.Stop();
+            _updateService.StopPeriodicCheck();
+        }
+        catch (Exception ex)
+        {
+            // Closing is a framework event: an escaping exception here would become an unhandled one
+            // on the way out of the process.
+            AppLog.Write(ShutdownLogSource, ex, "stopping the background services failed");
         }
     }
 }
