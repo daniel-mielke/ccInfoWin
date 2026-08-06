@@ -34,7 +34,12 @@ Phase: alle 6 (0-5) abgeschlossen — **Code komplett, visuelle UAT durchgeführ
 Status: implementiert und committet 2026-08-05, UAT 2026-08-06
 Last activity: 2026-08-06 -- UAT U1-U11, U6-Regression gefixt, 434/434 Tests grün
 
-**Nächster Schritt:** v1.6 Ship-Tag.
+**Nächster Schritt:** v1.6 Ship-Tag — **wartet auf den User.** Er führt am 2026-08-06 ab ca. 10:00
+noch eigene manuelle Tests durch (mehrere Stunden) und will erst danach taggen. Vor dem Tag also
+nachfragen, ob dabei etwas aufgefallen ist; mögliche Funde landen zuerst hier, nicht direkt im Tag.
+
+Wenn er dabei einen Reset-Toast sieht: das 5-h-Fenster endet regulär am 2026-08-06 um 13:29 lokal,
+ein Toast zu diesem Zeitpunkt ist also echt und kein Rückstand aus der UAT.
 
 ### Laufzeitbeleg Phase 4 (aus `%LOCALAPPDATA%\CCInfoWindows\notification-state.json`)
 
@@ -178,6 +183,11 @@ keine synthetischen Reste). `notification-state.json` wurde **bewusst nicht** au
 zurückgespielt: das Backup trägt die `windowId` eines abgelaufenen Fensters und hätte beim
 nächsten Start einen unechten Reset-Toast ausgelöst. Auf disk steht der von der App selbst
 geschriebene, korrekte Live-Zustand.
+
+Beide Backups liegen noch unter `%LOCALAPPDATA%\CCInfoWindows\` als
+`usage-history.json.bak` und `notification-state.json.bak`. Sie werden nicht mehr gebraucht und
+können gelöscht werden — `notification-state.json.bak` sollte man **nicht** zurückspielen
+(Begründung oben).
 
 **Zwei Befunde ohne Fix, bewusst offengelassen**
 
