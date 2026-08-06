@@ -1,5 +1,6 @@
 using CCInfoWindows.Helpers;
 using Microsoft.Graphics.Canvas;
+using Microsoft.Graphics.Canvas.Text;
 using Windows.UI;
 
 namespace CCInfoWindows.Tests.Helpers;
@@ -99,6 +100,30 @@ public class ExportHelperTests
 
         Assert.NotNull(target);
         target.Dispose();
+    }
+
+    [Theory]
+    [Trait("Category", "RequiresGPU")]
+    [InlineData("100%")]
+    [InlineData("50%")]
+    [InlineData("0%")]
+    public void AxisLabelFitsInGutter(string label)
+    {
+        // The v1.6 redesign lays the percentage labels out in a rect, and a rect wraps. At
+        // LeftMargin 22 the rect was 18px while "100%" measures 24.36px, so it broke into
+        // "100" / "%" straddling its own gridline -- visible only on screen, no test failed.
+        using var format = new CanvasTextFormat
+        {
+            FontFamily = "Segoe UI Variable",
+            FontSize = 10f
+        };
+        using var layout = new CanvasTextLayout(
+            CanvasDevice.GetSharedDevice(), label, format, 1000f, 100f);
+
+        Assert.True(
+            layout.LayoutBounds.Width <= ChartDrawing.AxisLabelRectWidth,
+            $"'{label}' needs {layout.LayoutBounds.Width:0.00}px but the gutter is "
+            + $"{ChartDrawing.AxisLabelRectWidth}px -- it will wrap onto two lines.");
     }
 
     [Fact]

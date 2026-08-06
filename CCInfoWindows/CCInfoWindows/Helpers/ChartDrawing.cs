@@ -34,7 +34,12 @@ public static class ChartDrawing
     /// </summary>
     private const byte GlowWhiteCoreAlpha = 235;
 
-    private const float AxisLabelGutter = 4f;
+    /// <summary>Breathing room between the percentage label and the gridline it belongs to.</summary>
+    public const float AxisLabelGutter = 4f;
+
+    /// <summary>Width the percentage labels are laid out in. Below the widest label they wrap.</summary>
+    public static float AxisLabelRectWidth => ChartRenderer.LeftMargin - AxisLabelGutter;
+
     private const float HourLabelHalfWidth = 20f;
     private const float HourLabelHeight = 14f;
     private const float HourLabelTopGap = 2f;
@@ -330,10 +335,9 @@ public static class ChartDrawing
     private static void DrawCenteredAxisLabel(
         CanvasDrawingSession session, string text, float offsetX, float lineY, Color color)
     {
-        var gutterWidth = ChartRenderer.LeftMargin - AxisLabelGutter;
         var rect = new Rect(
             offsetX, lineY - (HourLabelHeight / 2f),
-            gutterWidth, HourLabelHeight);
+            AxisLabelRectWidth, HourLabelHeight);
         session.DrawText(text, rect, color, AxisLabelFormat);
     }
 }

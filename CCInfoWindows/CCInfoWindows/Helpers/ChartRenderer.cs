@@ -8,7 +8,17 @@ namespace CCInfoWindows.Helpers;
 /// </summary>
 public static class ChartRenderer
 {
-    public const float LeftMargin = 22f;
+    /// <summary>
+    /// Gutter reserved left of the plot for the percentage labels.
+    ///
+    /// 32 and not 22 because the labels are laid out in a rect since the v1.6 redesign, and a rect
+    /// wraps: "100%" measures 24.36px at Segoe UI Variable 10, so a 22px margin left an 18px rect
+    /// that broke it into "100" / "%" straddling its own gridline. The pre-v1.6 code used the
+    /// point overload, which silently overflowed into the plot instead of wrapping.
+    /// Pinned by AxisLabelFitsInGutter.
+    /// </summary>
+    public const float LeftMargin = 32f;
+
     public const float TopMargin = 10f;
     public const float BottomMargin = 16f;
     public const double WindowDurationSeconds = 5 * 60 * 60;

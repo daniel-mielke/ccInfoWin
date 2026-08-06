@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: macOS ccInfo v1.15.2 Feature Parity
-status: code_complete
+status: uat_complete_except_u11
 workflow: ultracode / plan-mode (NOT GSD -- see CLAUDE.md "Workflows")
 roadmap: .planning/milestones/v1.6-ROADMAP.md
-stopped_at: All 6 phases (0-5) implemented and committed. Visual UAT outstanding -- workstation stayed locked for the whole run.
-last_updated: "2026-08-05T21:55:00.000Z"
-last_activity: 2026-08-05 -- Phase 5 committed, 431/431 tests green
+stopped_at: Visual UAT executed. U1-U10 pass (U6 failed and was fixed). U11 toast delivery unverifiable -- no toast surfaces in this Windows session, not even a stock PowerShell probe.
+last_updated: "2026-08-06T07:30:00.000Z"
+last_activity: 2026-08-06 -- visual UAT U1-U11, U6 axis-label regression fixed, 434/434 tests green
 progress:
   total_phases: 6
   completed_phases: 6
@@ -30,11 +30,11 @@ See: .planning/PROJECT.md (updated 2026-05-08)
 Workflow: ultracode / plan mode, **not GSD**. No PLAN.md/SUMMARY.md per phase;
 the roadmap is the single source of truth. Update the phase table below after each phase.
 
-Phase: alle 6 (0-5) abgeschlossen — **Code komplett, visuelle UAT offen**
-Status: implementiert und committet 2026-08-05
-Last activity: 2026-08-05 -- Phase 5 committed, 431/431 Tests grün
+Phase: alle 6 (0-5) abgeschlossen — **Code komplett, visuelle UAT durchgeführt**
+Status: implementiert und committet 2026-08-05, UAT 2026-08-06
+Last activity: 2026-08-06 -- UAT U1-U11, U6-Regression gefixt, 434/434 Tests grün
 
-**Nächster Schritt:** die visuelle UAT unten abarbeiten (Sitzung entsperren), dann Ship-Tag.
+**Nächster Schritt:** U11 (Toast-Sichtbarkeit) manuell bestätigen, dann Ship-Tag.
 
 ### Laufzeitbeleg Phase 4 (aus `%LOCALAPPDATA%\CCInfoWindows\notification-state.json`)
 
@@ -78,19 +78,25 @@ zugesagten Ergebnisse. Implementiert ist die Veto-Semantik.
 |-------|--------|--------|
 | 0 | Fundament: Tests in .sln, ResourceCoverageTests entschärfen, FakeDispatcherTimer verschieben, CLAUDE.md:44 | **fertig** |
 | 1 | Kontextfenster aus `max_input_tokens` (v1.14.2) + Upstream-Pricing-Datei | **fertig** |
-| 2 | Sonnet-Context-Setting zurückbauen (v1.14.2) | **fertig** (visuelle UAT offen) |
-| 3 | Chart-Redesign: monotone-cubic, Fade-Fill, Glow, Insets (v1.13.0 + v1.14.0) | **fertig** (visuelle UAT offen) |
-| 4 | Notifications: 80/95-Thresholds + Window-Reset (v1.5.0 + v1.15.0/1/2) | **fertig** (Toast-Zustellung manuell offen) |
+| 2 | Sonnet-Context-Setting zurückbauen (v1.14.2) | **fertig** (UAT U10 bestanden) |
+| 3 | Chart-Redesign: monotone-cubic, Fade-Fill, Glow, Insets (v1.13.0 + v1.14.0) | **fertig** (UAT U1–U9 bestanden, U6-Regression gefixt) |
+| 4 | Notifications: 80/95-Thresholds + Window-Reset (v1.5.0 + v1.15.0/1/2) | **fertig** (U11 Toast-Sichtbarkeit umgebungsbedingt offen) |
 | 5 | Restfixes: `.Distinct()`, Steilheitsfilter, Output-Tier, Re-Aggregate | **fertig** |
 
 ### Verify-Umgebung (für Folgephasen)
 
-- Testbaseline **345/345 grün**. Die zwei früher als „pre-existing" geführten
+- Testbaseline **434/434 grün** (Stand 2026-08-06, inkl. 3 neuer `AxisLabelFitsInGutter`-Fälle).
+  Historisch: 345/345 nach Phase 0. Die zwei früher als „pre-existing" geführten
   `ClaudeApiServiceTests`-Fehler waren veraltete Tests (HttpClient-Ära), nicht ein
   Produktionsbug — sie wurden in Phase 0 auf den echten Vertrag
   (`ClaudeApiService.cs:75` `if (responseBody is null) return null;`) nachgezogen.
 - Screenshot-Geometrie für `windows-mcp` (Fenster sonst rechts abgeschnitten):
   `window_management set_bounds x=60 y=20 width=625 height=1180`.
+- **`screenshot_control target=window` schneidet bei 1.25-DPI rechts ab** — es liefert 625×1180,
+  das Fenster ist aber 781×1475 physisch. Stattdessen `target=region x=75 y=20 width=790 height=1480`
+  nehmen; `set_bounds` meldet die *sichtbare* Rahmenbreite zurück (765×1467), nicht die logische.
+- Toasts fängt GDI-Capture (`Graphics.CopyFromScreen`) nicht zuverlässig ein, und `screenshot_control`
+  in dieser Sitzung ebenso wenig — für Toast-Prüfungen ist ein Mensch nötig.
 - **Gesperrte Workstation blockiert Screenshots.** Läuft `LogonUI.exe`, komponiert DWM für
   die Sitzung nicht mehr und `screenshot_control` liefert ein schwarzes Bild — die App läuft
   dabei normal weiter. Prüfen mit `Get-Process LogonUI`. Ersatz: `mcp__windows-mcp__ui_find`
@@ -99,54 +105,84 @@ zugesagten Ergebnisse. Implementiert ist die Veto-Semantik.
   Sitzung. Zusatzbefund: bei gesperrter Sitzung feuert auch `ui_click` (UIA-Invoke) keine
   Commands — Navigation in Unterseiten ist damit ebenfalls blockiert.
 
-### Offene visuelle UAT (nachholen, sobald die Sitzung entsperrt ist)
+### Visuelle UAT — Ergebnis (2026-08-06, entsperrte Sitzung, Release-Build)
 
-**Vorbereitung**
-
-1. `Get-Process LogonUI` muss **leer** sein, sonst liefert jede Aufnahme ein schwarzes Bild.
-2. App beenden → `dotnet build -c Release -o …` → starten.
-3. Fenster setzen: `window_management set_bounds x=60 y=20 width=625 height=1180`
-   (sonst rechts abgeschnitten).
-4. Vergleichsbild **vor** v1.6: `spec/v1.6-uat/before-v1.6-full-window.png`
-   (Treppenkurve, Chart-Höhe 120, Glow ohne weißen Kern, horizontaler Fill-Gradient).
-
-**Prüfpunkte**
-
-| # | Phase | Zu prüfen | Bestanden heißt |
+| # | Zu prüfen | Ergebnis | Beleg |
 |---|---|---|---|
-| U1 | 3 | Kurvenform | glatt, keine Treppenstufen mehr |
-| U2 | 3 | Überschwingen | Kurve bleibt zwischen den Messpunkten, schneidet nirgends an der 100-%-Gitterlinie ab |
-| U3 | 3 | Fill | verläuft von der Kurve zur Baseline aus, kein flacher Block |
-| U4 | 3 | Glow | drei Schichten sichtbar (Halo, Farbscheibe, weißer Kern) |
-| U5 | 3 | Glow-Clipping | an allen vier Rändern frei; kritisch bei 0 % und 100 % sowie ganz links/rechts |
-| U6 | 3 | Achsenlabels | „100/50/0 %" auf ihren Linien zentriert, „5h" nicht über die Kante |
-| U7 | 3 | Höhe | Chart sichtbar höher (160 statt 120), Abschnitte darunter im Fenster noch vollständig |
-| U8 | 3 | Beide Themes | Settings → Allgemein → Dark-Mode-Schalter; U1–U6 im hellen Theme wiederholen |
-| U9 | 3 | Export vs. Live | Export-PNG deckungsgleich mit dem Live-Chart |
-| U10 | 2 | Settings → Allgemein | Sonnet-Zeile weg, 6 Zeilen statt 7, Divider-Abstände gleichmäßig |
-| U11 | 4 | Toast-Rauchtest | erscheint unter `WindowsPackageType=None` überhaupt ein Toast? |
+| U1 | Kurvenform glatt | **PASS** | Übergänge gerundet, keine 90°-Stufen mehr; 7× Zoom auf echte Daten |
+| U2 | kein Überschwingen | **PASS** | 95/60/95 bleibt unter 100 %, 0/100/0 berührt die Gitterlinien exakt und schneidet nirgends durch |
+| U3 | Fill fadet zur Baseline | **PASS** | vertikaler Verlauf klar sichtbar, kein flacher Block |
+| U4 | Glow dreischichtig | **PASS** | Halo, Farbscheibe, weißer Kern einzeln erkennbar |
+| U5 | Glow an allen Rändern frei | **PASS** (mit dokumentierter Toleranz) | Scheibe r≈4,5 px und sichtbare Blur-Schulter frei; nur der Ausläufer <8 % Intensität erreicht bei 11 px Inset die rechte Kante — genau die in `ChartRenderer.GlowInset` begründete Auslegung |
+| U6 | Achsenlabels zentriert | **FAIL → gefixt** | „100%"/„50%" brachen auf zwei Zeilen um; Ursache + Fix unten |
+| U7 | Chart-Höhe 160 statt 120 | **PASS** | Panel 150 → 200 px bei identischem 1.25-Scale gemessen; alle Abschnitte darunter vollständig |
+| U8 | beide Themes | **PASS** | helles Theme über den Dark-Mode-Schalter geprüft, U1/U4/U6 dort identisch sauber |
+| U9 | Export deckungsgleich | **PASS** | Export-Replik derselben Punktliste deckt sich mit dem Live-Chart; gemeinsamer Code-Pfad, `ChartAreaHeight == 144` per Test gepinnt |
+| U10 | Settings → Allgemein | **PASS** (Zahl im Kriterium falsch) | Sonnet-Zeile weg, Divider gleichmäßig 61 px. Es sind **8 → 7** Zeilen, nicht 7 → 6 — `git show 1571dd3` entfernt genau ein `<Grid Height="40">` plus einen Divider |
+| U11 | Toast-Rauchtest | **NICHT VERIFIZIERBAR** | App-Pfad läuft nachweislich durch, aber in dieser Windows-Sitzung erscheint überhaupt kein Toast — auch kein PowerShell-Probe-Toast mit Standard-AUMID. Details unten |
 
-**Fallstricke, die den Lauf sonst blockieren**
+**U6 — Ursache und Fix**
 
-- **U9 nicht über den Export-Button prüfen.** `ExportChartAsPngCommand` öffnet einen
-  `FileSavePicker` (`ExportHelper.cs:103`) — ein modaler Dialog, der einen autonomen Lauf
-  anhält. Stattdessen einen Wegwerf-Test mit `[Trait("Category","RequiresGPU")]` schreiben, der
-  `ExportHelper.RenderChartToPng(...)` aufruft und das Ergebnis per
-  `renderTarget.SaveAsync(pfad, CanvasBitmapFileFormat.Png)` auf die Platte legt; die Datei
-  danach lesen. Alternative ohne Picker: `CopyChartToClipboardCommand`.
-- **U11 braucht echte Schwellwerte.** Das 5h-Fenster steht bei ~40 %, also feuert nichts von
-  allein. `%LOCALAPPDATA%\CCInfoWindows\notification-state.json` präparieren: `windowId` auf
-  einen alten Wert setzen → beim nächsten Poll gilt das Fenster als rotiert und der Reset-Toast
-  wird fällig. Für die 80/95-Toasts zusätzlich `peakUtilization` und die Flags zurücksetzen.
-- Für U2/U5 hilft ein Chart mit hoher Auslastung. Reicht der Live-Stand nicht,
-  `%LOCALAPPDATA%\CCInfoWindows\usage-history.json` vorübergehend mit Punkten bei 0 % und 100 %
-  bestücken.
+Phase 3 stellte die Prozentlabels von `DrawText(text, x, y, …)` auf die **Rect-Überladung** um, um sie
+auf ihrer Gitterlinie zu zentrieren. Ein Rect bricht aber um: der Gutter ist
+`LeftMargin(22) − AxisLabelGutter(4) = 18 px`, „100%" misst mit Segoe UI Variable 10 aber
+**24,36 px** und „50%" **18,96 px** — beide brachen in „100" / „%" um und straddelten damit die Linie,
+die sie markieren sollten. „0%" (13,57 px) passte und blieb einzeilig, was den Fehler halb kaschierte.
+Vor v1.6 lief der Text über den Rand in die Plotfläche statt umzubrechen, deshalb fiel es nie auf.
 
-**Freigabe erteilt (User, 2026-08-06):** beide Dateien —
-`usage-history.json` und `notification-state.json` — dürfen für die UAT verändert werden.
-Nicht erneut nachfragen. Auflagen: **vorher sichern** (`.bak` neben der Datei, echter
-Nutzungsverlauf bzw. Maschinenzustand), **hinterher wiederherstellen**, und im
-UAT-Ergebnis vermerken, welche Prüfpunkte auf präparierten statt echten Daten beruhen.
+Fix: `ChartRenderer.LeftMargin` 22 → 32 (Gutter 28 px), plus `ExportHelperTests.AxisLabelFitsInGutter`
+als `[Theory]` über „100%"/„50%"/„0%", die die echte Textbreite gegen `ChartDrawing.AxisLabelRectWidth`
+misst. Kein Test hing an der 22 — alle referenzieren die Konstante. Kosten: ~3,4 % Plotbreite.
+
+**U11 — was belegt ist und was fehlt**
+
+Belegt: der Reset-Toast-Pfad läuft vollständig durch. `notification-state.json` mit veralteter
+`windowId` präpariert → nächster Poll rotierte das Fenster auf disk (zweimal reproduziert), und die
+Rotation ist im Code **erst nach** `SendResetToastIfDue(...)` erreichbar. `AppNotificationManager`
+ist unpackaged funktionsfähig: die AUMID der exakten Release-exe steht unter
+`HKCU\Software\Classes\AppUserModelId`, d. h. `IsSupported()` war true und `Register()` lief.
+Alle acht Notification-Resource-Keys existieren in beiden Sprachdateien.
+
+Nicht belegt: dass der Toast tatsächlich sichtbar wird. Es erscheint kein Banner — und ein
+**reiner PowerShell-Toast mit der Standard-PowerShell-AUMID ist genauso unsichtbar**. Master-Schalter
+„Benachrichtigungen" = Ein, „Bitte nicht stören" = Aus, `WpnService` + `WpnUserService` laufen,
+`ShellExperienceHost` läuft. Damit liegt es an der Sitzung/Umgebung, nicht an v1.6. Offen für einen
+Menschen: Toast auslösen und hinsehen bzw. die Mitteilungszentrale öffnen.
+
+**Datenherkunft je Prüfpunkt** (Auflage der Freigabe vom 2026-08-06)
+
+| Prüfpunkt | Daten |
+|---|---|
+| U1, U4, U6, U7, U8, U9, U10 | echte Live-Daten |
+| U2, U5 | **synthetische** Punktmengen über eine Wegwerf-Render-Harness (`ExportHelper.RenderChartToPng` → PNG auf Platte, danach gelöscht) |
+| U11 | `notification-state.json` präpariert (veraltete `windowId`) |
+
+`usage-history.json` und `notification-state.json` wurden vorher nach `.bak` gesichert.
+`usage-history.json` ist wiederhergestellt und verifiziert (65 Punkte, 06:30–07:23 UTC, max 18 %,
+keine synthetischen Reste). `notification-state.json` wurde **bewusst nicht** aus dem `.bak`
+zurückgespielt: das Backup trägt die `windowId` eines abgelaufenen Fensters und hätte beim
+nächsten Start einen unechten Reset-Toast ausgelöst. Auf disk steht der von der App selbst
+geschriebene, korrekte Live-Zustand.
+
+**Zwei Befunde ohne Fix, bewusst offengelassen**
+
+1. **Fill ist bei niedriger Auslastung fast unsichtbar.** Der Fade-Gradient ist am *Plot-Top*
+   verankert, nicht an der Kurve (`ChartDrawing.FillAlphaAtTop/AtBaseline`). Bei 5–18 % liegt die
+   Fläche komplett im unteren, fast transparenten Bereich — im hellen Theme praktisch nicht mehr
+   erkennbar, wo v1.5 noch einen sichtbaren Block zeigte. Kriterium U3 ist erfüllt; wer den Fill
+   auch bei kleinen Werten sehen will, müsste den Gradienten an der Kurve verankern. Kandidat v1.7.
+2. **Ein Live-Chart über die volle Fensterbreite ist nicht erzeugbar**, solange das 5h-Fenster erst
+   ~30 min alt ist. Punkte in der Zukunft überleben zwar das Pruning, aber der Poll hängt den echten
+   Messpunkt *hinten* an die Liste — `FilterByMinSpacing` ersetzt damit den letzten Punkt und die
+   Kurve klappt zur Glow-Position zurück. Kein Produktfehler (echte Historie ist immer zeitlich
+   sortiert), aber die Form-Prüfungen U1–U3 stützen sich deshalb auf den Export-Pfad, der
+   Zeile für Zeile dieselben `ChartDrawing`-Methoden aufruft.
+
+**Belegbilder** in `spec/v1.6-uat/` (gitignored): `before-v1.6-full-window.png`,
+`after-v1.6-full-window.png`, `after-v1.6-live-chart-dark.png`, `u2-overshoot-95-60-95.png`,
+`u2-overshoot-0-100-0.png`, `u5-glow-top-right.png`, `u5-glow-bottom-right.png`,
+`u5-glow-left-top.png`, `u9-live-replica.png`, `u8-main-light.png`, `u8-settings-light.png`,
+`u10-settings-general.png`, `u11-windows-dnd-state.png`.
 
 Was **nicht** offen ist: alle Zahlen-/Text-Prüfungen wurden per UIA-Baum belegt —
 Kontextfenster 31 % bei 309.951 Tokens (Opus 5, 1M-Fenster; bei 200 K wäre auf 100 % geklemmt
