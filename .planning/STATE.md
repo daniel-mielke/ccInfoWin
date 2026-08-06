@@ -135,12 +135,18 @@ zugesagten Ergebnisse. Implementiert ist die Veto-Semantik.
   `renderTarget.SaveAsync(pfad, CanvasBitmapFileFormat.Png)` auf die Platte legt; die Datei
   danach lesen. Alternative ohne Picker: `CopyChartToClipboardCommand`.
 - **U11 braucht echte Schwellwerte.** Das 5h-Fenster steht bei ~40 %, also feuert nichts von
-  allein. Entweder `%LOCALAPPDATA%\CCInfoWindows\notification-state.json` präparieren
-  (`windowId` auf einen alten Wert setzen → beim nächsten Poll gilt das Fenster als rotiert und
-  der Reset-Toast wird fällig) oder den Rauchtest als manuell offen lassen.
-- Für U2/U5 hilft ein Chart mit hoher Auslastung. Reicht der Live-Stand nicht, lässt sich
+  allein. `%LOCALAPPDATA%\CCInfoWindows\notification-state.json` präparieren: `windowId` auf
+  einen alten Wert setzen → beim nächsten Poll gilt das Fenster als rotiert und der Reset-Toast
+  wird fällig. Für die 80/95-Toasts zusätzlich `peakUtilization` und die Flags zurücksetzen.
+- Für U2/U5 hilft ein Chart mit hoher Auslastung. Reicht der Live-Stand nicht,
   `%LOCALAPPDATA%\CCInfoWindows\usage-history.json` vorübergehend mit Punkten bei 0 % und 100 %
-  bestücken — **vorher sichern**, die Datei ist echter Verlauf.
+  bestücken.
+
+**Freigabe erteilt (User, 2026-08-06):** beide Dateien —
+`usage-history.json` und `notification-state.json` — dürfen für die UAT verändert werden.
+Nicht erneut nachfragen. Auflagen: **vorher sichern** (`.bak` neben der Datei, echter
+Nutzungsverlauf bzw. Maschinenzustand), **hinterher wiederherstellen**, und im
+UAT-Ergebnis vermerken, welche Prüfpunkte auf präparierten statt echten Daten beruhen.
 
 Was **nicht** offen ist: alle Zahlen-/Text-Prüfungen wurden per UIA-Baum belegt —
 Kontextfenster 31 % bei 309.951 Tokens (Opus 5, 1M-Fenster; bei 200 K wäre auf 100 % geklemmt
