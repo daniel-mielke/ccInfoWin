@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using CCInfoWindows.Helpers;
 using CCInfoWindows.Models;
 using CCInfoWindows.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -132,7 +132,8 @@ public sealed partial class SettingsView : Page
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[SettingsView] OrgPicker dialog failed: {ex.Message}");
+            AppLog.Write($"{nameof(SettingsView)}.{nameof(OnRequestOpenOrgPickerDialog)}", ex,
+                "org picker dialog could not be shown");
             request.CompletionSource.TrySetResult(ContentDialogResult.None);
         }
         finally

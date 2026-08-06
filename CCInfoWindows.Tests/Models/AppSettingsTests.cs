@@ -38,6 +38,86 @@ public class AppSettingsTests
         Assert.Equal(600, deserialized.WindowState.Height);
     }
 
+    /// <summary>
+    /// Finding 19: SettingsService validates the untrusted file against these allow-lists and falls
+    /// back to the Default* constants, so a default outside its own allow-list would make validation
+    /// produce a value the UI cannot represent.
+    /// </summary>
+    [Fact]
+    public void EveryDefault_IsAMemberOfItsAllowList()
+    {
+        Assert.Contains(AppSettings.DefaultRefreshIntervalSeconds, AppSettings.SupportedRefreshIntervalSeconds);
+        Assert.Contains(AppSettings.ManualRefreshSeconds, AppSettings.SupportedRefreshIntervalSeconds);
+        Assert.Contains(AppSettings.DefaultColorMode, AppSettings.SupportedColorModes);
+        Assert.Contains(AppSettings.DefaultLanguage, AppSettings.SupportedLanguages);
+        Assert.Contains(
+            AppSettings.DefaultSessionActivityThresholdMinutes,
+            AppSettings.SupportedSessionActivityThresholdMinutes);
+        Assert.Contains(
+            AppSettings.DefaultSessionVisibilityWindowDays,
+            AppSettings.SupportedSessionVisibilityWindowDays);
+        Assert.Contains(
+            AppSettings.UnlimitedSessionVisibilityWindowDays,
+            AppSettings.SupportedSessionVisibilityWindowDays);
+    }
+
+    /// <summary>
+    /// The property initializers and the allow-lists are two statements of the same default; a fresh
+    /// AppSettings must therefore already be valid input for every consumer.
+    /// </summary>
+    [Fact]
+    public void FreshInstance_HoldsOnlySupportedValues()
+    {
+        var settings = new AppSettings();
+
+        Assert.Contains(settings.RefreshIntervalSeconds, AppSettings.SupportedRefreshIntervalSeconds);
+        Assert.Contains(settings.ColorMode, AppSettings.SupportedColorModes);
+        Assert.Contains(settings.Language, AppSettings.SupportedLanguages);
+        Assert.Contains(settings.SessionActivityThresholdMinutes, AppSettings.SupportedSessionActivityThresholdMinutes);
+        Assert.Contains(settings.SessionVisibilityWindowDays, AppSettings.SupportedSessionVisibilityWindowDays);
+    }
+
+    /// <summary>Duplicates would make dropdown index mapping ambiguous in both directions.</summary>
+    [Fact]
+    public void AllowLists_ContainNoDuplicates()
+    {
+        Assert.Equal(
+            AppSettings.SupportedRefreshIntervalSeconds.Length,
+            AppSettings.SupportedRefreshIntervalSeconds.Distinct().Count());
+        Assert.Equal(
+            AppSettings.SupportedSessionActivityThresholdMinutes.Length,
+            AppSettings.SupportedSessionActivityThresholdMinutes.Distinct().Count());
+        Assert.Equal(
+            AppSettings.SupportedSessionVisibilityWindowDays.Length,
+            AppSettings.SupportedSessionVisibilityWindowDays.Distinct().Count());
+        Assert.Equal(
+            AppSettings.SupportedLanguages.Length,
+            AppSettings.SupportedLanguages.Distinct().Count());
+    }
+
+    /// <summary>
+    /// The threshold and visibility lists are index-aligned with the SettingsView ComboBox items
+    /// (15/30/60/120 minutes and 7/30/90/unlimited days); a silent reorder would remap the dropdown.
+    /// </summary>
+    [Fact]
+    public void AllowLists_KeepTheirDocumentedComboBoxOrder()
+    {
+        // ToArray on both sides: ImmutableArray<T>.Equals compares the underlying array by
+        // reference, so comparing the struct directly would never match a freshly built expectation.
+        Assert.Equal(
+            new[] { 15, 30, 60, 120 },
+            AppSettings.SupportedSessionActivityThresholdMinutes.ToArray());
+        Assert.Equal(
+            new[] { 7, 30, 90, 0 },
+            AppSettings.SupportedSessionVisibilityWindowDays.ToArray());
+        Assert.Equal(
+            new[] { "de-DE", "en-US" },
+            AppSettings.SupportedLanguages.ToArray());
+        Assert.Equal(
+            new[] { 30, 60, 120, 300, 600, 0 },
+            AppSettings.SupportedRefreshIntervalSeconds.ToArray());
+    }
+
     [Fact]
     public void Deserialize_LegacyJson_WithoutNewFields_AppliesDefaults()
     {

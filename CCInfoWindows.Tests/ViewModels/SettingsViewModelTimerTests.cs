@@ -42,6 +42,7 @@ public class SettingsViewModelTimerTests
         var historyService = new Mock<IUsageHistoryService>();
 
         var sessionNameStore = new Mock<ISessionNameStore>();
+        sessionNameStore.Setup(s => s.GetKnownSessionIds()).Returns(Array.Empty<string>());
         var jsonlService = new Mock<IJsonlService>();
         jsonlService.Setup(s => s.Sessions).Returns(Array.Empty<SessionInfo>());
         var dispatcherQueue = new Mock<IDispatcherQueue>();

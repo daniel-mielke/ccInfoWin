@@ -38,16 +38,25 @@ public partial class SettingsViewModel : ObservableObject
     internal Func<IDispatcherTimer> TimerFactory { get; set; } = () => new WinuiDispatcherTimerAdapter();
 
     /// <summary>
+    /// The only call into WinUI3Localizer's language switch, kept behind a delegate so the library
+    /// stays swappable and so tests can drive both the success and the failure branch — the library
+    /// has no headless host, which is why the runtime-language-switch UAT was never executable.
+    /// </summary>
+    internal Func<string, Task> LanguageSwitcher { get; set; } = code => Localizer.Get().SetLanguage(code);
+
+    /// <summary>
     /// Represents a selectable refresh interval option for the ComboBox.
     /// </summary>
     public record RefreshOption(string Label, int Seconds);
 
-    private const int DefaultRefreshSeconds = 60;
-
-    // Tab order: 0=General, 1=Updates, 2=Account, 3=Sessions (Phase 26 / RENAME-02), 4=About
-    // Used by SettingsView code-behind to start/stop the About-tab timer on navigation.
-    public const int SessionsTabIndex = 3;
-    public const int AboutTabIndex = 4;   // SHIFTED from 3 — Phase 26 inserts Sessions at index 3
+    // Tab order in SettingsView's Segmented control. Every dependent site — the visibility getters
+    // below, the About-tab timer in the code-behind, the tests — must reference these, never the
+    // literal: AboutTabIndex already shifted once when Phase 26 inserted Sessions at index 3.
+    public const int GeneralTabIndex = 0;
+    public const int UpdatesTabIndex = 1;
+    public const int AccountTabIndex = 2;
+    public const int SessionsTabIndex = 3;   // Phase 26 / RENAME-02
+    public const int AboutTabIndex = 4;
 
     public List<RefreshOption> RefreshOptions { get; } =
     [
@@ -56,17 +65,17 @@ public partial class SettingsViewModel : ObservableObject
         new("2min", 120),
         new("5min", 300),
         new("10min", 600),
-        new("Manuell", 0)
+        new(Localize("RefreshIntervalManual", "Manual"), AppSettings.ManualRefreshSeconds)
     ];
 
     [ObservableProperty]
-    private int _selectedTabIndex = 0;
+    private int _selectedTabIndex = GeneralTabIndex;
 
-    public bool IsGeneralTabVisible  => _selectedTabIndex == 0;
-    public bool IsUpdatesTabVisible  => _selectedTabIndex == 1;
-    public bool IsAccountTabVisible  => _selectedTabIndex == 2;
-    public bool IsSessionsTabVisible => _selectedTabIndex == 3;   // Phase 26 / RENAME-02
-    public bool IsAboutTabVisible    => _selectedTabIndex == 4;
+    public bool IsGeneralTabVisible  => _selectedTabIndex == GeneralTabIndex;
+    public bool IsUpdatesTabVisible  => _selectedTabIndex == UpdatesTabIndex;
+    public bool IsAccountTabVisible  => _selectedTabIndex == AccountTabIndex;
+    public bool IsSessionsTabVisible => _selectedTabIndex == SessionsTabIndex;
+    public bool IsAboutTabVisible    => _selectedTabIndex == AboutTabIndex;
 
     partial void OnSelectedTabIndexChanged(int value)
     {
@@ -107,22 +116,58 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private int _selectedVisibilityWindowIndex;
 
-    private static readonly string[] LanguageCodes = ["de-DE", "en-US"];
+    /// <summary>Message for the page-level error InfoBar. Empty while nothing has failed.</summary>
+    [ObservableProperty]
+    private string _errorMessage = string.Empty;
 
-    // DROPDOWN-04 / D-03: visibility window options. 0 == unlimited.
-    private static readonly int[] VisibilityWindowDayOptions = [7, 30, 90, 0];
-    private const int DefaultVisibilityWindowIndex = 1; // 30 days
+    [ObservableProperty]
+    private bool _isErrorVisible;
+
+    // Dropdown indices derived from the allow-lists so a reordered option list cannot desync them.
+    private static readonly int DefaultVisibilityWindowIndex =
+        AppSettings.SupportedSessionVisibilityWindowDays.IndexOf(AppSettings.DefaultSessionVisibilityWindowDays);
+
+    private static readonly int DefaultThresholdIndex =
+        AppSettings.SupportedSessionActivityThresholdMinutes.IndexOf(AppSettings.DefaultSessionActivityThresholdMinutes);
+
+    private static readonly int DefaultLanguageIndex =
+        AppSettings.SupportedLanguages.IndexOf(AppSettings.DefaultLanguage);
+
+    /// <summary>Index of the language currently active in the localizer, i.e. the revert target.</summary>
+    private int _appliedLanguageIndex = DefaultLanguageIndex;
+
+    private bool _isRevertingLanguage;
 
     public string PricingSourceText => _pricingService.Source switch
     {
         PricingSource.Live => "Live (LiteLLM API)",
-        PricingSource.Fallback => "Fallback (gebündelt)",
-        _ => "Unbekannt"
+        PricingSource.Fallback => Localize("PricingSourceFallback", "Fallback (bundled)"),
+        _ => Localize("PricingSourceUnknown", "Unknown")
     };
 
-    public string LastPricingFetchText => _pricingService.LastFetch.HasValue
-        ? _pricingService.LastFetch.Value.LocalDateTime.ToString("dd.MM.yyyy HH:mm")
-        : "Nie";
+    /// <summary>
+    /// Reads a resw value through the localizer, falling back to the given en-US literal. The
+    /// fallback only ever renders when the key is missing from both dictionaries — WinUI3Localizer
+    /// returns an empty string in that case, and an empty label is worse than an untranslated one.
+    /// </summary>
+    private static string Localize(string uid, string enUsFallback)
+    {
+        var localized = Localizer.Get().GetLocalizedString(uid);
+        return string.IsNullOrWhiteSpace(localized) ? enUsFallback : localized;
+    }
+
+    /// <summary>Opens the page-level error InfoBar with a localized, non-technical message.</summary>
+    private void ShowError(string uid, string enUsFallback)
+    {
+        ErrorMessage = Localize(uid, enUsFallback);
+        IsErrorVisible = true;
+    }
+
+    private void ClearError()
+    {
+        IsErrorVisible = false;
+        ErrorMessage = string.Empty;
+    }
 
     /// <summary>
     /// Localized "X minutes ago" string for the About tab. Re-evaluated on each
@@ -178,6 +223,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         var liveSessions = _jsonlService.Sessions;
         var liveIds = new HashSet<string>(liveSessions.Select(s => s.Id), StringComparer.Ordinal);
+        var clearLabel = Localize("SessionsClearNameTooltip", "Remove custom name");
 
         SessionRenameItems.Clear();
 
@@ -189,16 +235,13 @@ public partial class SettingsViewModel : ObservableObject
                 SessionId = s.Id,
                 DefaultName = s.DisplayName,
                 IsOrphan = false,
-                CustomName = _sessionNameStore.GetCustomName(s.Id) ?? string.Empty
+                CustomName = _sessionNameStore.GetCustomName(s.Id) ?? string.Empty,
+                ClearCustomNameCommand = ClearSessionCustomNameCommand,
+                ClearCustomNameLabel = clearLabel
             });
         }
 
         // Orphan custom names (D-08): sessions whose JSONL files are gone but a custom name persists.
-        // Detected by enumerating store keys not present in live IJsonlService.Sessions.
-        // The store does not expose enumeration; we discover orphans by reading session-names.json
-        // through a best-effort helper. For Phase 26 v1.5 we keep a minimum-API approach:
-        // orphans surface after a tab-activation snapshot refresh.
-        // (A future v1.6+ enumeration API on ISessionNameStore is deferred per O-01.)
         foreach (var orphanId in EnumerateOrphanIds(liveIds))
         {
             var custom = _sessionNameStore.GetCustomName(orphanId);
@@ -208,39 +251,23 @@ public partial class SettingsViewModel : ObservableObject
                 SessionId = orphanId,
                 DefaultName = orphanId,   // raw projectDirName as fallback label
                 IsOrphan = true,
-                CustomName = custom
+                CustomName = custom,
+                ClearCustomNameCommand = ClearSessionCustomNameCommand,
+                ClearCustomNameLabel = clearLabel
             });
         }
     }
 
-    private static IEnumerable<string> EnumerateOrphanIds(HashSet<string> liveIds)
+    /// <summary>
+    /// Store keys with no matching live session. The store owns session-names.json and exposes its
+    /// keys, so this no longer rebuilds the file path or re-parses the JSON behind the store's back.
+    /// </summary>
+    private IEnumerable<string> EnumerateOrphanIds(HashSet<string> liveIds)
     {
-        // Best-effort orphan discovery: read session-names.json directly. Failure returns empty
-        // (orphans hidden until next activation). No exception propagates to the UI. (T-26-12 mitigated)
-        // Note: yield-in-try/catch is not valid C#; use a separate helper that returns a snapshot list.
-        var keys = TryReadSessionNamesKeys();
+        var keys = _sessionNameStore.GetKnownSessionIds();
         foreach (var key in keys)
         {
             if (!liveIds.Contains(key)) yield return key;
-        }
-    }
-
-    private static List<string> TryReadSessionNamesKeys()
-    {
-        try
-        {
-            var path = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "CCInfoWindows", "session-names.json");
-            if (!File.Exists(path)) return new List<string>();
-            var json = File.ReadAllText(path);
-            var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json);
-            return dict?.Keys.ToList() ?? new List<string>();
-        }
-        catch
-        {
-            // Intentional: best-effort read — never propagate to UI (T-26-12 mitigated)
-            return new List<string>();
         }
     }
 
@@ -260,7 +287,8 @@ public partial class SettingsViewModel : ObservableObject
             // Reflect sanitized value back to the bound TextBox (e.g. control chars stripped):
             item.CustomName = sanitized;
         }
-        await _sessionNameStore.SaveAsync();
+
+        await PersistSessionNamesAsync(item);
     }
 
     [RelayCommand]
@@ -269,7 +297,22 @@ public partial class SettingsViewModel : ObservableObject
         if (item == null) return;
         _sessionNameStore.ClearCustomName(item.SessionId);
         item.CustomName = string.Empty;
-        await _sessionNameStore.SaveAsync();
+
+        await PersistSessionNamesAsync(item);
+    }
+
+    /// <summary>
+    /// The store mutates its map and raises NameChanged before writing, so a failed write has
+    /// already rolled the map back by the time SaveAsync returns false. Re-reading the store instead
+    /// of keeping the optimistic value is what stops the row from displaying a name that is not on
+    /// disk; the InfoBar tells the user, and the technical detail is already in AppLog.
+    /// </summary>
+    private async Task PersistSessionNamesAsync(SessionRenameItem item)
+    {
+        if (await _sessionNameStore.SaveAsync()) return;
+
+        item.CustomName = _sessionNameStore.GetCustomName(item.SessionId) ?? string.Empty;
+        ShowError("SettingsSessionNameSaveFailed", "The session name could not be saved.");
     }
 
     /// <summary>Called from SettingsView.OnLoaded — subscribe to NameChanged + initial snapshot.</summary>
@@ -343,8 +386,6 @@ public partial class SettingsViewModel : ObservableObject
         _usageNotificationService = usageNotificationService;
     }
 
-    private static readonly int[] ThresholdMinuteOptions = [15, 30, 60, 120];
-
     /// <summary>
     /// Loads persisted settings and binds them to observable properties.
     /// Called on page Loaded event.
@@ -353,11 +394,12 @@ public partial class SettingsViewModel : ObservableObject
     {
         var settings = _settingsService.LoadSettings();
         _selectedRefreshOption = RefreshOptions.FirstOrDefault(o => o.Seconds == settings.RefreshIntervalSeconds)
-                                 ?? RefreshOptions.First(o => o.Seconds == DefaultRefreshSeconds);
-        _isDarkMode = settings.ColorMode != "light"; // default dark
+                                 ?? RefreshOptions.First(o => o.Seconds == AppSettings.DefaultRefreshIntervalSeconds);
+        _isDarkMode = settings.ColorMode != AppSettings.LightColorMode; // default dark
         _selectedThresholdIndex = MapMinutesToThresholdIndex(settings.SessionActivityThresholdMinutes);
         _isAutostart = RegistryHelper.GetAutostart();
-        _selectedLanguageIndex = settings.Language == "en-US" ? 1 : 0;
+        _selectedLanguageIndex = MapLanguageToIndex(settings.Language);
+        _appliedLanguageIndex = _selectedLanguageIndex;
         _selectedVisibilityWindowIndex = MapVisibilityDaysToIndex(settings.SessionVisibilityWindowDays);
 
         OnPropertyChanged(nameof(SelectedRefreshOption));
@@ -396,32 +438,79 @@ public partial class SettingsViewModel : ObservableObject
 
     partial void OnSelectedLanguageIndexChanged(int value)
     {
-        if (value >= 0 && value < LanguageCodes.Length)
+        if (_isRevertingLanguage) return;   // our own revert echo, not a user choice
+        if (value < 0 || value >= AppSettings.SupportedLanguages.Length) return;
+
+        // Deliberately not wrapped in Task.Run: WinUI3Localizer 2.3.0 calls SetValue on thread-affine
+        // XAML DependencyObjects and contains no dispatcher marshaling of its own, so SetLanguage must
+        // run on the UI thread. This callback is only ever reached from the ComboBox's TwoWay binding
+        // (Initialize assigns the backing field), so the awaited continuation resumes there too.
+        //
+        // The task is discarded because an [ObservableProperty] change callback cannot be async; it
+        // catches everything internally, so nothing is left unobserved.
+        _ = ApplyLanguageAsync(AppSettings.SupportedLanguages[value], value);
+    }
+
+    /// <summary>
+    /// Applies the language, then persists it. The old order committed settings.json before the
+    /// switch could report failure, so a throwing SetLanguage left the file claiming a language the
+    /// screen was not showing.
+    /// </summary>
+    private async Task ApplyLanguageAsync(string languageCode, int languageIndex)
+    {
+        try
         {
-            var code = LanguageCodes[value];
-            _ = Task.Run(async () =>
-            {
-                try { await Localizer.Get().SetLanguage(code); }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Settings] SetLanguage failed: {ex.Message}"); }
-            });
+            await LanguageSwitcher(languageCode);
+
             var settings = _settingsService.LoadSettings();
-            settings.Language = code;
+            settings.Language = languageCode;
             _settingsService.SaveSettings(settings);
+
+            _appliedLanguageIndex = languageIndex;
+            ClearError();
+
+            // VM-computed strings are not DependencyObjects, so the localizer cannot re-apply them.
+            OnPropertyChanged(nameof(PricingSourceText));
+            OnPropertyChanged(nameof(LastFetchRelativeTime));
         }
+        catch (Exception ex)
+        {
+            AppLog.Write($"{nameof(SettingsViewModel)}.{nameof(ApplyLanguageAsync)}", ex,
+                $"language switch to {languageCode} failed");
+            RevertLanguageSelection();
+            ShowError("SettingsLanguageChangeFailed", "The display language could not be changed.");
+        }
+    }
+
+    /// <summary>
+    /// Puts the dropdown back on the language that is actually active. The guard swallows the
+    /// resulting change notification, which would otherwise retry the failing switch in a loop.
+    /// </summary>
+    private void RevertLanguageSelection()
+    {
+        _isRevertingLanguage = true;
+        try { SelectedLanguageIndex = _appliedLanguageIndex; }
+        finally { _isRevertingLanguage = false; }
+    }
+
+    private static int MapLanguageToIndex(string? language)
+    {
+        var index = AppSettings.SupportedLanguages.IndexOf(language ?? string.Empty);
+        return index >= 0 ? index : DefaultLanguageIndex;
     }
 
     private static int MapThresholdIndexToMinutes(int index)
     {
-        if (index >= 0 && index < ThresholdMinuteOptions.Length)
-            return ThresholdMinuteOptions[index];
+        if (index >= 0 && index < AppSettings.SupportedSessionActivityThresholdMinutes.Length)
+            return AppSettings.SupportedSessionActivityThresholdMinutes[index];
 
-        return ThresholdMinuteOptions[1]; // default 30 minutes
+        return AppSettings.DefaultSessionActivityThresholdMinutes;
     }
 
     private static int MapMinutesToThresholdIndex(int minutes)
     {
-        var index = Array.IndexOf(ThresholdMinuteOptions, minutes);
-        return index >= 0 ? index : 1; // default to index 1 (30 minutes)
+        var index = AppSettings.SupportedSessionActivityThresholdMinutes.IndexOf(minutes);
+        return index >= 0 ? index : DefaultThresholdIndex;
     }
 
     partial void OnSelectedVisibilityWindowIndexChanged(int value)
@@ -436,19 +525,19 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     private static int MapIndexToVisibilityDays(int index) =>
-        (index >= 0 && index < VisibilityWindowDayOptions.Length)
-            ? VisibilityWindowDayOptions[index]
-            : VisibilityWindowDayOptions[DefaultVisibilityWindowIndex];
+        (index >= 0 && index < AppSettings.SupportedSessionVisibilityWindowDays.Length)
+            ? AppSettings.SupportedSessionVisibilityWindowDays[index]
+            : AppSettings.DefaultSessionVisibilityWindowDays;
 
     private static int MapVisibilityDaysToIndex(int days)
     {
-        var index = Array.IndexOf(VisibilityWindowDayOptions, days);
+        var index = AppSettings.SupportedSessionVisibilityWindowDays.IndexOf(days);
         return index >= 0 ? index : DefaultVisibilityWindowIndex;
     }
 
     partial void OnIsDarkModeChanged(bool value)
     {
-        var colorMode = value ? "dark" : "light";
+        var colorMode = value ? AppSettings.DarkColorMode : AppSettings.LightColorMode;
         var settings = _settingsService.LoadSettings();
         settings.ColorMode = colorMode;
         _settingsService.SaveSettings(settings);
@@ -474,6 +563,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         _historyService.ClearHistory();                                              // D-13 ordering trap mitigation — must come FIRST
         _credentialService.ClearCredentials();
+        _apiService.ClearCache();                                                    // usage_cache.json outlived the session and rendered on the next login
         _usageNotificationService.CancelAll();                                       // direct DI, not a message (D-13)
         WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
         _navigationService.NavigateTo<LoginView>();

@@ -34,6 +34,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -51,8 +52,18 @@
                        VerticalAlignment="Center" CharacterSpacing="50" />
         </StackPanel>
 
-        <!-- Row 1: Segmented Control — 5 tabs with colored icon badges -->
-        <controls:Segmented Grid.Row="1"
+        <!-- Row 1: page-level failure surface — language switch and session-name persistence report
+             here instead of failing silently. Message text is resolved in the ViewModel. -->
+        <InfoBar Grid.Row="1"
+                 Severity="Error"
+                 IsOpen="{x:Bind ViewModel.IsErrorVisible, Mode=TwoWay}"
+                 Visibility="{x:Bind ViewModel.IsErrorVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                 Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                 IsClosable="True"
+                 Margin="0,0,0,8" />
+
+        <!-- Row 2: Segmented Control — 5 tabs with colored icon badges -->
+        <controls:Segmented Grid.Row="2"
             x:Name="TabsSegmented"
             HorizontalAlignment="Stretch"
             Margin="0,0,0,12"
@@ -111,8 +122,8 @@
 
         </controls:Segmented>
 
-        <!-- Row 2: Tab content panels in ScrollViewer -->
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+        <!-- Row 3: Tab content panels in ScrollViewer -->
+        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
             <Grid>
 
                 <!-- PANEL 1 — General Tab -->
@@ -178,10 +189,10 @@
                                           l:Uids.Uid="SessionTimeoutComboBox"
                                           SelectedIndex="{x:Bind ViewModel.SelectedThresholdIndex, Mode=TwoWay}"
                                           VerticalAlignment="Center">
-                                    <ComboBoxItem Content="15min" />
-                                    <ComboBoxItem Content="30min" />
-                                    <ComboBoxItem Content="60min" />
-                                    <ComboBoxItem Content="120min" />
+                                    <ComboBoxItem l:Uids.Uid="Timeout15" />
+                                    <ComboBoxItem l:Uids.Uid="Timeout30" />
+                                    <ComboBoxItem l:Uids.Uid="Timeout60" />
+                                    <ComboBoxItem l:Uids.Uid="Timeout120" />
                                 </ComboBox>
                             </Grid>
 
@@ -460,15 +471,19 @@
                                                  Tag="{x:Bind}"
                                                  VerticalAlignment="Center" />
 
-                                        <!-- Clear button -->
+                                        <!-- Clear button. Command and label are projected onto the row
+                                             by the ViewModel: a DataTemplate opens its own namescope,
+                                             so {Binding ElementName=…} cannot see page-level elements
+                                             and x:Bind cannot see the page. The glyph is the button's
+                                             only content, so the label is also its automation name. -->
                                         <Button Grid.Column="2" Grid.RowSpan="2"
-                                                Command="{Binding DataContext.ClearSessionCustomNameCommand,
-                                                          ElementName=SettingsRootGrid}"
+                                                Command="{x:Bind ClearCustomNameCommand}"
                                                 CommandParameter="{x:Bind}"
                                                 Background="Transparent"
                                                 BorderThickness="0"
                                                 VerticalAlignment="Center"
-                                                ToolTipService.ToolTip="&#xE894;">
+                                                AutomationProperties.Name="{x:Bind ClearCustomNameLabel}"
+                                                ToolTipService.ToolTip="{x:Bind ClearCustomNameLabel}">
                                             <FontIcon Glyph="&#xE894;" FontSize="14" />
                                         </Button>
                                     </Grid>
