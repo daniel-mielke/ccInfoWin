@@ -63,8 +63,12 @@ public static class CountdownFormatter
 
     /// <summary>
     /// Renders <paramref name="value"/> in local time using the pattern the active language stores
-    /// under <paramref name="patternUid"/>. Shared by every label whose field order is a translated
-    /// resource rather than a literal — the weekly reset date and the 5-hour next-window label.
+    /// under <paramref name="patternUid"/> — the dictionary-reading entry point for labels whose field
+    /// order is a translated resource rather than a literal.
+    ///
+    /// The 5-hour next-window label composes the same two primitives instead of calling this, because it
+    /// attributes a failed pattern read to itself in the log; <see cref="FormatWithPattern"/> is the part
+    /// both share.
     /// </summary>
     internal static string FormatWithLocalePattern(DateTimeOffset value, string patternUid, CultureInfo culture)
         => FormatWithPattern(value, LocalizedText.ResolveOrNull(patternUid, LogSource), patternUid, culture);

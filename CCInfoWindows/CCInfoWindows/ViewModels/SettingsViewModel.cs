@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Globalization;
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Messages;
 using CCInfoWindows.Models;
@@ -151,6 +150,12 @@ public partial class SettingsViewModel : ObservableObject
     /// Reads a resw value through the localizer, falling back to the given en-US literal. The
     /// fallback only ever renders when the key is missing from both dictionaries — WinUI3Localizer
     /// returns an empty string in that case, and an empty label is worse than an untranslated one.
+    ///
+    /// Deliberately NOT routed through Helpers/LocalizedText: that shared rule also rejects an echoed
+    /// uid, and the echo is what SettingsViewModelTests and SettingsViewModelTimerTests use to assert
+    /// WHICH key a label reached for (see HeadlessLocalizerContractTests). Converting this without
+    /// converting those assertions in the same commit turns them from "the right key" into "some
+    /// non-blank string" — see the cross-file request filed with the 2026-08-06 finding-30 wave.
     /// </summary>
     private static string Localize(string uid, string enUsFallback)
     {
@@ -173,8 +178,13 @@ public partial class SettingsViewModel : ObservableObject
 
     /// <summary>
     /// Localized "X minutes ago" string for the About tab. Re-evaluated on each
-    /// _aboutTimestampTimer Tick (D-09, D-11). L10N-01: 5 categories backed by
-    /// LastFetchRelative.* resw keys; switches DE/EN via CurrentUICulture.
+    /// _aboutTimestampTimer Tick (D-09, D-11). L10N-01: 5 categories backed by the single-segment resw
+    /// keys LastFetchNever / LastFetchJustNow / LastFetchMinutesAgo / LastFetchHoursAgo /
+    /// LastFetchDaysAgo, at the 30 s, 60 min and 24 h boundaries.
+    ///
+    /// Single-segment on purpose, and the doc said "LastFetchRelative.*" until the 2026-08-06 review:
+    /// WinUI3Localizer 2.3.0 keys its dictionary on the text before the FIRST '.', so every dotted key
+    /// the old comment named would resolve to an empty label.
     /// </summary>
     public string LastFetchRelativeTime
     {
@@ -458,7 +468,11 @@ public partial class SettingsViewModel : ObservableObject
         try
         {
             await LanguageSwitcher(languageCode);
-            ApplyUiCulture(languageCode);
+
+            // After the switch, never before: a failed switch must not leave the culture claiming a
+            // language the screen is not showing. UiCulture logs and ignores a name the system cannot
+            // resolve, so a globalization failure is not reported to the user as a failed switch.
+            UiCulture.Apply(languageCode, $"{nameof(SettingsViewModel)}.{nameof(ApplyLanguageAsync)}");
 
             var settings = _settingsService.LoadSettings();
             settings.Language = languageCode;
@@ -477,33 +491,6 @@ public partial class SettingsViewModel : ObservableObject
                 $"language switch to {languageCode} failed");
             RevertLanguageSelection();
             ShowError("SettingsLanguageChangeFailed", "The display language could not be changed.");
-        }
-    }
-
-    /// <summary>
-    /// Points <see cref="CultureInfo.CurrentUICulture"/> at the language the localizer just applied.
-    /// WinUI3Localizer only swaps resw values, so without this the resw-supplied date patterns render
-    /// with the OS language's day and month names — CountdownFormatter.FormatResetDate and
-    /// MainViewModel's next-window label both format through CurrentUICulture.
-    ///
-    /// CurrentCulture is deliberately NOT changed: number, currency and regional date formatting is an
-    /// OS user setting that a display-language choice must not override, and every numeric formatter
-    /// here (CostFormatter, TokenFormatter) is already pinned to InvariantCulture. App does the same at
-    /// startup. The local catch keeps a globalization failure from being reported to the user as a
-    /// failed language switch — the switch itself already succeeded.
-    /// </summary>
-    private static void ApplyUiCulture(string languageCode)
-    {
-        try
-        {
-            var culture = CultureInfo.GetCultureInfo(languageCode);
-            CultureInfo.DefaultThreadCurrentUICulture = culture;
-            CultureInfo.CurrentUICulture = culture;
-        }
-        catch (CultureNotFoundException ex)
-        {
-            AppLog.Write($"{nameof(SettingsViewModel)}.{nameof(ApplyUiCulture)}", ex,
-                $"'{languageCode}' is not a culture this system knows");
         }
     }
 

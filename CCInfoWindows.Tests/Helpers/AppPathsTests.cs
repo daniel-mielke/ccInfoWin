@@ -149,8 +149,9 @@ internal static class ProductionSourceFiles
         || path.Contains(@"\bin\", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Walks up from the test output directory to the app's source root — the compiled assembly
-    /// carries no source. AppHostConventionTests still keeps its own copy of this walk.
+    /// Walks up from the test output directory to the app's source root — the compiled assembly carries
+    /// no source. The one copy: AppPathsTests, DiagnosticChannelConventionTests, ResourceCoverageTests,
+    /// ChartColorsTests and AppHostConventionTests all read through here.
     /// </summary>
     private static string LocateSourceRoot()
     {

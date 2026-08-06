@@ -227,24 +227,12 @@ public sealed partial class MainView : Page
             AppLog.Write(BootstrapLogSource, exception, reason);
         }
 
-        ViewModel.ApiErrorMessage = BootstrapFailureMessage();
+        // The shared rule also rejects an echoed uid, which this copy accepted: an unbuilt localizer —
+        // one of the very startup failures this banner reports — hands back the key it was asked for,
+        // so the InfoBar would have read "DashboardStartupFailedMessage" (finding 30).
+        ViewModel.ApiErrorMessage = LocalizedText.Resolve(
+            BootstrapFailureMessageKey, BootstrapFailureFallbackMessage, BootstrapLogSource);
         ViewModel.HasApiError = true;
-    }
-
-    private static string BootstrapFailureMessage()
-    {
-        try
-        {
-            var localized = Localizer.Get().GetLocalizedString(BootstrapFailureMessageKey);
-            return string.IsNullOrWhiteSpace(localized) ? BootstrapFailureFallbackMessage : localized;
-        }
-        catch (Exception ex)
-        {
-            // Localizer.Get() throws when the localizer host never built — which is one of the startup
-            // failures this banner exists to report.
-            AppLog.Write(BootstrapLogSource, ex, "localized bootstrap-failure text unavailable");
-            return BootstrapFailureFallbackMessage;
-        }
     }
 
     /// <summary>

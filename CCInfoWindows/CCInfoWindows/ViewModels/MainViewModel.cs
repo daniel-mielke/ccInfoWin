@@ -930,8 +930,10 @@ public partial class MainViewModel : ObservableObject,
 
     /// <summary>
     /// NEXTWIN-01..03 (D-NW-02..04): recomputes the absolute next-window label from
-    /// _fiveHourResetsAt. Hides the label (Visibility=Collapsed) when ResetsAt is null OR
-    /// IsSessionExpired is true (auth banner takes priority — banner-stack alignment with PRICING).
+    /// _fiveHourResetsAt, with the field order taken from the active language's
+    /// <see cref="NextWindowPatternUid"/> entry. Hides the label (Visibility=Collapsed) when ResetsAt
+    /// is null OR IsSessionExpired is true (auth banner takes priority — banner-stack alignment with
+    /// PRICING).
     /// </summary>
     private void RecomputeNextWindowLabel()
     {
@@ -943,57 +945,25 @@ public partial class MainViewModel : ObservableObject,
         }
 
         FiveHourNextWindowText = FormatNextWindowLabel(
-            _fiveHourResetsAt.Value, ResolveNextWindowPattern(), CultureInfo.CurrentUICulture);
+            _fiveHourResetsAt.Value,
+            LocalizedText.ResolveOrNull(NextWindowPatternUid, NextWindowLogSource),
+            CultureInfo.CurrentUICulture);
         IsFiveHourNextWindowVisible = true;
     }
 
     /// <summary>
-    /// Pattern-and-culture overload, internal so the formatting can be asserted without a
-    /// WinUI3Localizer host. The layout comes from the active language's resw entry rather than from
-    /// a `culture.Name.StartsWith("de")` branch, which silently gave every third language the
-    /// English field order. A missing or malformed pattern degrades to a culture-derived one.
+    /// Names this label's pattern uid for the shared formatter, and stays internal so the formatting
+    /// can be asserted without a WinUI3Localizer host. The layout comes from the active language's resw
+    /// entry rather than from a `culture.Name.StartsWith("de")` branch, which silently gave every third
+    /// language the English field order; a missing or malformed pattern degrades to a culture-derived
+    /// one instead of throwing into the caller's UI update.
+    ///
+    /// The body used to be a second copy of CountdownFormatter's — same try/ToString/catch, same
+    /// culture-derived fallback — so a hardening applied to the weekly reset date silently skipped this
+    /// label (finding 30).
     /// </summary>
     internal static string FormatNextWindowLabel(DateTimeOffset resetsAt, string? pattern, CultureInfo culture)
-    {
-        var localTime = resetsAt.LocalDateTime;
-
-        if (!string.IsNullOrWhiteSpace(pattern))
-        {
-            try
-            {
-                return localTime.ToString(pattern, culture);
-            }
-            catch (FormatException ex)
-            {
-                AppLog.Write(
-                    NextWindowLogSource,
-                    ex,
-                    $"'{NextWindowPatternUid}' = \"{pattern}\" is not a valid custom date format string.");
-            }
-        }
-
-        return localTime.ToString(CountdownFormatter.CultureDefaultPattern(culture), culture);
-    }
-
-    /// <summary>
-    /// Reads the pattern of the active language, or null when the answer cannot be trusted: an
-    /// unbuilt localizer echoes the uid back and a built one returns empty for an unknown uid.
-    /// </summary>
-    private static string? ResolveNextWindowPattern()
-    {
-        try
-        {
-            var pattern = Localizer.Get().GetLocalizedString(NextWindowPatternUid);
-            return string.IsNullOrWhiteSpace(pattern) || pattern == NextWindowPatternUid
-                ? null
-                : pattern;
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write(NextWindowLogSource, ex, $"could not read '{NextWindowPatternUid}'.");
-            return null;
-        }
-    }
+        => CountdownFormatter.FormatWithPattern(resetsAt, pattern, NextWindowPatternUid, culture);
 
     /// <summary>
     /// Releases everything this ViewModel owns: its two timers and its event subscriptions. Call from
@@ -1105,7 +1075,7 @@ public partial class MainViewModel : ObservableObject,
     /// </summary>
     private void ReportActionError(string uid, string fallback, string logSource)
     {
-        ActionErrorMessage = LocalizedOrFallback(uid, fallback, logSource);
+        ActionErrorMessage = LocalizedText.Resolve(uid, fallback, logSource);
         HasActionError = true;
     }
 
@@ -1113,25 +1083,6 @@ public partial class MainViewModel : ObservableObject,
     {
         HasActionError = false;
         ActionErrorMessage = string.Empty;
-    }
-
-    /// <summary>
-    /// Resolves a banner sentence, falling back to English when the dictionary cannot answer: an
-    /// unbuilt localizer echoes the uid back and a built one returns empty for an unknown uid, and a
-    /// banner showing a resource key tells the user nothing.
-    /// </summary>
-    private static string LocalizedOrFallback(string uid, string fallback, string logSource)
-    {
-        try
-        {
-            var text = Localizer.Get().GetLocalizedString(uid);
-            return string.IsNullOrWhiteSpace(text) || text == uid ? fallback : text;
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write(logSource, ex, $"could not read '{uid}'.");
-            return fallback;
-        }
     }
 
     /// <summary>Lookup helper for the View — exposes whether a custom name currently exists.</summary>

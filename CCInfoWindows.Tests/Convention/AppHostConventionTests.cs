@@ -1,3 +1,5 @@
+using CCInfoWindows.Tests.Helpers;
+
 namespace CCInfoWindows.Tests.Convention;
 
 /// <summary>
@@ -7,10 +9,14 @@ namespace CCInfoWindows.Tests.Convention;
 /// installer script and ResourceCoverageTests asserts the resw files.
 ///
 /// Two ViewModel invariants are asserted the same way, deliberately: WHO owns a singleton's lifecycle
-/// (finding 29) and WHICH global the language switch aligns (the localisation follow-up). Both are
-/// statements about call sites rather than about observable state, and the alternative for the second —
-/// a test that sets CultureInfo.DefaultThreadCurrentUICulture — would mutate process-global state that
-/// a parallel test collection reads (finding 33).
+/// (finding 29) and THAT the language switch aligns the UI culture (the localisation follow-up). Both are
+/// statements about call sites rather than about observable state — for the second, a test that let the
+/// real assignment run would mutate process-global culture state that a parallel test collection reads
+/// (finding 33). What the alignment then DOES with the language is UiCultureTests' subject.
+///
+/// The source-root walk lives in Helpers/ProductionSourceFiles, shared with AppPathsTests,
+/// DiagnosticChannelConventionTests, ChartColorsTests and ResourceCoverageTests; this class carried a
+/// fourth private copy of it until the finding-30 wave.
 ///
 /// Covers findings 4, 10, 17, 18, 19, 29, 30, 34 and 40 of the 2026-08-06 repo review: the bootstrap's
 /// silent catch, the teardown that could outrun the setup, the navigation result that was thrown away,
@@ -22,10 +28,12 @@ public class AppHostConventionTests
 {
     private const string AppFile = "App.xaml.cs";
     private const string MainWindowFile = "MainWindow.xaml.cs";
-    private const string MainViewFile = @"Views\MainView.xaml.cs";
-    private const string MainViewModelFile = @"ViewModels\MainViewModel.cs";
-    private const string SettingsViewModelFile = @"ViewModels\SettingsViewModel.cs";
-    private const string SettingsViewFile = @"Views\SettingsView.xaml";
+    private const string MainViewFile = "MainView.xaml.cs";
+    private const string MainViewModelFile = "MainViewModel.cs";
+    private const string SettingsViewModelFile = "SettingsViewModel.cs";
+
+    /// <summary>Not a .cs file, so it is read by relative path rather than through the by-name index.</summary>
+    private const string SettingsViewXamlPath = @"Views\SettingsView.xaml";
 
     private static readonly string[] AppHostFiles = [AppFile, MainWindowFile, MainViewFile];
 
@@ -36,19 +44,19 @@ public class AppHostConventionTests
         // catch bodies are literally empty. AppLog is the Release-safe channel.
         foreach (var file in AppHostFiles)
         {
-            Assert.DoesNotContain("Debug.WriteLine", ReadAppSourceFile(file));
+            Assert.DoesNotContain("Debug.WriteLine", ProductionSourceFiles.Read(file));
         }
     }
 
     [Fact]
-    public void AppHostFiles_DeriveTheDataRootFromAppPaths()
+    public void App_WritesTheCrashLogAndTheDataRootThroughAppPaths()
     {
-        foreach (var file in AppHostFiles)
-        {
-            Assert.DoesNotContain("SpecialFolder.LocalApplicationData", ReadAppSourceFile(file));
-        }
+        // Only the positive half lives here. The negative half — "no file outside AppPaths derives the
+        // LOCALAPPDATA root" — used to be a three-file loop and is now a repo-wide scan in
+        // AppPathsTests, which strictly subsumes it. This half is not subsumed: App could stop writing a
+        // crash log altogether and that scan would still report a clean repo.
+        var app = ProductionSourceFiles.Read(AppFile);
 
-        var app = ReadAppSourceFile(AppFile);
         Assert.Contains("AppPaths.CrashLogFile", app);
         Assert.Contains("AppPaths.DataDirectory", app);
     }
@@ -58,21 +66,24 @@ public class AppHostConventionTests
     {
         // The zero-caller copy duplicated AppPaths.WebView2UserDataFolder; LoginViewModel and MainView
         // both resolve it from AppPaths.
-        Assert.DoesNotContain("WebView2UserDataFolder", ReadAppSourceFile(MainWindowFile));
+        Assert.DoesNotContain("WebView2UserDataFolder", ProductionSourceFiles.Read(MainWindowFile));
     }
 
     [Fact]
     public void MainView_SurfacesBootstrapFailuresInTheErrorBannerAndTheLog()
     {
-        var mainView = ReadAppSourceFile(MainViewFile);
+        var mainView = ProductionSourceFiles.Read(MainViewFile);
 
         Assert.Contains("ViewModel.HasApiError = true;", mainView);
         Assert.Contains("AppLog.Write(BootstrapLogSource", mainView);
 
         // Generic on screen, detail in the log (CLAUDE.md): the banner text must not interpolate the
-        // exception, and it must come from a single-segment localizer key.
+        // exception, and it must come from a single-segment localizer key resolved through the shared
+        // rule — the private copy that used to live here accepted an echoed uid, so an unbuilt localizer
+        // painted the resource key onto the InfoBar.
         Assert.DoesNotContain("ApiErrorMessage = $\"", mainView);
-        Assert.Contains("GetLocalizedString(BootstrapFailureMessageKey)", mainView);
+        Assert.Contains("LocalizedText.Resolve(", mainView);
+        Assert.DoesNotContain("GetLocalizedString(BootstrapFailureMessageKey)", mainView);
 
         // WinUI3Localizer 2.3.0 splits resw keys at the first dot, so a multi-segment key returns empty.
         var messageKey = BootstrapFailureMessageKeyValue(mainView);
@@ -82,7 +93,7 @@ public class AppHostConventionTests
     [Fact]
     public void MainView_StopsWhatItStartedWhenTeardownRacesTheBootstrap()
     {
-        var mainView = ReadAppSourceFile(MainViewFile);
+        var mainView = ProductionSourceFiles.Read(MainViewFile);
 
         Assert.Contains("_bootstrapCancellation?.Cancel();", mainView);
         Assert.Contains("if (bootstrap.IsCancellationRequested) return;", mainView);
@@ -95,7 +106,7 @@ public class AppHostConventionTests
     [Fact]
     public void MainView_TreatsAFailedBridgeNavigationAsAFailureAndBoundsTheWait()
     {
-        var mainView = ReadAppSourceFile(MainViewFile);
+        var mainView = ProductionSourceFiles.Read(MainViewFile);
 
         // A handler typed (object, object) discards IsSuccess, so an error page looked like a loaded page.
         Assert.Contains("CoreWebView2NavigationCompletedEventArgs args", mainView);
@@ -107,7 +118,7 @@ public class AppHostConventionTests
     [Fact]
     public void MainView_ReleasesTheHiddenBridgeWebViewOnUnload()
     {
-        var mainView = ReadAppSourceFile(MainViewFile);
+        var mainView = ProductionSourceFiles.Read(MainViewFile);
 
         Assert.Contains("ApiBridgeWebView.Close();", mainView);
 
@@ -121,7 +132,7 @@ public class AppHostConventionTests
     [Fact]
     public void App_RecordsEveryUnhandledExceptionBeforeSwallowingIt()
     {
-        var app = ReadAppSourceFile(AppFile);
+        var app = ProductionSourceFiles.Read(AppFile);
 
         Assert.Contains("AppLog.Write(UnhandledExceptionLogSource, e.Exception);", app);
         Assert.Contains("AppLog.Write(LaunchLogSource, ex);", app);
@@ -134,7 +145,7 @@ public class AppHostConventionTests
     [Fact]
     public void App_DegradesToTheDefaultLanguageInsteadOfRefusingToStart()
     {
-        var app = ReadAppSourceFile(AppFile);
+        var app = ProductionSourceFiles.Read(AppFile);
 
         Assert.Contains("await ApplyPersistedLanguageAsync(appSettings.Language);", app);
         Assert.DoesNotContain("await Localizer.Get().SetLanguage(appSettings.Language);", app);
@@ -147,10 +158,13 @@ public class AppHostConventionTests
         // WinUI3Localizer only swaps resw values. Without this the resw-supplied date patterns render
         // with the OS language's day and month names, because CountdownFormatter.FormatResetDate and
         // MainViewModel's next-window label format through CultureInfo.CurrentUICulture.
-        var app = ReadAppSourceFile(AppFile);
+        var app = ProductionSourceFiles.Read(AppFile);
 
-        Assert.Contains("CultureInfo.DefaultThreadCurrentUICulture = culture;", app);
-        Assert.Contains("CultureInfo.CurrentUICulture = culture;", app);
+        // Both branches: the persisted language, and the default the app degrades to when that value is
+        // rejected. The second one is the easy one to forget, and forgetting it leaves the culture on the
+        // OS language while the screen speaks the fallback one.
+        Assert.Contains("UiCulture.Apply(requested, LocalizerLogSource);", app);
+        Assert.Contains("UiCulture.Apply(DefaultLanguage, LocalizerLogSource);", app);
 
         // Deliberate: regional number and date formatting is an OS user setting that a display-language
         // choice must not override, and every numeric formatter here is InvariantCulture-pinned. If this
@@ -164,18 +178,17 @@ public class AppHostConventionTests
         // The startup path and the Settings dropdown are the only two places the language changes, and
         // both have to move CurrentUICulture with it — a switch that only swaps resw values leaves the
         // localized date patterns rendering another language's day and month names.
-        var settingsViewModel = ReadAppSourceFile(SettingsViewModelFile);
+        var settingsViewModel = ProductionSourceFiles.Read(SettingsViewModelFile);
 
-        Assert.Contains("ApplyUiCulture(languageCode);", settingsViewModel);
-        Assert.Contains("CultureInfo.DefaultThreadCurrentUICulture = culture;", settingsViewModel);
+        Assert.Contains("UiCulture.Apply(languageCode", settingsViewModel);
         Assert.DoesNotContain("DefaultThreadCurrentCulture", settingsViewModel);
 
         // Order: the culture may only move once the localizer has accepted the language, otherwise a
         // failed switch would leave the two disagreeing in the opposite direction.
         var switchIndex = settingsViewModel.IndexOf("await LanguageSwitcher(languageCode);", StringComparison.Ordinal);
-        var cultureIndex = settingsViewModel.IndexOf("ApplyUiCulture(languageCode);", StringComparison.Ordinal);
+        var cultureIndex = settingsViewModel.IndexOf("UiCulture.Apply(languageCode", StringComparison.Ordinal);
         Assert.True(switchIndex >= 0 && switchIndex < cultureIndex,
-            "ApplyUiCulture must run after the localizer switch has succeeded.");
+            "UiCulture.Apply must run after the localizer switch has succeeded.");
     }
 
     [Fact]
@@ -184,7 +197,7 @@ public class AppHostConventionTests
         // Finding 29: IJsonlService (FileSystemWatcher + debounce timer) and IUpdateService (hourly
         // PeriodicTimer) are singletons whose Start/Stop used to be driven by a transient ViewModel
         // through MainView's visual-tree membership.
-        var app = ReadAppSourceFile(AppFile);
+        var app = ProductionSourceFiles.Read(AppFile);
 
         Assert.Contains("StartBackgroundServices();", app);
         Assert.Contains("jsonlService.InitializeAsync()", app);
@@ -198,7 +211,7 @@ public class AppHostConventionTests
     [Fact]
     public void MainWindow_StopsTheLifecycleOwningSingletonsOnClose()
     {
-        var mainWindow = ReadAppSourceFile(MainWindowFile);
+        var mainWindow = ProductionSourceFiles.Read(MainWindowFile);
 
         Assert.Contains("_jsonlService.Stop();", mainWindow);
         Assert.Contains("_updateService.StopPeriodicCheck();", mainWindow);
@@ -216,7 +229,7 @@ public class AppHostConventionTests
         // The other half of finding 29: MainViewModel is AddTransient. It may read from these services
         // and subscribe to their events, but starting or stopping them from here tore the watcher down
         // on every Settings round-trip — and could stop services a newer MainView was already using.
-        var mainViewModel = ReadAppSourceFile(MainViewModelFile);
+        var mainViewModel = ProductionSourceFiles.Read(MainViewModelFile);
 
         Assert.DoesNotContain("_jsonlService.InitializeAsync()", mainViewModel);
         Assert.DoesNotContain("_jsonlService.Stop()", mainViewModel);
@@ -237,12 +250,12 @@ public class AppHostConventionTests
         // Finding 18: MainViewModel carried a more complete-looking Logout bound in no XAML file, so a
         // maintainer could fix a logout bug there, watch MainViewModelAuthFlowTests go green, and ship a
         // change no user could reach. IWebViewBridge was that command's only use of the dependency.
-        var mainViewModel = ReadAppSourceFile(MainViewModelFile);
+        var mainViewModel = ProductionSourceFiles.Read(MainViewModelFile);
 
         Assert.DoesNotContain("IWebViewBridge", mainViewModel);
         Assert.DoesNotContain("private void Logout()", mainViewModel);
 
-        Assert.Contains("ViewModel.LogoutCommand", ReadAppSourceFile(SettingsViewFile));
+        Assert.Contains("ViewModel.LogoutCommand", ReadSettingsViewXaml());
     }
 
     /// <summary>Extracts the ApplyPersistedLanguageAsync body so the guard cannot be asserted from elsewhere.</summary>
@@ -286,27 +299,17 @@ public class AppHostConventionTests
         return count;
     }
 
-    private static string ReadAppSourceFile(string relativePath) =>
-        File.ReadAllText(Path.Combine(FindAppSourceDirectory(), relativePath));
-
     /// <summary>
-    /// Walks up from the test output directory to the app's source root (mirrors the locator in
-    /// ResourceCoverageTests — the compiled assembly carries no source).
+    /// The one assertion target that is not C#. ProductionSourceFiles indexes *.cs by file name, so the
+    /// XAML is read from the source root it already resolves — which is why the fourth private copy of
+    /// that directory walk could be deleted from this class.
     /// </summary>
-    private static string FindAppSourceDirectory()
+    private static string ReadSettingsViewXaml()
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory != null)
-        {
-            var candidate = Path.Combine(directory.FullName, "CCInfoWindows", "CCInfoWindows");
-            if (File.Exists(Path.Combine(candidate, AppFile)))
-            {
-                return candidate;
-            }
-            directory = directory.Parent;
-        }
+        var path = Path.Combine(ProductionSourceFiles.Root, SettingsViewXamlPath);
 
-        throw new InvalidOperationException(
-            $"Could not locate the app source directory ({AppFile}) from {AppContext.BaseDirectory}.");
+        Assert.True(File.Exists(path), $"{SettingsViewXamlPath} not found under {ProductionSourceFiles.Root}.");
+
+        return File.ReadAllText(path);
     }
 }

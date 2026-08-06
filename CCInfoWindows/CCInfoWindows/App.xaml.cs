@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net.Http;
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Services;
@@ -139,7 +138,7 @@ public partial class App : Application
         try
         {
             await Localizer.Get().SetLanguage(requested);
-            ApplyUiCulture(requested);
+            UiCulture.Apply(requested, LocalizerLogSource);
         }
         catch (Exception ex)
         {
@@ -149,32 +148,7 @@ public partial class App : Application
                 LocalizerLogSource,
                 ex,
                 $"unsupported persisted language '{requested}', falling back to {DefaultLanguage}");
-            ApplyUiCulture(DefaultLanguage);
-        }
-    }
-
-    /// <summary>
-    /// Points <see cref="CultureInfo.CurrentUICulture"/> at the language the localizer is showing.
-    /// WinUI3Localizer only swaps resw values, so without this the resw-supplied date patterns render
-    /// with the OS language's day and month names — CountdownFormatter.FormatResetDate and
-    /// MainViewModel's next-window label both format through CurrentUICulture.
-    ///
-    /// CurrentCulture is deliberately left on the OS regional setting: which language the UI speaks and
-    /// how the user wants numbers and dates formatted are independent Windows settings, and every
-    /// numeric formatter in this app is pinned to InvariantCulture anyway. SettingsViewModel repeats
-    /// this for the runtime language switch, which is the only other place the language changes.
-    /// </summary>
-    private static void ApplyUiCulture(string language)
-    {
-        try
-        {
-            var culture = CultureInfo.GetCultureInfo(language);
-            CultureInfo.DefaultThreadCurrentUICulture = culture;
-            CultureInfo.CurrentUICulture = culture;
-        }
-        catch (CultureNotFoundException ex)
-        {
-            AppLog.Write(LocalizerLogSource, ex, $"'{language}' is not a culture this system knows");
+            UiCulture.Apply(DefaultLanguage, LocalizerLogSource);
         }
     }
 

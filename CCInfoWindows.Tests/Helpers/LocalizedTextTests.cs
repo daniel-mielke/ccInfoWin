@@ -8,6 +8,10 @@ namespace CCInfoWindows.Tests.Helpers;
 /// CountdownFormatter's date pattern, MainViewModel's action banner) disagreed on what counts as an
 /// unusable answer, which is exactly the class of defect finding 30 is about.
 ///
+/// SettingsViewModel.Localize is a fifth, weaker copy that is deliberately still standing: its callers'
+/// tests assert WHICH key was reached for, and headlessly that signal IS the echoed uid this rule
+/// rejects. Converting it needs those assertions converted in the same commit.
+///
 /// The exception path is asserted by its observable contract — fallback returned, nothing thrown.
 /// AppLogTests owns the assertions about what reaches the sink.
 /// </summary>
@@ -16,6 +20,19 @@ public class LocalizedTextTests
     private const string Uid = "SomeCaptionUid";
     private const string Fallback = "Fallback caption";
     private const string LogSource = nameof(LocalizedTextTests);
+
+    /// <summary>
+    /// The files that each carried one of the converted copies. Named by file rather than scanned by
+    /// shape because the four spellings of the rule shared no literal text — one tested
+    /// <c>text == uid</c>, one compared against its own pattern const, two only checked for blank.
+    /// </summary>
+    private static readonly string[] FilesThatCarriedTheirOwnCopy =
+    [
+        "MainView.xaml.cs",
+        "MainViewModel.cs",
+        "ExportHelper.cs",
+        "CountdownFormatter.cs"
+    ];
 
     [Fact]
     public void Resolve_ReturnsTheTranslation_WhenTheDictionaryAnswers()
@@ -121,5 +138,17 @@ public class LocalizedTextTests
     public void Resolve_WithoutALocalizerHost_ReturnsTheFallback()
     {
         Assert.Equal(Fallback, LocalizedText.Resolve(Uid, Fallback, LogSource));
+    }
+
+    [Fact]
+    public void EveryFileThatCarriedItsOwnCopy_NowResolvesThroughThisHelper()
+    {
+        // Pins the routing, which is the part no behavioural test can see: each of these files still
+        // reads resw entries, and a re-inlined private copy would keep every other test green while
+        // reintroducing whichever variant of the rule its author happened to remember.
+        foreach (var file in FilesThatCarriedTheirOwnCopy)
+        {
+            Assert.Contains("LocalizedText.", ProductionSourceFiles.Read(file));
+        }
     }
 }
