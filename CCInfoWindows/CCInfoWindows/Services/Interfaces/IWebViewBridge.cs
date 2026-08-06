@@ -13,8 +13,9 @@ public interface IWebViewBridge
 
     /// <summary>
     /// Executes a GET request via WebView2's fetch() and returns the response body as string.
-    /// Throws <see cref="HttpFetchException"/> on non-2xx status, <see cref="UnauthorizedAccessException"/> on 401,
-    /// and <see cref="TimeoutException"/> if no response arrives within 30 seconds.
+    /// Throws <see cref="HttpFetchException"/> on non-2xx status, <see cref="SessionExpiredException"/> on 401,
+    /// <see cref="TimeoutException"/> if no response arrives within 30 seconds, and
+    /// <see cref="ArgumentException"/> when the URL is not an https URL on claude.ai.
     /// </summary>
     Task<string?> FetchJsonAsync(string url);
 

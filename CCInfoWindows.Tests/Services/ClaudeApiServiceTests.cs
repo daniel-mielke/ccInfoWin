@@ -12,6 +12,7 @@ namespace CCInfoWindows.Tests.Services;
 /// Unit tests for ClaudeApiService with retry, caching, and auth error handling.
 /// Uses Mock of IWebViewBridge to simulate API responses without network access.
 /// </summary>
+[Collection("WeakReferenceMessenger")]
 public class ClaudeApiServiceTests : IDisposable
 {
     private readonly Mock<ICredentialService> _credentialMock;
@@ -30,6 +31,8 @@ public class ClaudeApiServiceTests : IDisposable
 
     public void Dispose()
     {
+        WeakReferenceMessenger.Default.UnregisterAll(this);
+
         if (Directory.Exists(_cacheDir))
         {
             Directory.Delete(_cacheDir, recursive: true);
@@ -68,12 +71,15 @@ public class ClaudeApiServiceTests : IDisposable
     [Fact]
     public async Task FetchUsageAsync_On401_SendsAuthStateChangedAndReturnsNull()
     {
+        // The bridge signals HTTP 401 with SessionExpiredException. It used to raise
+        // UnauthorizedAccessException, which the filesystem also raises for ACL failures —
+        // that ambiguity let a failed cache write force a logout (review finding 5).
         _credentialMock.Setup(x => x.GetSessionToken()).Returns("expired-token");
         _credentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
 
         _bridgeMock
             .Setup(b => b.FetchJsonAsync(It.IsAny<string>()))
-            .ThrowsAsync(new UnauthorizedAccessException());
+            .ThrowsAsync(new SessionExpiredException());
 
         bool authMessageReceived = false;
         bool authState = true;
@@ -92,6 +98,62 @@ public class ClaudeApiServiceTests : IDisposable
         Assert.False(authState);
 
         WeakReferenceMessenger.Default.UnregisterAll(this);
+    }
+
+    [Fact]
+    public async Task FetchUsageAsync_WhenCacheWriteFails_ReturnsDataAndKeepsSessionAlive()
+    {
+        _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
+        _credentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
+        _bridgeMock
+            .Setup(b => b.FetchJsonAsync(It.IsAny<string>()))
+            .ReturnsAsync(CreateUsageJson(0.5));
+
+        // A directory where the cache file belongs makes File.WriteAllTextAsync raise
+        // UnauthorizedAccessException — deterministic, no ACL manipulation needed.
+        Directory.CreateDirectory(_cacheFile);
+
+        var authMessages = 0;
+        WeakReferenceMessenger.Default.Register<AuthStateChangedMessage>(this, (_, _) => authMessages++);
+
+        var service = CreateService();
+
+        var result = await service.FetchUsageAsync();
+
+        Assert.NotNull(result);
+        Assert.Equal(0.5, result!.FiveHour!.Utilization);
+        Assert.Equal(0, authMessages);
+        _bridgeMock.Verify(b => b.FetchJsonAsync(It.IsAny<string>()), Times.Once);
+
+        WeakReferenceMessenger.Default.UnregisterAll(this);
+    }
+
+    [Fact]
+    public async Task ClearCache_RemovesFileAndInMemorySnapshot()
+    {
+        var service = CreateService();
+        await service.SaveCacheAsync(new UsageResponse
+        {
+            FiveHour = new UsageWindow { Utilization = 0.7 }
+        });
+        await service.LoadCacheAsync();
+
+        Assert.NotNull(service.GetCachedUsage());
+
+        service.ClearCache();
+
+        Assert.Null(service.GetCachedUsage());
+        Assert.False(File.Exists(_cacheFile));
+    }
+
+    [Fact]
+    public void ClearCache_WithoutCacheFile_DoesNotThrow()
+    {
+        var service = CreateService();
+
+        service.ClearCache();
+
+        Assert.Null(service.GetCachedUsage());
     }
 
     [Fact]

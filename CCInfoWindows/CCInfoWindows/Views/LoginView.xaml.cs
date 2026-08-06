@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using CCInfoWindows.Helpers;
 using CCInfoWindows.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
@@ -32,7 +32,7 @@ public sealed partial class LoginView : Page
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[LoginView] OnLoaded failed: {ex.Message}");
+            AppLog.Write("LoginView.OnLoaded", ex, "login WebView2 initialization failed");
         }
     }
 

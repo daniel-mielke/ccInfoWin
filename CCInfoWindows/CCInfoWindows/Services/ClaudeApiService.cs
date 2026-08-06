@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using System.Text.Json;
+using CCInfoWindows.Helpers;
 using CCInfoWindows.Messages;
 using CCInfoWindows.Models;
 using CCInfoWindows.Services.Interfaces;
@@ -13,9 +13,10 @@ namespace CCInfoWindows.Services;
 /// </summary>
 public class ClaudeApiService : IClaudeApiService
 {
-    private const string BaseUrl = "https://claude.ai";
+    private const string BaseUrl = ClaudeAiUrlPolicy.Origin;
     private const int MaxAttempts = 3;
     private const int RetryBaseDelayMs = 1_000;
+    private const string CacheFileName = "usage_cache.json";
 
     private readonly IWebViewBridge _bridge;
     private readonly ICredentialService _credentialService;
@@ -36,10 +37,8 @@ public class ClaudeApiService : IClaudeApiService
         _bridge = bridge;
         _credentialService = credentialService;
 
-        var dir = cacheDirectory ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "CCInfoWindows");
-        _cacheFilePath = Path.Combine(dir, "usage_cache.json");
+        var dir = cacheDirectory ?? AppPaths.DataDirectory;
+        _cacheFilePath = Path.Combine(dir, CacheFileName);
     }
 
     public async Task<UsageResponse?> FetchUsageAsync(CancellationToken ct = default)
@@ -60,7 +59,7 @@ public class ClaudeApiService : IClaudeApiService
             }
         }
 
-        var url = $"{BaseUrl}/api/organizations/{Uri.EscapeDataString(orgId)}/usage";
+        var url = BuildUsageUrl(orgId);
 
         Exception? lastException = null;
         var orgIdReresolved = false;
@@ -79,13 +78,14 @@ public class ClaudeApiService : IClaudeApiService
                 if (usage is not null)
                 {
                     _cachedUsage = usage;
-                    await SaveCacheAsync(usage);
+                    await TrySaveCacheAsync(usage);
                 }
 
                 return usage;
             }
-            catch (UnauthorizedAccessException)
+            catch (SessionExpiredException ex)
             {
+                AppLog.Write("ClaudeApiService.FetchUsage", ex, "session expired — requesting re-login");
                 WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
                 return null;
             }
@@ -101,9 +101,9 @@ public class ClaudeApiService : IClaudeApiService
                 var freshOrgId = await TryMigrateOrgIdAsync(ct);
                 if (freshOrgId is null || freshOrgId == orgId) throw;
 
-                Debug.WriteLine($"[ClaudeApiService] org id re-resolved after HTTP {ex.StatusCode}");
+                AppLog.Write("ClaudeApiService.FetchUsage", $"org id re-resolved after HTTP {ex.StatusCode}");
                 orgId = freshOrgId;
-                url = $"{BaseUrl}/api/organizations/{Uri.EscapeDataString(orgId)}/usage";
+                url = BuildUsageUrl(orgId);
                 attempt--;  // this attempt probed a stale id — don't spend it
             }
             catch (HttpFetchException ex) when (ex.StatusCode is >= 400 and < 500)
@@ -149,14 +149,14 @@ public class ClaudeApiService : IClaudeApiService
 
             if (!_bridge.IsInitialized)
             {
-                Debug.WriteLine("[ClaudeApiService] ListAvailableOrganizations: bridge not initialized");
+                AppLog.Write("ClaudeApiService.ListAvailableOrganizations", "bridge not initialized");
                 return Array.Empty<OrganizationInfo>();
             }
 
             var responseBody = await _bridge.FetchJsonAsync($"{BaseUrl}/api/organizations");
             if (responseBody is null)
             {
-                Debug.WriteLine("[ClaudeApiService] ListAvailableOrganizations: null response body");
+                AppLog.Write("ClaudeApiService.ListAvailableOrganizations", "null response body");
                 return Array.Empty<OrganizationInfo>();
             }
 
@@ -165,7 +165,9 @@ public class ClaudeApiService : IClaudeApiService
 
             if (root.ValueKind != JsonValueKind.Array)
             {
-                Debug.WriteLine($"[ClaudeApiService] ListAvailableOrganizations: expected array, got {root.ValueKind}");
+                AppLog.Write(
+                    "ClaudeApiService.ListAvailableOrganizations",
+                    $"expected a JSON array, got {root.ValueKind}");
                 return Array.Empty<OrganizationInfo>();
             }
 
@@ -186,15 +188,16 @@ public class ClaudeApiService : IClaudeApiService
 
             return list;
         }
-        catch (UnauthorizedAccessException)
+        catch (SessionExpiredException ex)
         {
+            AppLog.Write("ClaudeApiService.ListAvailableOrganizations", ex, "session expired — requesting re-login");
             WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
             return Array.Empty<OrganizationInfo>();
         }
         catch (Exception ex)
         {
             // Defensive — caller renders the empty-state in the dialog
-            Debug.WriteLine($"[ClaudeApiService] ListAvailableOrganizations failed: {ex.Message}");
+            AppLog.Write("ClaudeApiService.ListAvailableOrganizations", ex);
             return Array.Empty<OrganizationInfo>();
         }
     }
@@ -225,10 +228,55 @@ public class ClaudeApiService : IClaudeApiService
             _cachedUsage = usage;
             return usage;
         }
-        catch (Exception ex) when (ex is JsonException or IOException)
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
-            // Corrupt or inaccessible cache file — safe to ignore
+            // Corrupt or inaccessible cache file — safe to ignore. UnauthorizedAccessException
+            // belongs here too: an ACL'd cache file must degrade to "no cache", not escape into
+            // the caller, which is where it used to be mistaken for a session expiry.
+            AppLog.Write("ClaudeApiService.LoadCache", ex, "cached usage could not be read");
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Drops the cached usage snapshot from memory and from disk so a following login cannot
+    /// render the previous account's figures. Best-effort on the file: the in-memory copy is
+    /// always cleared, even when the delete fails.
+    /// </summary>
+    public void ClearCache()
+    {
+        _cachedUsage = null;
+
+        try
+        {
+            if (File.Exists(_cacheFilePath))
+            {
+                File.Delete(_cacheFilePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write("ClaudeApiService.ClearCache", ex, "cached usage file could not be deleted");
+        }
+    }
+
+    private static string BuildUsageUrl(string orgId) =>
+        $"{BaseUrl}/api/organizations/{Uri.EscapeDataString(orgId)}/usage";
+
+    /// <summary>
+    /// The disk cache is best-effort. Its failures must never reach the retry loop or the
+    /// session-expiry handler: the filesystem raises <see cref="UnauthorizedAccessException"/>
+    /// for ACL and read-only failures, which used to be misread as HTTP 401 and forced a logout.
+    /// </summary>
+    private async Task TrySaveCacheAsync(UsageResponse usage)
+    {
+        try
+        {
+            await SaveCacheAsync(usage);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write("ClaudeApiService.SaveCache", ex, "usage cache could not be written");
         }
     }
 

@@ -1,3 +1,4 @@
+using CCInfoWindows.Helpers;
 using CCInfoWindows.Messages;
 using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
@@ -15,9 +16,26 @@ namespace CCInfoWindows.ViewModels;
 /// </summary>
 public partial class LoginViewModel : ObservableObject
 {
+    private const string SessionCookieName = "sessionKey";
+    private const string OrganizationCookieName = "lastActiveOrg";
+    private const string LoginPath = "/login";
+    private const int LoginUnclaimed = 0;
+    private const int LoginClaimed = 1;
+
+    /// <summary>Paths of the pre-authentication flow — reaching one of these is not a login.</summary>
+    private static readonly string[] LoginFlowPaths = [LoginPath, "/signup", "/oauth", "/auth"];
+
     private readonly ICredentialService _credentialService;
     private readonly INavigationService _navigationService;
     private readonly IWebViewBridge _bridge;
+
+    /// <summary>
+    /// One-shot claim guarding the login tail. An <see cref="int"/> and not a <see cref="bool"/>
+    /// because all three navigation handlers suspend at the cookie await: a plain check-then-set
+    /// let two WebView2 events for the same navigation both complete the login, which navigated
+    /// to MainView twice.
+    /// </summary>
+    private int _loginHandled = LoginUnclaimed;
 
     [ObservableProperty]
     private bool _isLoading;
@@ -31,7 +49,7 @@ public partial class LoginViewModel : ObservableObject
     /// <summary>
     /// User Data Folder path for WebView2 isolation (%LOCALAPPDATA%\CCInfoWindows\WebView2).
     /// </summary>
-    public static string UserDataFolderPath => Helpers.AppPaths.WebView2UserDataFolder;
+    public static string UserDataFolderPath => AppPaths.WebView2UserDataFolder;
 
     public LoginViewModel(
         ICredentialService credentialService,
@@ -60,8 +78,10 @@ public partial class LoginViewModel : ObservableObject
         {
             await InitializeCoreWebView2(webView, udfPath);
         }
-        catch (Exception)
+        catch (Exception firstAttemptEx)
         {
+            AppLog.Write("LoginViewModel.InitializeWebView", firstAttemptEx, "retrying with a fresh UDF");
+
             // Retry once after deleting corrupted UDF (Pitfall 1 from research)
             try
             {
@@ -75,7 +95,7 @@ public partial class LoginViewModel : ObservableObject
             catch (Exception retryEx)
             {
                 ErrorMessage = "WebView2 initialization failed. Please restart the application.";
-                System.Diagnostics.Debug.WriteLine($"[LoginViewModel] WebView2 init: {retryEx.Message}");
+                AppLog.Write("LoginViewModel.InitializeWebView", retryEx, "UDF recreation failed");
                 IsLoading = false;
                 return;
             }
@@ -84,24 +104,24 @@ public partial class LoginViewModel : ObservableObject
         // Clear session cookies (e.g., after logout) while preserving UDF cache/service workers.
         // This ensures claude.ai shows the login page, not a cached authenticated session.
         var cookieManager = webView.CoreWebView2.CookieManager;
-        var existingCookies = await cookieManager.GetCookiesAsync("https://claude.ai");
+        var existingCookies = await cookieManager.GetCookiesAsync(ClaudeAiUrlPolicy.Origin);
         foreach (var cookie in existingCookies)
         {
             cookieManager.DeleteCookie(cookie);
         }
 
         // Reset login state for re-entry (e.g., after logout)
-        _loginHandled = false;
+        ReleaseLoginClaim();
 
         // Register SourceChanged on CoreWebView2 — fires on SPA pushState navigation too.
         // NavigationCompleted only fires on full page loads, which misses SPA route changes.
         webView.CoreWebView2.SourceChanged += HandleSourceChanged;
         webView.CoreWebView2.HistoryChanged += HandleHistoryChanged;
         webView.NavigationCompleted += HandleNavigationCompleted;
-        webView.CoreWebView2.Navigate("https://claude.ai/login");
+        webView.CoreWebView2.Navigate($"{ClaudeAiUrlPolicy.Origin}{LoginPath}");
         // D-08: IsLoading stays true here. HandleNavigationCompleted flips it to false
-        // ONLY when args.IsSuccess && Source starts with https://claude.ai/login. This
-        // keeps LoginWebView (bound to inverse of IsLoading) Collapsed and the loading
+        // ONLY when args.IsSuccess && Source is the claude.ai login page. This keeps
+        // LoginWebView (bound to inverse of IsLoading) Collapsed and the loading
         // overlay (bound to IsLoading) Visible — preventing AUTH-07 flash of cached chat URL.
     }
 
@@ -109,13 +129,13 @@ public partial class LoginViewModel : ObservableObject
     {
         try
         {
-            if (_loginHandled) return;
+            if (IsLoginClaimed) return;
             await TryExtractSessionCookieAsync(sender, sender.Source ?? "");
         }
         catch (Exception ex)
         {
             ErrorMessage = "Login processing failed.";
-            System.Diagnostics.Debug.WriteLine($"[LoginViewModel] HandleSourceChanged: {ex.Message}");
+            AppLog.Write("LoginViewModel.HandleSourceChanged", ex);
         }
     }
 
@@ -123,17 +143,15 @@ public partial class LoginViewModel : ObservableObject
     {
         try
         {
-            if (_loginHandled) return;
+            if (IsLoginClaimed) return;
             await TryExtractSessionCookieAsync(sender, sender.Source ?? "");
         }
         catch (Exception ex)
         {
             ErrorMessage = "Login processing failed.";
-            System.Diagnostics.Debug.WriteLine($"[LoginViewModel] HandleHistoryChanged: {ex.Message}");
+            AppLog.Write("LoginViewModel.HandleHistoryChanged", ex);
         }
     }
-
-    private bool _loginHandled;
 
     /// <summary>
     /// Handles full page navigation completion.
@@ -146,14 +164,13 @@ public partial class LoginViewModel : ObservableObject
     {
         try
         {
-            if (_loginHandled || sender.CoreWebView2 is null) return;
+            if (IsLoginClaimed || sender.CoreWebView2 is null) return;
 
             var source = sender.CoreWebView2.Source ?? string.Empty;
 
             // D-08: reveal the WebView2 (and hide the loading overlay) only when the login URL
             // has finished loading successfully — prevents AUTH-07 flash of any cached chat URL.
-            if (args.IsSuccess &&
-                source.StartsWith("https://claude.ai/login", StringComparison.OrdinalIgnoreCase))
+            if (args.IsSuccess && IsLoginPageUrl(source))
             {
                 IsLoading = false;
             }
@@ -163,7 +180,7 @@ public partial class LoginViewModel : ObservableObject
         catch (Exception ex)
         {
             ErrorMessage = "Login processing failed.";
-            System.Diagnostics.Debug.WriteLine($"[LoginViewModel] HandleNavigationCompleted: {ex.Message}");
+            AppLog.Write("LoginViewModel.HandleNavigationCompleted", ex);
         }
     }
 
@@ -174,65 +191,91 @@ public partial class LoginViewModel : ObservableObject
     /// </summary>
     private async Task TryExtractSessionCookieAsync(CoreWebView2 coreWebView, string currentUrl)
     {
-        if (_loginHandled) return;
+        if (!IsPostLoginUrl(currentUrl)) return;
 
-        if (!IsPostLoginUrl(currentUrl))
+        // Claim BEFORE the first await — the message pump can dispatch a second WebView2 event
+        // for the same navigation while this one is parked at the cookie await.
+        if (!TryClaimLogin()) return;
+
+        try
         {
-            return;
+            var cookies = await coreWebView.CookieManager.GetCookiesAsync(ClaudeAiUrlPolicy.Origin);
+
+            var sessionToken = FindCookieValue(cookies, SessionCookieName);
+            if (string.IsNullOrEmpty(sessionToken))
+            {
+                // The SPA has not written the cookie yet — hand the claim back so a later
+                // navigation event can complete the login.
+                ReleaseLoginClaim();
+                return;
+            }
+
+            PersistSession(sessionToken, FindCookieValue(cookies, OrganizationCookieName));
+            ActivateSession(coreWebView);
         }
-
-        var cookies = await coreWebView.CookieManager
-            .GetCookiesAsync("https://claude.ai");
-
-        var sessionCookie = cookies.FirstOrDefault(c =>
-            string.Equals(c.Name, "sessionKey", StringComparison.Ordinal));
-
-        if (sessionCookie is not null)
+        catch (Exception)
         {
-            _loginHandled = true;
-            _credentialService.SaveSessionToken(sessionCookie.Value);
-
-            // Extract lastActiveOrg cookie for API URL construction.
-            var orgCookie = cookies.FirstOrDefault(c =>
-                string.Equals(c.Name, "lastActiveOrg", StringComparison.Ordinal));
-            if (orgCookie is not null)
-            {
-                _credentialService.SaveOrganizationId(orgCookie.Value);
-            }
-            else
-            {
-                // The cookie is often not set yet at this point (the SPA resolves the org after
-                // the first redirect). Dropping the stale id forces re-resolution via
-                // /api/organizations on the first poll — keeping the previous account's org id
-                // here is what made re-login fail with "API request failed".
-                _credentialService.ClearOrganizationId();
-            }
-
-            // Initialize WebView2 bridge for API calls — Chromium context has
-            // all Cloudflare cookies and proper TLS fingerprint at this point.
-            _bridge.Initialize(coreWebView, DispatcherQueue.GetForCurrentThread());
-
-            WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(true));
-            _navigationService.NavigateTo<MainView>();
+            // Release before rethrowing: the caller surfaces the error but the user stays on the
+            // login page, where a following navigation event must be able to try again.
+            ReleaseLoginClaim();
+            throw;
         }
     }
+
+    private void PersistSession(string sessionToken, string? organizationId)
+    {
+        _credentialService.SaveSessionToken(sessionToken);
+
+        if (organizationId is not null)
+        {
+            _credentialService.SaveOrganizationId(organizationId);
+        }
+        else
+        {
+            // The cookie is often not set yet at this point (the SPA resolves the org after
+            // the first redirect). Dropping the stale id forces re-resolution via
+            // /api/organizations on the first poll — keeping the previous account's org id
+            // here is what made re-login fail with "API request failed".
+            _credentialService.ClearOrganizationId();
+        }
+    }
+
+    private void ActivateSession(CoreWebView2 coreWebView)
+    {
+        // Initialize WebView2 bridge for API calls — Chromium context has
+        // all Cloudflare cookies and proper TLS fingerprint at this point.
+        _bridge.Initialize(coreWebView, DispatcherQueue.GetForCurrentThread());
+
+        WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(true));
+        _navigationService.NavigateTo<MainView>();
+    }
+
+    private static string? FindCookieValue(IEnumerable<CoreWebView2Cookie> cookies, string cookieName) =>
+        cookies.FirstOrDefault(c => string.Equals(c.Name, cookieName, StringComparison.Ordinal))?.Value;
+
+    private bool IsLoginClaimed => Volatile.Read(ref _loginHandled) == LoginClaimed;
+
+    private bool TryClaimLogin() =>
+        Interlocked.Exchange(ref _loginHandled, LoginClaimed) == LoginUnclaimed;
+
+    private void ReleaseLoginClaim() => Volatile.Write(ref _loginHandled, LoginUnclaimed);
 
     /// <summary>
     /// Determines if the current URL indicates a successful post-login state.
     /// Returns true for claude.ai pages that are NOT the login/signup flow.
+    /// The host is compared after parsing: a prefix test also accepts lookalike authorities
+    /// such as https://claude.ai.evil.example/, and this method gates the bridge handover.
     /// </summary>
-    private static bool IsPostLoginUrl(string url)
+    internal static bool IsPostLoginUrl(string url)
     {
-        if (!url.StartsWith("https://claude.ai", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
+        if (!ClaudeAiUrlPolicy.TryGetAllowedUri(url, out var uri)) return false;
 
-        // Login/signup flow URLs — not yet authenticated
-        var loginPaths = new[] { "/login", "/signup", "/oauth", "/auth" };
-        var uri = new Uri(url);
-        return !loginPaths.Any(p => uri.AbsolutePath.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+        return !LoginFlowPaths.Any(p => uri.AbsolutePath.StartsWith(p, StringComparison.OrdinalIgnoreCase));
     }
+
+    internal static bool IsLoginPageUrl(string url) =>
+        ClaudeAiUrlPolicy.TryGetAllowedUri(url, out var uri) &&
+        uri.AbsolutePath.StartsWith(LoginPath, StringComparison.OrdinalIgnoreCase);
 
     private static async Task InitializeCoreWebView2(WebView2 webView, string udfPath)
     {

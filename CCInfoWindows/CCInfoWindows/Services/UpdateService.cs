@@ -2,6 +2,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Reflection;
+using CCInfoWindows.Helpers;
 using CCInfoWindows.Models;
 using CCInfoWindows.Services.Interfaces;
 
@@ -10,10 +11,12 @@ namespace CCInfoWindows.Services;
 /// <summary>
 /// Checks GitHub Releases API hourly for new versions and fires UpdateAvailable when a newer release is found.
 /// Respects DismissedUpdateVersion from settings to avoid re-notifying for dismissed versions.
+/// Egress hosts: api.github.com (this check) and github.com (the release page opened on click).
 /// </summary>
 public class UpdateService : IUpdateService
 {
     private const string GitHubApiUrl = "https://api.github.com/repos/daniel-mielke/ccInfoWin/releases/latest";
+    private const string ReleasePageHost = "github.com";
     private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(1);
 
     private readonly HttpClient _httpClient;
@@ -35,7 +38,11 @@ public class UpdateService : IUpdateService
     {
         try
         {
-            var release = await _httpClient.GetFromJsonAsync<GitHubRelease>(GitHubApiUrl);
+            // ConfigureAwait(false): this is service code, and the only consumer of
+            // UpdateAvailable marshals to the dispatcher itself (MainViewModel.OnUpdateAvailable).
+            var release = await _httpClient
+                .GetFromJsonAsync<GitHubRelease>(GitHubApiUrl)
+                .ConfigureAwait(false);
 
             if (release == null || release.Prerelease) return;
 
@@ -51,16 +58,26 @@ public class UpdateService : IUpdateService
                 if (remoteVersion <= dismissedVersion) return;
             }
 
-            if (!release.HtmlUrl.StartsWith("https://github.com/", StringComparison.OrdinalIgnoreCase))
-                return;
+            if (!IsReleasePageUrl(release.HtmlUrl)) return;
 
             UpdateAvailable?.Invoke(release.TagName, release.HtmlUrl);
         }
-        catch
+        catch (Exception ex)
         {
-            // Silent failure — network errors must not surface to UI
+            // Network, JSON and version-parse failures must not surface to the UI, but they must
+            // leave a trace: a swallowed failure here means silently broken update checks forever.
+            AppLog.Write("UpdateService.CheckForUpdate", ex, "update check failed");
         }
     }
+
+    /// <summary>
+    /// Allow-list for the URL handed to the browser. The host is compared after parsing rather
+    /// than by prefix, so a lookalike authority cannot be launched from a spoofed API response.
+    /// </summary>
+    public static bool IsReleasePageUrl(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+        uri.Scheme == Uri.UriSchemeHttps &&
+        string.Equals(uri.Host, ReleasePageHost, StringComparison.OrdinalIgnoreCase);
 
     public void StartPeriodicCheck()
     {
@@ -98,10 +115,18 @@ public class UpdateService : IUpdateService
 
     private async Task RunPeriodicCheckLoopAsync(CancellationToken token)
     {
-        using var timer = new PeriodicTimer(CheckInterval);
-        while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
+        try
         {
-            await CheckForUpdateAsync().ConfigureAwait(false);
+            using var timer = new PeriodicTimer(CheckInterval);
+            while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
+            {
+                await CheckForUpdateAsync().ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // StopPeriodicCheck cancelled the token. The loop is fire-and-forget, so letting the
+            // cancellation escape would leave an unobserved faulted task behind on every logout.
         }
     }
 

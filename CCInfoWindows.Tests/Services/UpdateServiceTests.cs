@@ -46,6 +46,20 @@ public class UpdateServiceTests
         Assert.False(result);
     }
 
+    [Theory]
+    [InlineData("https://github.com/daniel-mielke/ccInfoWin/releases/tag/v2.1.0", true)]
+    [InlineData("https://GITHUB.COM/daniel-mielke/ccInfoWin", true)]
+    [InlineData("https://github.com.evil.example/daniel-mielke/ccInfoWin", false)]
+    [InlineData("https://githubXcom/daniel-mielke/ccInfoWin", false)]
+    [InlineData("http://github.com/daniel-mielke/ccInfoWin", false)]
+    [InlineData("https://user@evil.example/https://github.com/", false)]
+    [InlineData("javascript:alert(1)", false)]
+    [InlineData("", false)]
+    public void IsReleasePageUrl_AcceptsOnlyHttpsUrlsOnTheGitHubHost(string url, bool expected)
+    {
+        Assert.Equal(expected, UpdateService.IsReleasePageUrl(url));
+    }
+
     [Fact]
     public void GitHubRelease_Deserializes_JsonWithTagNameAndHtmlUrl()
     {
