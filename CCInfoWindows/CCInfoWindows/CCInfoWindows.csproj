@@ -5,20 +5,28 @@
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <RootNamespace>CCInfoWindows</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Platforms>x64;ARM64</Platforms>
-    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
     <Nullable>enable</Nullable>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>13.0</LangVersion>
-    <Version>1.5.1</Version>
-    <AssemblyVersion>1.5.1.0</AssemblyVersion>
-    <FileVersion>1.5.1.0</FileVersion>
+    <Version>1.6.0</Version>
+    <AssemblyVersion>1.6.0.0</AssemblyVersion>
+    <FileVersion>1.6.0.0</FileVersion>
     <Product>CCInfoWindows</Product>
     <Description>Real-time Claude Code usage monitoring for Windows</Description>
     <Copyright>Copyright (c) 2026 Daniel Mielke</Copyright>
+    <!-- Trimming and AOT are forbidden: System.Text.Json's reflection path (IL2026) breaks
+         JSON deserialization at runtime. Declared here and enforced by the guard target below,
+         because a -p: switch on the command line outranks these values. -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishAot>false</PublishAot>
+    <!-- Repeated in CCInfoWindows.Tests.csproj: Directory.Build.props sits in CCInfoWindows\,
+         which the sibling test project never walks through. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <!-- Uncomment to test chart with mock data (disables API polling) -->
     <!-- <DefineConstants>$(DefineConstants);MOCK_CHART</DefineConstants> -->
   </PropertyGroup>
@@ -26,6 +34,11 @@
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <SelfContained>true</SelfContained>
   </PropertyGroup>
+
+  <Target Name="FailOnTrimmedPublish" BeforeTargets="Publish"
+          Condition="'$(PublishTrimmed)' == 'true' Or '$(PublishAot)' == 'true'">
+    <Error Text="Trimming and AOT are forbidden for CCInfoWindows: the trimmer removes types System.Text.Json needs by reflection (IL2026), which silently blanks the dashboard at runtime. Reverted once already in commit eea7fce. Build the Release exe with: dotnet build CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj -c Release -o CCInfoWindows/CCInfoWindows/bin/x64/Release/net9.0-windows10.0.19041.0/" />
+  </Target>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.WinUI.Controls.Segmented" Version="8.2.251219" />

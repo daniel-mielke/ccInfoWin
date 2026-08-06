@@ -47,7 +47,9 @@
 - On app restart: check runs, banner shown only if newer version than dismissed
 
 **Distribution — Build**
-- Self-contained publish: `dotnet publish -c Release -r win-x64 --self-contained -p:PublishTrimmed=true -p:TrimMode=partial`
+- Self-contained Release build: `dotnet build -c Release -o <sanctioned output dir>`
+  (SUPERSEDED 2026-08-06: the trimmed `dotnet publish` command researched here was reverted in
+  commit eea7fce — trimming breaks System.Text.Json reflection, IL2026)
 - No .NET Runtime prerequisite for end users
 - No code signing — unsigned installer (SmartScreen warning acceptable for open-source)
 
@@ -99,7 +101,7 @@ None — discussion stayed within phase scope
 | UIPF-07 | All interactive elements screen-reader compatible | AutomationProperties.Name on every Button, ToggleSwitch, ComboBox; .resw entries for localized names |
 | DIST-01 | Inno Setup EXE installer (per-user, no admin) | Inno Setup 6.3.3; PrivilegesRequired=lowest; DefaultDirName={localappdata}\Programs\CCInfoWindows |
 | DIST-02 | GitHub public repository with README, LICENSE, screenshots | Standard GitHub release workflow; no tooling required |
-| DIST-03 | Self-contained publish with runtime prerequisite check | `dotnet publish -c Release -r win-x64 --self-contained -p:PublishTrimmed=true -p:TrimMode=partial` |
+| DIST-03 | Self-contained publish with runtime prerequisite check | `dotnet build -c Release -o <sanctioned output dir>` (SUPERSEDED 2026-08-06: trimmed publish reverted in eea7fce) |
 </phase_requirements>
 
 ---
@@ -559,7 +561,7 @@ These items are complete based on reading the existing code:
 3. **GitHub Actions CI/CD**
    - What we know: Context marks this as Claude's Discretion
    - What's unclear: Whether to include a basic `.github/workflows/release.yml` that builds and attaches installer to GitHub Release
-   - Recommendation: Include a minimal workflow that triggers on tag push `v*.*.*`, runs `dotnet publish`, and runs Inno Setup; this enables repeatable releases without local build environment
+   - Recommendation: Include a minimal workflow that triggers on tag push `v*.*.*`, runs `dotnet build -c Release -o <sanctioned output dir>` (never `dotnet publish` — SUPERSEDED 2026-08-06), and runs Inno Setup; this enables repeatable releases without local build environment
 
 ---
 

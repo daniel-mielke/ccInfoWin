@@ -82,7 +82,7 @@ human_verification:
 | SettingsViewModel.cs | WinUI3Localizer | `Localizer.Get().SetLanguage()` | ✓ WIRED | Called in OnSelectedLanguageIndexChanged partial method. |
 | App.xaml.cs | Strings/ folder | `AddStringResourcesFolderForLanguageDictionaries` | ✓ WIRED | InitializeLocalizerAsync calls the builder with `Path.Combine(AppContext.BaseDirectory, "Strings")`. |
 | MainView.xaml | Resources.resw | `l:Uids.Uid=` attributes | ✓ WIRED | All static text elements use `l:Uids.Uid=` via WinUI3Localizer namespace `xmlns:l="using:WinUI3Localizer"`. |
-| installer/setup.iss | dotnet publish output | `Source: "..\CCInfoWindows\...publish\*"` | ✓ WIRED | Source path references the x64 Release publish directory. |
+| installer/setup.iss | dotnet publish output | `Source: "..\CCInfoWindows\...publish\*"` | ✗ REWIRED 2026-08-06 | The publish directory is never written by the sanctioned Release build; the source path now points at `bin\x64\Release\net9.0-windows10.0.19041.0` (2026-08-06 review, finding 1). |
 
 ---
 
@@ -103,7 +103,7 @@ human_verification:
 | UIPF-07 | 06-03 | All interactive elements screen-reader compatible | ✓ SATISFIED | All buttons, toggles, comboboxes have `l:Uids.Uid=` with AutomationProperties.Name in both .resw files |
 | DIST-01 | 06-04 | Inno Setup EXE installer (per-user, no admin) | ✓ SATISFIED | installer/setup.iss with PrivilegesRequired=lowest, {localappdata} install dir |
 | DIST-02 | 06-04 | GitHub repo with README, LICENSE (MIT), screenshots | ✓ SATISFIED | README.md and LICENSE exist; screenshots placeholder noted in README (acceptable for pre-release) |
-| DIST-03 | 06-04 | Self-contained publish | ✓ SATISFIED | .csproj has Version 1.0.0, PublishTrimmed=true, TrimMode=partial in Release PropertyGroup |
+| DIST-03 | 06-04 | Self-contained publish | ✓ SATISFIED | .csproj has Version 1.0.0, PublishTrimmed=true, TrimMode=partial in Release PropertyGroup — trimming reverted in eea7fce and pinned off 2026-08-06; SelfContained=true still holds |
 
 **Note — REQUIREMENTS.md staleness:** REQUIREMENTS.md still marks EXPT-01/02/03, SETT-02, UPDT-01, UIPF-05 as unchecked (`[ ]`). This is a documentation inconsistency — the code implementations exist and are verified above. The traceability table in REQUIREMENTS.md also shows several Phase 6 items as "Pending" or "Complete" inconsistently. REQUIREMENTS.md should be updated to reflect current implementation state.
 

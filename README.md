@@ -2,7 +2,7 @@
 
 Real-time Claude Code usage monitoring for Windows. A Windows port of [ccInfo](https://github.com/stefanlange/ccInfo) (macOS).
 
-**Current version:** v1.5.0 — macOS v1.12.0 feature parity + hardening.
+**Current version:** v1.6.0 — macOS v1.15.2 feature parity + hardening.
 
 ## Features
 
@@ -39,7 +39,7 @@ The installer:
 
 **Prerequisites:**
 - .NET 9 SDK
-- Windows 10 (19041) or later
+- Windows 10 (19041) or later, x64 (no ARM64 build)
 
 ```bash
 git clone https://github.com/daniel-mielke/ccInfoWin.git
@@ -53,7 +53,14 @@ dotnet run --project CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj
 dotnet build CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj -c Release -o CCInfoWindows/CCInfoWindows/bin/x64/Release/net9.0-windows10.0.19041.0/
 ```
 
-> **Note:** Do not use `dotnet publish` with trimming — `PublishTrimmed` breaks JSON deserialization at runtime. Always use `dotnet build -c Release` instead.
+> **Note:** Do not use `dotnet publish` with trimming — `PublishTrimmed` breaks JSON deserialization at runtime, and the project file fails the publish with an explanatory error if it is enabled. Always use `dotnet build -c Release` instead.
+
+**Installer** (Inno Setup 6.x, after the Release build above):
+```bash
+iscc installer/setup.iss
+```
+
+It packages exactly that Release directory — excluding any `win-x64\` publish leftovers and `*.pdb` — takes its version from the built `CCInfoWindows.exe`, and refuses to compile if the Release build has not been run.
 
 ## Tech Stack
 

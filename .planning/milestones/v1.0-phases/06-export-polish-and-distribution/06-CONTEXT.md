@@ -49,7 +49,9 @@ App is feature-complete, localized, accessible, and distributed as a standalone 
 - On app restart: check runs, banner shown only if newer version than dismissed
 
 ### Distribution — Build
-- Self-contained publish: `dotnet publish -c Release -r win-x64 --self-contained -p:PublishTrimmed=true -p:TrimMode=partial`
+- Self-contained Release build: `dotnet build -c Release -o <sanctioned output dir>`
+  (SUPERSEDED 2026-08-06: the trimmed `dotnet publish` command originally locked in here was
+  reverted in commit eea7fce — trimming breaks System.Text.Json reflection, IL2026)
 - No .NET Runtime prerequisite for end users
 - No code signing — unsigned installer (SmartScreen warning acceptable for open-source)
 

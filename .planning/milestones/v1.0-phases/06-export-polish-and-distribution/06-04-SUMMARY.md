@@ -22,6 +22,7 @@ tech-stack:
   added: []
   patterns:
     - dotnet publish Release PropertyGroup with PublishTrimmed=true, TrimMode=partial, SelfContained=true
+      (no longer the pattern -- reverted in commit eea7fce; trimming is pinned off since 2026-08-06)
     - Inno Setup PrivilegesRequired=lowest for per-user installation without admin
     - HKCU Run key autostart with quoted path to handle paths with spaces
 
@@ -81,7 +82,7 @@ Each task was committed atomically:
 
 ## Files Created/Modified
 
-- `CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj` - Added version metadata (1.0.0) and Release PropertyGroup with PublishTrimmed/TrimMode/SelfContained
+- `CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj` - Added version metadata (1.0.0) and Release PropertyGroup with PublishTrimmed/TrimMode/SelfContained (PublishTrimmed/TrimMode later reverted in eea7fce)
 - `installer/setup.iss` - Inno Setup 6 script: per-user install, PrivilegesRequired=lowest, HKCU autostart, lzma2/ultra, German+English languages
 - `README.md` - GitHub project README with features, installation, tech stack, build instructions, credits
 - `LICENSE` - MIT License with 2026 Daniel Mielke

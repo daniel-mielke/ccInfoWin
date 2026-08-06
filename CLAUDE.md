@@ -100,14 +100,19 @@ dotnet build CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj -c Release -o CCIn
 - **Always use `dotnet build -c Release`** instead of `dotnet publish` -- produces a working exe without trimming issues.
 - **Always pass `-o`** to target the correct output directory -- without `-o`, the build outputs to a `win-x64/` subdirectory that differs from the expected launch path.
 - **Release exe location:** `CCInfoWindows/CCInfoWindows/bin/x64/Release/net9.0-windows10.0.19041.0/CCInfoWindows.exe`
+- **x64 only** -- both projects declare `<Platforms>x64</Platforms>` / `<RuntimeIdentifiers>win-x64</RuntimeIdentifiers>` and the solution offers only `Any CPU` (redirects to x64) and `x64`. ARM64 was declared for a year without ever being built or tested; don't re-add it without an ARM64 device, an ARM64 installer, and a test run.
+- **The rule is enforced, not just written down** -- `CCInfoWindows.csproj` pins `PublishTrimmed`/`PublishAot` to `false` and the `FailOnTrimmedPublish` target errors out if a `-p:` switch re-enables either. Fix the build command, never the guard.
+- **The installer reads that same directory** -- `installer/setup.iss` packages it (excluding `win-x64\` and `*.pdb`), derives its version from the built `CCInfoWindows.exe`, and refuses to compile if the Release build was not run. Build order: `dotnet build -c Release -o ...` then `iscc installer/setup.iss`.
+- **Version bump before tagging** -- `<Version>`/`<AssemblyVersion>`/`<FileVersion>` in the csproj plus the `README.md` version line. `UpdateService` compares the GitHub tag against the assembly version, so a stale assembly version means a permanent update banner.
 
 ## Security Rules
 
 - **No secrets in source code** -- zero hardcoded tokens, keys, or passwords
 - **Credential Manager only** -- all tokens stored via `AdysTech.CredentialManager` (DPAPI-encrypted)
 - **WebView2 UDF isolation** -- User Data Folder at `%LOCALAPPDATA%\CCInfoWindows\WebView2`
+- **Uninstall purges local state** -- `installer/setup.iss` deletes `%LOCALAPPDATA%\CCInfoWindows` and both Credential Manager targets. Never persist sensitive data anywhere else, or uninstall will leave it behind.
 - **.gitignore enforced** -- settings.json, WebView2/, *.pfx, *.snk, .env excluded
-- **Network calls only to** -- `claude.ai` and `raw.githubusercontent.com` (HTTPS)
+- **Network calls only to** (HTTPS, complete list) -- `claude.ai` (usage API + login inside WebView2, which additionally loads whatever subresources that page references), `api.github.com` (`UpdateService` release check), `raw.githubusercontent.com` (`LiteLLMPricingService` price list), `github.com` (release page and upstream credits link, handed to the default browser via `Process.Start`)
 
 ## Clean Code Rules (authoritative)
 
