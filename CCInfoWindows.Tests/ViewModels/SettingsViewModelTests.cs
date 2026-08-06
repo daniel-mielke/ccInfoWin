@@ -21,6 +21,9 @@ public class SettingsViewModelTests
     private static readonly int EnglishLanguageIndex =
         AppSettings.SupportedLanguages.IndexOf(AppSettings.EnglishLanguage);
 
+    /// <summary>resw key behind the manual entry of the refresh-interval dropdown.</summary>
+    private const string ManualRefreshLabelUid = "RefreshIntervalManual";
+
     /// <summary>
     /// A store double with the two members every Sessions-tab code path needs. Moq has no fallback
     /// value for IReadOnlyCollection&lt;string&gt;, so an unconfigured GetKnownSessionIds would return
@@ -561,11 +564,13 @@ public class SettingsViewModelTests
         Assert.Equal("5min", vm.RefreshOptions[3].Label);
         Assert.Equal("10min", vm.RefreshOptions[4].Label);
 
-        // Finding 21: the last label was the German literal "Manuell" on an app whose default
-        // language is en-US. It now comes from the RefreshIntervalManual resw key, and headless tests
-        // have no localizer host — so only its presence is asserted here, exactly as the
-        // LastFetchRelativeTime tests do. The translated values are covered by ResourceCoverageTests.
-        Assert.False(string.IsNullOrWhiteSpace(vm.RefreshOptions[5].Label));
+        // Finding 21: the last label was the German literal "Manuell" on an app whose default language
+        // is en-US. It now comes from the RefreshIntervalManual resw key. The wave-2 relaxation to a
+        // not-blank check was too loose to notice a typo in that uid — an unbuilt localizer echoes
+        // whatever it is handed, so a misspelled key is also non-blank. Headlessly the label therefore
+        // IS the uid (see HeadlessLocalizerContractTests); the translations are covered by
+        // ResourceCoverageTests.
+        Assert.Equal(ManualRefreshLabelUid, vm.RefreshOptions[5].Label);
         Assert.Equal(AppSettings.ManualRefreshSeconds, vm.RefreshOptions[5].Seconds);
     }
 

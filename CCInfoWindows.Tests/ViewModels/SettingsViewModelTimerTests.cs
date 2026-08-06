@@ -10,13 +10,35 @@ namespace CCInfoWindows.Tests.ViewModels;
 
 /// <summary>
 /// Unit tests for SettingsViewModel timer lifecycle: StartAboutTimestampTimer /
-/// StopAboutTimestampTimer idempotency and LastFetchRelativeTime formatting.
+/// StopAboutTimestampTimer idempotency, plus the band the About tab's LastFetchRelativeTime picks.
 /// Tick-driven PropertyChanged is not unit-tested headlessly via a real DispatcherTimer
 /// (WinRT COM context required); FakeDispatcherTimer covers that path instead.
 /// See VALIDATION §Manual-Only for runtime smoke test.
+///
+/// Finding 32 item 3: the three LastFetchRelativeTime tests here asserted Assert.NotNull on a
+/// non-nullable string, so they only ever failed if the getter threw — the Never / JustNow /
+/// MinutesAgo / HoursAgo / DaysAgo selection and its 30 s / 60 min / 24 h edges were unasserted, and
+/// the three cases differed only in a mock the assertion could not observe. They now assert which
+/// resw key the getter reached for, which headlessly is the key itself
+/// (see <see cref="HeadlessLocalizerContractTests"/>).
 /// </summary>
 public class SettingsViewModelTimerTests
 {
+    private const string NeverUid = "LastFetchNever";
+    private const string JustNowUid = "LastFetchJustNow";
+    private const string MinutesAgoUid = "LastFetchMinutesAgo";
+    private const string HoursAgoUid = "LastFetchHoursAgo";
+    private const string DaysAgoUid = "LastFetchDaysAgo";
+
+    private const int OneMinuteInSeconds = 60;
+    private const int OneHourInSeconds = 60 * OneMinuteInSeconds;
+    private const int OneDayInSeconds = 24 * OneHourInSeconds;
+
+    /// <summary>Elapsed time at which the getter leaves "just now" for a counted minute.</summary>
+    private const int JustNowBandEndsAtSeconds = 30;
+
+    private const int SeveralDaysInSeconds = 9 * OneDayInSeconds;
+
     private static FieldInfo TimerField => typeof(SettingsViewModel)
         .GetField("_aboutTimestampTimer", BindingFlags.NonPublic | BindingFlags.Instance)!;
 
@@ -109,50 +131,57 @@ public class SettingsViewModelTimerTests
         sut.StopAboutTimestampTimer();
     }
 
-    [Fact]
-    public void LastFetchRelativeTime_NullTimestamp_ReturnsNonNullString()
+    /// <summary>
+    /// A pricing double whose LastFetch is re-derived on every read, so the span the getter computes is
+    /// <paramref name="secondsAgo"/> plus only the microseconds between its two statements. A sample
+    /// sitting exactly on a band edge therefore always lands in the upper band, however the test host is
+    /// scheduled — the edges are asserted from above, and the in-band samples keep a minute of slack.
+    /// </summary>
+    private static Mock<IPricingService> PricingFetchedSecondsAgo(int secondsAgo)
     {
-        // L10N-01: LastFetchRelativeTime now calls Localizer.Get().GetLocalizedString("LastFetchNever").
-        // In headless unit tests WinUI3Localizer has no host, so it returns the key name as fallback.
-        // We assert the getter does not throw and returns a non-null string — the exact locale value
-        // is validated by ResourceCoverageTests which reads the resw files directly.
+        var pricing = new Mock<IPricingService>();
+        pricing.Setup(s => s.Source).Returns(PricingSource.Unknown);
+        pricing.SetupGet(s => s.LastFetch).Returns(() => DateTimeOffset.Now.AddSeconds(-secondsAgo));
+        return pricing;
+    }
+
+    [Fact]
+    public void LastFetchRelativeTime_WithoutAnyFetchYet_ReadsNever()
+    {
         var pricingMock = new Mock<IPricingService>();
+        pricingMock.Setup(s => s.Source).Returns(PricingSource.Unknown);
         pricingMock.SetupGet(x => x.LastFetch).Returns((DateTimeOffset?)null);
-        pricingMock.Setup(s => s.Source).Returns(PricingSource.Unknown);
 
         var sut = CreateSut(pricingMock: pricingMock);
 
-        Assert.NotNull(sut.LastFetchRelativeTime);
+        Assert.Equal(NeverUid, sut.LastFetchRelativeTime);
+    }
+
+    [Theory]
+    [InlineData(5, JustNowUid)]
+    [InlineData(JustNowBandEndsAtSeconds, MinutesAgoUid)]
+    [InlineData(OneHourInSeconds - OneMinuteInSeconds, MinutesAgoUid)]
+    [InlineData(OneHourInSeconds, HoursAgoUid)]
+    [InlineData(OneDayInSeconds - OneHourInSeconds, HoursAgoUid)]
+    [InlineData(OneDayInSeconds, DaysAgoUid)]
+    [InlineData(SeveralDaysInSeconds, DaysAgoUid)]
+    public void LastFetchRelativeTime_ReadsTheKeyOfTheBandTheElapsedTimeFallsIn(
+        int elapsedSeconds,
+        string expectedUid)
+    {
+        var sut = CreateSut(PricingFetchedSecondsAgo(elapsedSeconds));
+
+        Assert.Equal(expectedUid, sut.LastFetchRelativeTime);
     }
 
     [Fact]
-    public void LastFetchRelativeTime_FiveMinutesAgo_ReturnsNonNullString()
+    public void LastFetchRelativeTime_WithATimestampInTheFuture_StaysOnJustNow()
     {
-        // L10N-01: getter calls Localizer.Get().GetLocalizedString("LastFetchMinutesAgo")
-        // and formats with string.Format. In headless tests the Localizer returns its key as fallback;
-        // the numeric substitution still happens. We assert non-null output — exact string validated by ResourceCoverageTests.
-        var pricingMock = new Mock<IPricingService>();
-        pricingMock.SetupGet(x => x.LastFetch).Returns(DateTimeOffset.Now.AddMinutes(-5));
-        pricingMock.Setup(s => s.Source).Returns(PricingSource.Unknown);
+        // A clock correction between the fetch and the render makes the span negative. "Just now" is
+        // where that belongs; the counted bands would have to render a negative number.
+        var sut = CreateSut(PricingFetchedSecondsAgo(-OneHourInSeconds));
 
-        var sut = CreateSut(pricingMock: pricingMock);
-        var result = sut.LastFetchRelativeTime;
-
-        Assert.NotNull(result);
-    }
-
-    [Fact]
-    public void LastFetchRelativeTime_OneMinuteAgo_ReturnsNonNullString()
-    {
-        // L10N-01: singular-form distinction removed — "vor 1 Minuten" accepted per project precedent
-        // (InactiveSessionTooltip Phase 23). Non-null / non-throw assertion replaces exact-string check.
-        var pricingMock = new Mock<IPricingService>();
-        pricingMock.SetupGet(x => x.LastFetch).Returns(DateTimeOffset.Now.AddMinutes(-1));
-        pricingMock.Setup(s => s.Source).Returns(PricingSource.Unknown);
-
-        var sut = CreateSut(pricingMock: pricingMock);
-
-        Assert.NotNull(sut.LastFetchRelativeTime);
+        Assert.Equal(JustNowUid, sut.LastFetchRelativeTime);
     }
 
     [Fact]

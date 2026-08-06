@@ -1,98 +1,110 @@
-using CCInfoWindows.Models;
+using System.Text.Json;
+using CCInfoWindows.Messages;
 using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
 using CommunityToolkit.Mvvm.Messaging;
+using Moq;
 
 namespace CCInfoWindows.Tests.Services;
 
 /// <summary>
-/// ORGID-01 (D-OG-01): verifies <see cref="ClaudeApiService.ListAvailableOrganizationsAsync"/>
-/// parses /api/organizations JSON correctly and handles error cases defensively.
-/// Does NOT instantiate ClaudeApiService (requires IWebViewBridge + WinRT COM).
-/// Mirrors the parsing logic directly.
+/// ORGID-01 (D-OG-01): the real <see cref="ClaudeApiService.ListAvailableOrganizationsAsync"/> driven
+/// through a mocked <see cref="IWebViewBridge"/>, plus the first-org auto-pick the private
+/// TryMigrateOrgIdAsync derives from its result.
+///
+/// Finding 31: this file used to hold a private OrgListParser — a second copy of the production
+/// parsing loop — justified with "requires IWebViewBridge + WinRT COM", which ClaudeApiServiceTests
+/// disproves by building the real service from the same mock in the same test project. Removing the
+/// empty-uuid guard from production left all nine tests green while the auto-pick persisted "" and
+/// every following usage fetch went to /api/organizations//usage.
 /// </summary>
-public class ListAvailableOrganizationsTests
+[Collection("WeakReferenceMessenger")]
+public class ListAvailableOrganizationsTests : IDisposable
 {
-    /// <summary>
-    /// Parses a valid JSON array from /api/organizations into OrganizationInfo records.
-    /// Mirrors ClaudeApiService parsing logic.
-    /// </summary>
-    private sealed class OrgListParser
+    private const string OrganizationsUrl = ClaudeAiUrlPolicy.Origin + "/api/organizations";
+    private const string UsagePathSuffix = "/usage";
+    private const string ValidOrgId = "org-valid";
+
+    private readonly Mock<IWebViewBridge> _bridgeMock = new();
+    private readonly Mock<ICredentialService> _credentialMock = new();
+    private readonly string _cacheDirectory =
+        Path.Combine(Path.GetTempPath(), $"ccinfo_orglist_{Guid.NewGuid():N}");
+
+    public ListAvailableOrganizationsTests()
     {
-        public static IReadOnlyList<OrganizationInfo> Parse(string? responseBody)
+        _bridgeMock.Setup(b => b.IsInitialized).Returns(true);
+    }
+
+    public void Dispose()
+    {
+        WeakReferenceMessenger.Default.UnregisterAll(this);
+
+        if (Directory.Exists(_cacheDirectory))
         {
-            if (responseBody is null) return Array.Empty<OrganizationInfo>();
-
-            try
-            {
-                using var doc = System.Text.Json.JsonDocument.Parse(responseBody);
-                var root = doc.RootElement;
-
-                if (root.ValueKind != System.Text.Json.JsonValueKind.Array)
-                    return Array.Empty<OrganizationInfo>();
-
-                var list = new List<OrganizationInfo>(root.GetArrayLength());
-                foreach (var element in root.EnumerateArray())
-                {
-                    if (!element.TryGetProperty("uuid", out var uuidProp)) continue;
-                    var uuid = uuidProp.GetString();
-                    if (string.IsNullOrEmpty(uuid)) continue;
-
-                    var name = element.TryGetProperty("name", out var nameProp)
-                        ? nameProp.GetString() ?? uuid
-                        : uuid;
-
-                    list.Add(new OrganizationInfo(uuid, name));
-                }
-
-                return list;
-            }
-            catch
-            {
-                return Array.Empty<OrganizationInfo>();
-            }
+            Directory.Delete(_cacheDirectory, recursive: true);
         }
     }
 
+    private ClaudeApiService CreateService()
+        => new(_bridgeMock.Object, _credentialMock.Object, _cacheDirectory);
+
+    private void RespondToOrganizationsWith(string? responseBody)
+        => _bridgeMock.Setup(b => b.FetchJsonAsync(OrganizationsUrl)).ReturnsAsync(responseBody);
+
     [Fact]
-    public void Parse_ValidArray_ReturnsOrganizationInfoList()
+    public async Task ListAvailableOrganizations_ParsesEveryEntryFromTheOrganizationsEndpoint()
     {
-        const string json = """
+        RespondToOrganizationsWith("""
             [
               {"uuid":"org-abc-123","name":"Personal"},
               {"uuid":"org-def-456","name":"My Team"}
             ]
-            """;
+            """);
 
-        var result = OrgListParser.Parse(json);
+        var result = await CreateService().ListAvailableOrganizationsAsync();
 
         Assert.Equal(2, result.Count);
         Assert.Equal("org-abc-123", result[0].Uuid);
         Assert.Equal("Personal", result[0].Name);
         Assert.Equal("org-def-456", result[1].Uuid);
         Assert.Equal("My Team", result[1].Name);
+
+        // The endpoint itself is part of the contract — a mirrored parser could never assert it.
+        _bridgeMock.Verify(b => b.FetchJsonAsync(OrganizationsUrl), Times.Once);
     }
 
     [Fact]
-    public void Parse_NullBody_ReturnsEmptyList()
+    public async Task ListAvailableOrganizations_WithoutAnInitializedBridge_ReturnsEmptyWithoutFetching()
     {
-        var result = OrgListParser.Parse(null);
-        Assert.Empty(result);
+        _bridgeMock.Setup(b => b.IsInitialized).Returns(false);
+
+        Assert.Empty(await CreateService().ListAvailableOrganizationsAsync());
+
+        _bridgeMock.Verify(b => b.FetchJsonAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
-    public void Parse_EmptyArray_ReturnsEmptyList()
+    public async Task ListAvailableOrganizations_WithANullResponseBody_ReturnsEmpty()
     {
-        var result = OrgListParser.Parse("[]");
-        Assert.Empty(result);
+        RespondToOrganizationsWith(null);
+
+        Assert.Empty(await CreateService().ListAvailableOrganizationsAsync());
     }
 
     [Fact]
-    public void Parse_MissingName_FallsBackToUuid()
+    public async Task ListAvailableOrganizations_WithAnEmptyArray_ReturnsEmpty()
     {
-        const string json = """[{"uuid":"org-no-name-789"}]""";
+        RespondToOrganizationsWith("[]");
 
-        var result = OrgListParser.Parse(json);
+        Assert.Empty(await CreateService().ListAvailableOrganizationsAsync());
+    }
+
+    [Fact]
+    public async Task ListAvailableOrganizations_WithoutAName_FallsBackToTheUuid()
+    {
+        RespondToOrganizationsWith("""[{"uuid":"org-no-name-789"}]""");
+
+        var result = await CreateService().ListAvailableOrganizationsAsync();
 
         Assert.Single(result);
         Assert.Equal("org-no-name-789", result[0].Uuid);
@@ -100,54 +112,108 @@ public class ListAvailableOrganizationsTests
     }
 
     [Fact]
-    public void Parse_EntryWithEmptyUuid_IsSkipped()
+    public async Task ListAvailableOrganizations_WithANullName_FallsBackToTheUuid()
     {
-        const string json = """
-            [
-              {"uuid":"","name":"Empty UUID"},
-              {"uuid":"org-valid","name":"Valid"}
-            ]
-            """;
+        RespondToOrganizationsWith($$"""[{"uuid":"{{ValidOrgId}}","name":null}]""");
 
-        var result = OrgListParser.Parse(json);
+        var result = await CreateService().ListAvailableOrganizationsAsync();
 
         Assert.Single(result);
-        Assert.Equal("org-valid", result[0].Uuid);
+        Assert.Equal(ValidOrgId, result[0].Name);
     }
 
     [Fact]
-    public void Parse_NotAnArray_ReturnsEmptyList()
+    public async Task ListAvailableOrganizations_SkipsEntriesWithoutAUsableUuid()
     {
-        const string json = """{"uuid":"org-not-an-array","name":"Obj"}""";
+        RespondToOrganizationsWith($$"""
+            [
+              {"uuid":"","name":"Empty uuid"},
+              {"name":"No uuid at all"},
+              {"uuid":"{{ValidOrgId}}","name":"Valid"}
+            ]
+            """);
 
-        var result = OrgListParser.Parse(json);
-        Assert.Empty(result);
+        var result = await CreateService().ListAvailableOrganizationsAsync();
+
+        Assert.Single(result);
+        Assert.Equal(ValidOrgId, result[0].Uuid);
     }
 
     [Fact]
-    public void Parse_MalformedJson_ReturnsEmptyList()
+    public async Task ListAvailableOrganizations_WithAJsonObjectInsteadOfAnArray_ReturnsEmpty()
     {
-        var result = OrgListParser.Parse("{broken json");
-        Assert.Empty(result);
+        RespondToOrganizationsWith("""{"uuid":"org-not-an-array","name":"Obj"}""");
+
+        Assert.Empty(await CreateService().ListAvailableOrganizationsAsync());
     }
 
     [Fact]
-    public void OrganizationInfo_Record_HasUuidAndName()
+    public async Task ListAvailableOrganizations_WithMalformedJson_ReturnsEmpty()
     {
-        // OrganizationInfo is a sealed record — verify structural contract
-        var org = new OrganizationInfo("test-uuid", "Test Name");
-        Assert.Equal("test-uuid", org.Uuid);
-        Assert.Equal("Test Name", org.Name);
+        RespondToOrganizationsWith("{broken json");
+
+        Assert.Empty(await CreateService().ListAvailableOrganizationsAsync());
     }
 
     [Fact]
-    public void OrganizationInfo_RecordEquality_WorksCorrectly()
+    public async Task ListAvailableOrganizations_OnSessionExpiry_ReturnsEmptyAndAsksForReauthentication()
     {
-        var a = new OrganizationInfo("uid", "Name");
-        var b = new OrganizationInfo("uid", "Name");
-        var c = new OrganizationInfo("other", "Name");
+        _bridgeMock.Setup(b => b.FetchJsonAsync(OrganizationsUrl))
+                   .ThrowsAsync(new SessionExpiredException());
 
-        Assert.Equal(a, b);
-        Assert.NotEqual(a, c);
+        var authStates = new List<bool>();
+        WeakReferenceMessenger.Default.Register<AuthStateChangedMessage>(this, (_, m) => authStates.Add(m.Value));
+
+        Assert.Empty(await CreateService().ListAvailableOrganizationsAsync());
+
+        Assert.Equal([false], authStates);
     }
+
+    [Fact]
+    public async Task FetchUsage_WithoutAStoredOrgId_AutoPicksTheFirstUsableOrgForTheUsageUrl()
+    {
+        // The failure the empty-uuid guard prevents: the auto-pick takes orgs[0], so an entry the parser
+        // should have dropped becomes the persisted org id and every usage fetch of that session goes to
+        // /api/organizations//usage — a 404 loop the user can only escape by logging out.
+        _credentialMock.Setup(c => c.GetOrganizationId()).Returns((string?)null);
+        RespondToOrganizationsWith($$"""
+            [
+              {"uuid":"","name":"Empty uuid"},
+              {"uuid":"{{ValidOrgId}}","name":"Valid"}
+            ]
+            """);
+
+        string? usageUrl = null;
+        _bridgeMock
+            .Setup(b => b.FetchJsonAsync(It.Is<string>(url => url.EndsWith(UsagePathSuffix, StringComparison.Ordinal))))
+            .Callback<string>(url => usageUrl = url)
+            .ReturnsAsync(EmptyUsageJson);
+
+        var result = await CreateService().FetchUsageAsync();
+
+        Assert.NotNull(result);
+        _credentialMock.Verify(c => c.SaveOrganizationId(ValidOrgId), Times.Once);
+        Assert.Equal($"{OrganizationsUrl}/{ValidOrgId}{UsagePathSuffix}", usageUrl);
+    }
+
+    [Fact]
+    public async Task FetchUsage_WhenNoOrgHasAUsableUuid_FailsInsteadOfFetchingAnEmptyOrgUrl()
+    {
+        _credentialMock.Setup(c => c.GetOrganizationId()).Returns((string?)null);
+        RespondToOrganizationsWith("""[{"uuid":"","name":"Empty uuid"}]""");
+
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.FetchUsageAsync());
+
+        _credentialMock.Verify(c => c.SaveOrganizationId(It.IsAny<string>()), Times.Never);
+        _bridgeMock.Verify(
+            b => b.FetchJsonAsync(It.Is<string>(url => url.EndsWith(UsagePathSuffix, StringComparison.Ordinal))),
+            Times.Never);
+    }
+
+    private static string EmptyUsageJson => JsonSerializer.Serialize(new
+    {
+        five_hour = new { utilization = 0.0, resets_at = DateTimeOffset.UtcNow.AddHours(1).ToString("o") }
+    });
 }
