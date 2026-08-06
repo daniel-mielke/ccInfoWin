@@ -207,18 +207,20 @@ public class JsonlServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task GetTokenSummary_DeduplicatesByUuidAndRequestId()
+    public async Task GetTokenSummary_DeduplicatesByMessageIdAndRequestId()
     {
         const string SessionId = "tok2aaaa-0000-0000-0000-000000000002";
+        const string SharedMessageId = "msg_011CdkFMUPJsJvagAd5DXbrB";
         var projectDir = CreateProjectSessionDir(SessionId);
         var projectDirName = Path.GetFileName(projectDir);
         var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
 
-        // Same uuid+requestId appears twice — should only be counted once
+        // One assistant message written as two lines: distinct per-line uuids, shared
+        // message.id + requestId. This is the shape Claude Code actually produces.
         await File.WriteAllLinesAsync(jsonlFile,
         [
-            BuildAssistantEntry(SessionId, "uuid-1", "req-1", outputTokens: 500),
-            BuildAssistantEntry(SessionId, "uuid-1", "req-1", outputTokens: 500)
+            BuildAssistantEntry(SessionId, "uuid-1", "req-1", outputTokens: 500, messageId: SharedMessageId),
+            BuildAssistantEntry(SessionId, "uuid-2", "req-1", outputTokens: 500, messageId: SharedMessageId)
         ]);
 
         var service = new JsonlService(_tempDir);
@@ -227,6 +229,115 @@ public class JsonlServiceTests : IDisposable
         var summary = service.GetTokenSummary(projectDirName);
 
         Assert.Equal(500L, summary.OutputTokens);
+    }
+
+    /// <summary>
+    /// Regression lock for the deduplication blocker (finding 2). Reproduces
+    /// msg_011CdkFMUPJsJvagAd5DXbrB from the maintainer's live corpus: four lines, four distinct
+    /// uuids, one message.id, every line repeating the identical usage block. Before the fix the
+    /// key was read from a uniqueHash field Claude Code never writes, so all four were summed and
+    /// every token, statistic and cost figure came out 4x too high for this message.
+    /// </summary>
+    [Fact]
+    public async Task GetStatistics_FourLinesSharingOneMessageId_AreCountedOnce()
+    {
+        const string SessionId = "tok4aaaa-0000-0000-0000-000000000004";
+        const string SharedMessageId = "msg_011CdkFMUPJsJvagAd5DXbrB";
+        const string SharedRequestId = "req_011CdkFMRhavpWWeU3wA89TB";
+        const long InputTokens = 2L;
+        const long OutputTokens = 681L;
+        const long CacheCreationTokens = 65_563L;
+
+        var projectDir = CreateProjectSessionDir(SessionId);
+        var projectDirName = Path.GetFileName(projectDir);
+        var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
+        var withinCurrentHour = CurrentHourTimestamp(minute: 5);
+
+        var lines = Enumerable.Range(1, 4)
+            .Select(lineNumber => BuildAssistantEntryWithCache(
+                SessionId,
+                uuid: $"line-{lineNumber}",
+                requestId: SharedRequestId,
+                inputTokens: InputTokens,
+                outputTokens: OutputTokens,
+                cacheCreation: CacheCreationTokens,
+                timestamp: withinCurrentHour,
+                messageId: SharedMessageId))
+            .ToArray();
+
+        await File.WriteAllLinesAsync(jsonlFile, lines);
+
+        var service = new JsonlService(_tempDir, pricingService: BuildNullPricingService());
+        await service.InitializeAsync();
+
+        var summary = service.GetTokenSummary(projectDirName);
+        var stats = service.GetStatistics(TimePeriod.Session, projectDirName);
+
+        Assert.Equal(InputTokens, summary.InputTokens);
+        Assert.Equal(OutputTokens, summary.OutputTokens);
+        Assert.Equal(InputTokens, stats.InputTokens);
+        Assert.Equal(OutputTokens, stats.OutputTokens);
+        Assert.Equal(CacheCreationTokens, stats.CacheCreationTokens);
+    }
+
+    /// <summary>
+    /// The lines of one message are not always clones: in the live corpus every multi-line group
+    /// whose output_tokens differ (670 of 670) carries the completed value on the LAST line, the
+    /// earlier ones being partial content blocks. First-seen-wins would keep the stub and report
+    /// 1 output token instead of 288, so the later line must supersede the earlier one.
+    /// </summary>
+    [Fact]
+    public async Task GetTokenSummary_PartialThenFinalLineForOneMessage_KeepsFinalOutputTokens()
+    {
+        const string SessionId = "tok5aaaa-0000-0000-0000-000000000005";
+        const string SharedMessageId = "msg_011Cdk9QkpQnEytv4hRV5nPU";
+        const long PartialOutputTokens = 1L;
+        const long FinalOutputTokens = 288L;
+
+        var projectDir = CreateProjectSessionDir(SessionId);
+        var projectDirName = Path.GetFileName(projectDir);
+        var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
+
+        await File.WriteAllLinesAsync(jsonlFile,
+        [
+            BuildAssistantEntry(SessionId, "uuid-partial-1", "req-1", outputTokens: PartialOutputTokens, messageId: SharedMessageId),
+            BuildAssistantEntry(SessionId, "uuid-partial-2", "req-1", outputTokens: PartialOutputTokens, messageId: SharedMessageId),
+            BuildAssistantEntry(SessionId, "uuid-final", "req-1", outputTokens: FinalOutputTokens, messageId: SharedMessageId)
+        ]);
+
+        var service = new JsonlService(_tempDir);
+        await service.InitializeAsync();
+
+        var summary = service.GetTokenSummary(projectDirName);
+
+        Assert.Equal(FinalOutputTokens, summary.OutputTokens);
+    }
+
+    /// <summary>
+    /// Distinct messages must still accumulate — a dedup key that collapsed too much would make
+    /// every assertion above pass while zeroing the app's actual purpose.
+    /// </summary>
+    [Fact]
+    public async Task GetTokenSummary_DistinctMessageIdsSharingOneRequestId_AreCountedSeparately()
+    {
+        const string SessionId = "tok6aaaa-0000-0000-0000-000000000006";
+        const string SharedRequestId = "req-shared";
+        var projectDir = CreateProjectSessionDir(SessionId);
+        var projectDirName = Path.GetFileName(projectDir);
+        var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
+
+        await File.WriteAllLinesAsync(jsonlFile,
+        [
+            BuildAssistantEntry(SessionId, "uuid-1", SharedRequestId, outputTokens: 100, messageId: "msg_first"),
+            BuildAssistantEntry(SessionId, "uuid-2", SharedRequestId, outputTokens: 200, messageId: "msg_second")
+        ]);
+
+        var service = new JsonlService(_tempDir);
+        await service.InitializeAsync();
+
+        var summary = service.GetTokenSummary(projectDirName);
+
+        Assert.Equal(300L, summary.OutputTokens);
     }
 
     [Fact]
@@ -476,6 +587,96 @@ public class JsonlServiceTests : IDisposable
         Assert.True(File.Exists(Path.Combine(cacheDir, "jsonl-cache.json")));
     }
 
+    /// <summary>
+    /// An existing installation's cache was written while every streamed content block counted as
+    /// its own assistant message. Its read positions therefore mark lines that were aggregated
+    /// under the old semantics, so the schema stamp must reject the whole file and force a full
+    /// re-read. Observed through a marker for a path that no longer exists: nothing prunes
+    /// _filePositions, so the stale key survives into the next save if — and only if — the file
+    /// was adopted.
+    /// </summary>
+    [Fact]
+    public async Task LoadCache_UnstampedLegacyFile_IsDiscardedAndRestamped()
+    {
+        const string SessionId = "cac1aaaa-0000-0000-0000-000000000060";
+        var cacheDir = Path.Combine(_tempDir, "cache");
+        Directory.CreateDirectory(cacheDir);
+        var ghostPath = VanishedJsonlPath();
+
+        WriteCacheFile(cacheDir, JsonSerializer.Serialize(new
+        {
+            filePositions = BuildGhostPositions(ghostPath)
+        }));
+
+        CreateSessionFile(SessionId);
+        var sessionFile = Path.Combine(_tempDir, "project-" + SessionId[..8], $"{SessionId}.jsonl");
+
+        using var service = new JsonlService(_tempDir, cacheDir);
+        await service.InitializeAsync();
+
+        var saved = ReadCacheFile(cacheDir);
+        Assert.Equal(JsonlCache.CurrentSchemaVersion, saved.SchemaVersion);
+        Assert.DoesNotContain(ghostPath, saved.FilePositions.Keys);
+        Assert.Contains(sessionFile, saved.FilePositions.Keys);
+    }
+
+    /// <summary>
+    /// Complement to the discard test: a cache already stamped with the current schema is adopted,
+    /// so the marker it carries survives. Without this the discard above would also pass for a
+    /// version gate that rejected every file unconditionally.
+    /// </summary>
+    [Fact]
+    public async Task LoadCache_CurrentSchemaVersion_IsAdopted()
+    {
+        const string SessionId = "cac2aaaa-0000-0000-0000-000000000061";
+        var cacheDir = Path.Combine(_tempDir, "cache");
+        Directory.CreateDirectory(cacheDir);
+        var ghostPath = VanishedJsonlPath();
+
+        WriteCacheFile(cacheDir, JsonSerializer.Serialize(new
+        {
+            schemaVersion = JsonlCache.CurrentSchemaVersion,
+            filePositions = BuildGhostPositions(ghostPath)
+        }));
+
+        CreateSessionFile(SessionId);
+
+        using var service = new JsonlService(_tempDir, cacheDir);
+        await service.InitializeAsync();
+
+        var saved = ReadCacheFile(cacheDir);
+        Assert.Equal(JsonlCache.CurrentSchemaVersion, saved.SchemaVersion);
+        Assert.Contains(ghostPath, saved.FilePositions.Keys);
+    }
+
+    /// <summary>
+    /// A path that is never created, so session discovery cannot reintroduce it and only cache
+    /// adoption can explain its presence in the saved file.
+    /// </summary>
+    private static string VanishedJsonlPath() =>
+        Path.Combine(Path.GetTempPath(), $"ccinfo-vanished-{Guid.NewGuid():N}", "gone.jsonl");
+
+    private static Dictionary<string, FilePositionMarker> BuildGhostPositions(string ghostPath) =>
+        new()
+        {
+            [ghostPath] = new FilePositionMarker
+            {
+                LastReadPosition = 4096,
+                FileSize = 4096,
+                LastWriteTime = DateTimeOffset.UnixEpoch
+            }
+        };
+
+    private static void WriteCacheFile(string cacheDir, string json) =>
+        File.WriteAllText(Path.Combine(cacheDir, "jsonl-cache.json"), json);
+
+    private static JsonlCache ReadCacheFile(string cacheDir)
+    {
+        var json = File.ReadAllText(Path.Combine(cacheDir, "jsonl-cache.json"));
+        return JsonSerializer.Deserialize<JsonlCache>(json)
+            ?? throw new InvalidOperationException("Saved jsonl-cache.json did not deserialize.");
+    }
+
     // -------------------------------------------------------------------------
     // Subagent discovery
     // -------------------------------------------------------------------------
@@ -570,17 +771,18 @@ public class JsonlServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task GetStatistics_DeduplicatesByUuidAndRequestIdAcrossProjects()
+    public async Task GetStatistics_DeduplicatesByMessageIdAndRequestIdAcrossProjects()
     {
         const string Session1 = "aaaaaaaa-0000-0000-0000-000000000052";
         const string Session2 = "aaaaaaaa-0000-0000-0000-000000000053";
+        const string SharedMessageId = "msg_shared";
         var projectDir1 = CreateProjectSessionDir(Session1);
         var projectDir2 = CreateProjectSessionDir(Session2);
 
-        // Same uuid+requestId in two different project dirs — must only count once
-        var json1 = BuildAssistantEntry(Session1, "shared-uuid", "shared-req",
+        // Same message.id+requestId under two different project dirs — must only count once
+        var json1 = BuildAssistantEntry(Session1, "uuid-1", "shared-req", messageId: SharedMessageId,
             inputTokens: 500, outputTokens: 100, timestamp: DateTimeOffset.UtcNow.AddHours(-1));
-        var json2 = BuildAssistantEntry(Session2, "shared-uuid", "shared-req",
+        var json2 = BuildAssistantEntry(Session2, "uuid-2", "shared-req", messageId: SharedMessageId,
             inputTokens: 500, outputTokens: 100, timestamp: DateTimeOffset.UtcNow.AddHours(-1));
 
         await File.WriteAllTextAsync(Path.Combine(projectDir1, $"{Session1}.jsonl"), json1 + "\n");
@@ -604,9 +806,8 @@ public class JsonlServiceTests : IDisposable
         var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
 
         // Use timestamps guaranteed to be within the current hour
-        var now = DateTimeOffset.Now;
-        var safeTimestamp1 = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, 1, 0, now.Offset);
-        var safeTimestamp2 = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, 2, 0, now.Offset);
+        var safeTimestamp1 = CurrentHourTimestamp(minute: 1);
+        var safeTimestamp2 = CurrentHourTimestamp(minute: 2);
 
         await File.WriteAllLinesAsync(jsonlFile,
         [
@@ -624,6 +825,16 @@ public class JsonlServiceTests : IDisposable
 
         Assert.Equal(300L, stats.InputTokens);
         Assert.Equal(130L, stats.OutputTokens);
+    }
+
+    /// <summary>
+    /// A local timestamp inside the current clock hour, which is what TimePeriod.Session filters on.
+    /// Independent of when in the hour the test runs — the cutoff is the start of the hour.
+    /// </summary>
+    private static DateTimeOffset CurrentHourTimestamp(int minute)
+    {
+        var now = DateTimeOffset.Now;
+        return new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, minute, 0, now.Offset);
     }
 
     private static IPricingService BuildNullPricingService()
@@ -644,7 +855,8 @@ public class JsonlServiceTests : IDisposable
         long outputTokens = 0,
         long cacheCreation = 0,
         long cacheRead = 0,
-        DateTimeOffset? timestamp = null)
+        DateTimeOffset? timestamp = null,
+        string? messageId = null)
     {
         return JsonSerializer.Serialize(new
         {
@@ -657,6 +869,7 @@ public class JsonlServiceTests : IDisposable
             type = "assistant",
             message = new
             {
+                id = messageId ?? DefaultMessageId(uuid),
                 model = "claude-sonnet-4-6",
                 usage = new
                 {
@@ -704,6 +917,14 @@ public class JsonlServiceTests : IDisposable
         File.WriteAllText(jsonlFile, line + "\n");
     }
 
+    /// <summary>
+    /// Mirrors the real Claude Code line shape: a per-line <c>uuid</c> plus a
+    /// <c>message.id</c> that repeats across every line belonging to one assistant message.
+    /// There is deliberately no <c>uniqueHash</c> key — Claude Code never writes one
+    /// (0 occurrences across the maintainer's 145-file live corpus), so a fixture that
+    /// supplied it would test a schema that does not exist.
+    /// Pass <paramref name="messageId"/> explicitly to make several lines share one message.
+    /// </summary>
     private static string BuildAssistantEntry(
         string sessionId,
         string uuid,
@@ -714,7 +935,7 @@ public class JsonlServiceTests : IDisposable
         long outputTokens = 0,
         bool isSidechain = false,
         DateTimeOffset? timestamp = null,
-        string? uniqueHash = null)
+        string? messageId = null)
     {
         return JsonSerializer.Serialize(new
         {
@@ -724,10 +945,10 @@ public class JsonlServiceTests : IDisposable
             cwd = cwd ?? "/home/user/project",
             timestamp = (timestamp ?? DateTimeOffset.UtcNow).ToString("O"),
             isSidechain,
-            uniqueHash = uniqueHash ?? $"{uuid}|{requestId}",
             type = "assistant",
             message = new
             {
+                id = messageId ?? DefaultMessageId(uuid),
                 model,
                 usage = new
                 {
@@ -739,6 +960,8 @@ public class JsonlServiceTests : IDisposable
             }
         });
     }
+
+    private static string DefaultMessageId(string uuid) => "msg_" + uuid;
 
     private static string BuildSidechainAssistantEntry(
         string sessionId,

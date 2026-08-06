@@ -26,6 +26,14 @@ public record JsonlUsage
 /// </summary>
 public record JsonlMessage
 {
+    /// <summary>
+    /// Server-assigned message identifier (msg_...). Claude Code writes one JSONL line per
+    /// streamed content block of the same assistant message, so this — not the per-line
+    /// <see cref="JsonlEntry.Uuid"/> — is the identity a usage block must be deduplicated on.
+    /// </summary>
+    [JsonPropertyName("id")]
+    public string? Id { get; init; }
+
     [JsonPropertyName("model")]
     public string? Model { get; init; }
 
@@ -74,7 +82,4 @@ public record JsonlEntry
 
     [JsonPropertyName("costUSD")]
     public decimal? CostUsd { get; init; }
-
-    [JsonPropertyName("uniqueHash")]
-    public string? UniqueHash { get; init; }
 }

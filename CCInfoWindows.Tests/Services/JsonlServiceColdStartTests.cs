@@ -155,6 +155,70 @@ public class JsonlServiceColdStartTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
+    // Deduplication across two reads (finding 2)
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// A streamed assistant message can straddle two refresh cycles: the first read sees a partial
+    /// content block (output_tokens 1), the incremental read that follows sees the completed line
+    /// for the SAME message.id. The result must be one entry carrying the final token count — not
+    /// two entries, and not the stub frozen in place. Skipping the repeat instead of superseding it
+    /// would report 1 output token for a 300-token answer, forever.
+    /// </summary>
+    [Fact]
+    public async Task ProcessFilesForTest_FinalLineOfAMessageArrivesLater_SupersedesThePartialLine()
+    {
+        const string ProjectDirName = "S--supersede";
+        const string SharedMessageId = "msg_011Cdk9QkpQnEytv4hRV5nPU";
+        const long PartialOutputTokens = 1L;
+        const long FinalOutputTokens = 300L;
+
+        var projectDir = CreateProjectSubdir(_tempDir, ProjectDirName);
+        var sessionFile = Path.Combine(projectDir, "streamed.jsonl");
+        WriteAssistantJsonlLine(sessionFile, "sess-s", cwd: null, PartialOutputTokens, SharedMessageId);
+
+        var svc = BuildService(_tempDir);
+        await svc.InitializeAsync();
+
+        Assert.Equal(PartialOutputTokens, svc.GetTokenSummary(ProjectDirName).OutputTokens);
+
+        WriteAssistantJsonlLine(sessionFile, "sess-s", cwd: null, FinalOutputTokens, SharedMessageId);
+        await svc.ProcessFilesForTestAsync([sessionFile]);
+
+        Assert.Equal(1, GetEntryCountForProject(svc, ProjectDirName));
+        Assert.Equal(FinalOutputTokens, svc.GetTokenSummary(ProjectDirName).OutputTokens);
+        svc.Stop();
+    }
+
+    /// <summary>
+    /// Two distinct messages must still accumulate across an incremental read — proof that the
+    /// supersede path keys on message identity and not on "anything seen in this file before".
+    /// </summary>
+    [Fact]
+    public async Task ProcessFilesForTest_DistinctMessageArrivesLater_IsAddedNotSuperseded()
+    {
+        const string ProjectDirName = "S--append";
+        const long FirstOutputTokens = 40L;
+        const long SecondOutputTokens = 60L;
+
+        var projectDir = CreateProjectSubdir(_tempDir, ProjectDirName);
+        var sessionFile = Path.Combine(projectDir, "appended.jsonl");
+        WriteAssistantJsonlLine(sessionFile, "sess-a", cwd: null, FirstOutputTokens, "msg_first");
+
+        var svc = BuildService(_tempDir);
+        await svc.InitializeAsync();
+
+        WriteAssistantJsonlLine(sessionFile, "sess-a", cwd: null, SecondOutputTokens, "msg_second");
+        await svc.ProcessFilesForTestAsync([sessionFile]);
+
+        Assert.Equal(2, GetEntryCountForProject(svc, ProjectDirName));
+        Assert.Equal(
+            FirstOutputTokens + SecondOutputTokens,
+            svc.GetTokenSummary(ProjectDirName).OutputTokens);
+        svc.Stop();
+    }
+
+    // -------------------------------------------------------------------------
     // Test seam
     // -------------------------------------------------------------------------
 
@@ -176,62 +240,62 @@ public class JsonlServiceColdStartTests : IDisposable
     /// Appends one JSONL assistant entry line to filePath.
     /// When cwd is null the key is omitted entirely, reproducing entries from
     /// projects where Claude Code never writes the cwd field.
+    /// The line shape mirrors real Claude Code output: a per-line uuid plus a message.id that
+    /// identifies the assistant message. Passing messageId makes several lines belong to one
+    /// message, which is how a streamed response is written. There is no uniqueHash key —
+    /// Claude Code never writes one.
     /// </summary>
-    private static void WriteAssistantJsonlLine(string filePath, string sessionId, string? cwd, int outputTokens)
+    private static void WriteAssistantJsonlLine(
+        string filePath,
+        string sessionId,
+        string? cwd,
+        long outputTokens,
+        string? messageId = null)
     {
-        var uuid = $"msg_{Guid.NewGuid():N}";
-        var requestId = $"req_{Guid.NewGuid():N}";
-        var uniqueHash = $"{uuid}|{requestId}";
-        string line;
-        if (cwd is null)
+        var uuid = Guid.NewGuid().ToString();
+        var resolvedMessageId = messageId ?? $"msg_{Guid.NewGuid():N}";
+
+        // Measured on the live corpus (6,941 usage-bearing lines, 3,322 distinct message.id): of the 2,552 ids
+        // written on more than one line, zero span more than one requestId. requestId is a function of message.id,
+        // so lines sharing a message must share the request id or the fixture invents a shape that never occurs.
+        var requestId = $"req_{resolvedMessageId}";
+        var message = new
         {
-            line = JsonSerializer.Serialize(new
+            id = resolvedMessageId,
+            model = "claude-sonnet-4-20250514",
+            usage = new
+            {
+                input_tokens = 10,
+                output_tokens = outputTokens,
+                cache_read_input_tokens = 0,
+                cache_creation_input_tokens = 0
+            }
+        };
+        var timestamp = DateTimeOffset.UtcNow.ToString("O");
+
+        var line = cwd is null
+            ? JsonSerializer.Serialize(new
             {
                 uuid,
                 requestId,
-                uniqueHash,
                 sessionId,
-                timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                timestamp,
                 isSidechain = false,
                 type = "assistant",
-                message = new
-                {
-                    model = "claude-sonnet-4-20250514",
-                    usage = new
-                    {
-                        input_tokens = 10,
-                        output_tokens = outputTokens,
-                        cache_read_input_tokens = 0,
-                        cache_creation_input_tokens = 0
-                    }
-                }
-            });
-        }
-        else
-        {
-            line = JsonSerializer.Serialize(new
+                message
+            })
+            : JsonSerializer.Serialize(new
             {
                 uuid,
                 requestId,
-                uniqueHash,
                 sessionId,
                 cwd,
-                timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                timestamp,
                 isSidechain = false,
                 type = "assistant",
-                message = new
-                {
-                    model = "claude-sonnet-4-20250514",
-                    usage = new
-                    {
-                        input_tokens = 10,
-                        output_tokens = outputTokens,
-                        cache_read_input_tokens = 0,
-                        cache_creation_input_tokens = 0
-                    }
-                }
+                message
             });
-        }
+
         File.AppendAllText(filePath, line + "\n");
     }
 

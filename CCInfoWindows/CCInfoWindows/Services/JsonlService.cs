@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Models;
@@ -31,6 +30,14 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
     private static readonly JsonSerializerOptions CacheSerializerOptions = new() { WriteIndented = false };
 
+    // AppLog call-site tags — kept as constants so the log stays greppable when methods are renamed.
+    private const string LoadCacheSource = "JsonlService.LoadCache";
+    private const string SaveCacheSource = "JsonlService.SaveCache";
+    private const string ParseFileSource = "JsonlService.ParseFileIntoProject";
+    private const string SubagentContextSource = "JsonlService.BuildSubagentContext";
+    private const string FileChangeSource = "JsonlService.ProcessPendingFileChanges";
+    private const string WatcherErrorSource = "JsonlService.OnWatcherError";
+
     // -------------------------------------------------------------------------
     // Internal per-project aggregation (keyed by project directory name)
     // -------------------------------------------------------------------------
@@ -46,9 +53,15 @@ public sealed class JsonlService : IJsonlService, IDisposable
         public long TotalOutputTokens { get; set; }
         public long TotalCacheCreationTokens { get; set; }
         public long TotalCacheReadTokens { get; set; }
-        public HashSet<string> SeenIds { get; } = [];
         public string? NewestSessionFile { get; set; }
         public DateTimeOffset NewestSessionModTime { get; set; }
+
+        /// <summary>
+        /// Maps a deduplication key to the index of its entry in <see cref="EntryLog"/>, so a
+        /// repeated line for the same assistant message supersedes the earlier one instead of
+        /// adding a second contribution. Indices stay valid because entries are never removed.
+        /// </summary>
+        public Dictionary<string, int> EntryIndexByKey { get; } = new(StringComparer.Ordinal);
 
         /// <summary>
         /// Compact per-entry log for time-period filtering.
@@ -288,7 +301,9 @@ public sealed class JsonlService : IJsonlService, IDisposable
                 if (logEntry.Timestamp < cutoff)
                     continue;
 
-                // Deduplicate by uuid+requestId across projects (TOKS-04)
+                // Cross-project guard (TOKS-04). Within one project the entry index already holds
+                // a single entry per message.id+requestId; this catches the same message surfacing
+                // under two project directories, where the two indexes cannot see each other.
                 if (!string.IsNullOrEmpty(logEntry.DeduplicationKey)
                     && !seenIds.Add(logEntry.DeduplicationKey))
                 {
@@ -594,7 +609,9 @@ public sealed class JsonlService : IJsonlService, IDisposable
         if (string.IsNullOrEmpty(data.Cwd) && !string.IsNullOrEmpty(data.ProjectDirName))
         {
             var decoded = SessionNameHelper.DecodeProjectDirectory(data.ProjectDirName);
-            Debug.WriteLine($"[JsonlService] No cwd in '{data.ProjectDirName}'; display surrogate: '{decoded ?? "(none)"}'");
+            AppLog.Write(
+                ParseFileSource,
+                $"No cwd in '{data.ProjectDirName}'; display surrogate: '{decoded ?? "(none)"}'");
         }
 
         UpdateFilePosition(filePath, newPosition);
@@ -608,41 +625,82 @@ public sealed class JsonlService : IJsonlService, IDisposable
         if (!IsRelevantAssistantEntry(entry))
             return;
 
-        var deduplicationKey = BuildDeduplicationKey(entry);
-
-        if (!string.IsNullOrEmpty(deduplicationKey) && !data.SeenIds.Add(deduplicationKey))
-            return; // Already counted this entry
-
         var usage = entry.Message?.Usage;
         if (usage is null)
             return;
 
-        var inputTokens = usage.InputTokens ?? 0;
-        var outputTokens = usage.OutputTokens ?? 0;
-        var cacheCreation = usage.CacheCreationInputTokens ?? 0;
-        var cacheRead = usage.CacheReadInputTokens ?? 0;
+        var logItem = BuildEntryLogItem(entry, usage, sourceFile);
 
-        data.TotalInputTokens += inputTokens;
-        data.TotalOutputTokens += outputTokens;
-        data.TotalCacheCreationTokens += cacheCreation;
-        data.TotalCacheReadTokens += cacheRead;
+        if (logItem.DeduplicationKey.Length > 0
+            && data.EntryIndexByKey.TryGetValue(logItem.DeduplicationKey, out var knownIndex))
+        {
+            SupersedeEntry(data, knownIndex, logItem);
+            return;
+        }
 
-        var model = entry.Message?.Model;
-        if (!string.IsNullOrEmpty(model))
-            data.ModelName = model;
+        AppendEntry(data, logItem);
+    }
 
-        data.EntryLog.Add(new EntryLogItem
+    private static EntryLogItem BuildEntryLogItem(JsonlEntry entry, JsonlUsage usage, string sourceFile) =>
+        new()
         {
             Timestamp = entry.Timestamp ?? DateTimeOffset.MinValue,
-            InputTokens = inputTokens,
-            OutputTokens = outputTokens,
-            CacheCreationTokens = cacheCreation,
-            CacheReadTokens = cacheRead,
+            InputTokens = usage.InputTokens ?? 0,
+            OutputTokens = usage.OutputTokens ?? 0,
+            CacheCreationTokens = usage.CacheCreationInputTokens ?? 0,
+            CacheReadTokens = usage.CacheReadInputTokens ?? 0,
             CostUsd = entry.CostUsd,
-            ModelName = model,
-            DeduplicationKey = deduplicationKey,
+            ModelName = entry.Message?.Model,
+            DeduplicationKey = BuildDeduplicationKey(entry),
             SourceFile = sourceFile
-        });
+        };
+
+    private static void AppendEntry(ProjectData data, EntryLogItem item)
+    {
+        if (item.DeduplicationKey.Length > 0)
+            data.EntryIndexByKey[item.DeduplicationKey] = data.EntryLog.Count;
+
+        data.EntryLog.Add(item);
+        AddToTotals(data, item);
+        ApplyModelName(data, item.ModelName);
+    }
+
+    /// <summary>
+    /// Replaces an already-counted entry with a later line carrying the same identity.
+    /// Claude Code writes one JSONL line per streamed content block of a single assistant
+    /// message: every line repeats the identical input/cache figures while only the final line
+    /// carries the completed output_tokens. Superseding (rather than skipping the repeat) keeps
+    /// exactly one contribution per message AND keeps the authoritative one, and makes
+    /// re-reading lines that were already parsed idempotent instead of additive.
+    /// </summary>
+    private static void SupersedeEntry(ProjectData data, int index, EntryLogItem replacement)
+    {
+        SubtractFromTotals(data, data.EntryLog[index]);
+        data.EntryLog[index] = replacement;
+        AddToTotals(data, replacement);
+        ApplyModelName(data, replacement.ModelName);
+    }
+
+    private static void AddToTotals(ProjectData data, EntryLogItem item)
+    {
+        data.TotalInputTokens += item.InputTokens;
+        data.TotalOutputTokens += item.OutputTokens;
+        data.TotalCacheCreationTokens += item.CacheCreationTokens;
+        data.TotalCacheReadTokens += item.CacheReadTokens;
+    }
+
+    private static void SubtractFromTotals(ProjectData data, EntryLogItem item)
+    {
+        data.TotalInputTokens -= item.InputTokens;
+        data.TotalOutputTokens -= item.OutputTokens;
+        data.TotalCacheCreationTokens -= item.CacheCreationTokens;
+        data.TotalCacheReadTokens -= item.CacheReadTokens;
+    }
+
+    private static void ApplyModelName(ProjectData data, string? modelName)
+    {
+        if (!string.IsNullOrEmpty(modelName))
+            data.ModelName = modelName;
     }
 
     private static bool IsRelevantAssistantEntry(JsonlEntry entry) =>
@@ -653,8 +711,17 @@ public sealed class JsonlService : IJsonlService, IDisposable
         string.Equals(modelName, "<synthetic>", StringComparison.OrdinalIgnoreCase)
         || string.Equals(modelName, "synthetic", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Identity of one assistant message (TOKS-04). message.id is written on every usage-bearing
+    /// assistant line and is repeated across the lines that belong to one streamed response;
+    /// requestId narrows it to the single API call that produced it. uuid is only a fallback: it
+    /// is unique per LINE, so it can never collapse a multi-line message — it merely keeps a line
+    /// that carries no message.id from being counted twice when the same bytes are re-read.
+    /// </summary>
     private static string BuildDeduplicationKey(JsonlEntry entry) =>
-        entry.UniqueHash ?? string.Empty;
+        entry.Message?.Id is { Length: > 0 } messageId
+            ? $"{messageId}|{entry.RequestId}"
+            : entry.Uuid ?? string.Empty;
 
     private static bool IsSubagentFile(string filePath) =>
         filePath.Contains(Path.DirectorySeparatorChar + SubagentsDirectoryName + Path.DirectorySeparatorChar)
@@ -740,11 +807,11 @@ public sealed class JsonlService : IJsonlService, IDisposable
             }
             catch (IOException ex)
             {
-                Debug.WriteLine($"[JsonlService] Failed to parse subagent file {file}: {ex.Message}");
+                AppLog.Write(SubagentContextSource, ex, $"Failed to parse subagent file {file}.");
             }
             catch (UnauthorizedAccessException ex)
             {
-                Debug.WriteLine($"[JsonlService] Access denied for subagent file {file}: {ex.Message}");
+                AppLog.Write(SubagentContextSource, ex, $"Access denied for subagent file {file}.");
             }
         }
 
@@ -952,7 +1019,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[JsonlService] Error processing pending file changes: {ex.Message}");
+            AppLog.Write(FileChangeSource, ex, "Error processing pending file changes.");
         }
     }
 
@@ -1004,11 +1071,15 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
     private void OnWatcherError(object sender, ErrorEventArgs e)
     {
-        Debug.WriteLine($"[JsonlService] Watcher error: {e.GetException()?.Message}");
+        var watcherException = e.GetException();
+        if (watcherException is not null)
+            AppLog.Write(WatcherErrorSource, watcherException, "Watcher error.");
+        else
+            AppLog.Write(WatcherErrorSource, "Watcher error with no exception attached.");
 
         if (Interlocked.CompareExchange(ref _watcherRestartCount, 0, 0) >= MaxWatcherRestarts)
         {
-            Debug.WriteLine("[JsonlService] Max watcher restarts reached — giving up.");
+            AppLog.Write(WatcherErrorSource, "Max watcher restarts reached — giving up; live updates stop here.");
             return;
         }
 
@@ -1021,7 +1092,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[JsonlService] Failed to restart watcher: {ex.Message}");
+            AppLog.Write(WatcherErrorSource, ex, "Failed to restart watcher.");
         }
     }
 
@@ -1041,7 +1112,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
             var fileInfo = new FileInfo(cacheFile);
             if (fileInfo.Length > MaxCacheFileSizeBytes)
             {
-                Debug.WriteLine($"[JsonlService] Cache file exceeds {MaxCacheFileSizeBytes} bytes — ignoring.");
+                AppLog.Write(LoadCacheSource, $"Cache file exceeds {MaxCacheFileSizeBytes} bytes — ignoring.");
                 return;
             }
 
@@ -1051,6 +1122,17 @@ public sealed class JsonlService : IJsonlService, IDisposable
             if (cache is null)
                 return;
 
+            // Read positions produced under different aggregation semantics would let an existing
+            // installation resume from lines that were counted the old way. Dropping them costs
+            // one full re-read and is the only way those numbers can self-correct.
+            if (cache.SchemaVersion != JsonlCache.CurrentSchemaVersion)
+            {
+                AppLog.Write(
+                    LoadCacheSource,
+                    $"Cache schema {cache.SchemaVersion} != {JsonlCache.CurrentSchemaVersion} — discarding to force a full re-read.");
+                return;
+            }
+
             var positions = cache.FilePositions ?? [];
 
             // Validate deserialized values — reject negative positions
@@ -1058,7 +1140,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
             {
                 if (marker.LastReadPosition < 0)
                 {
-                    Debug.WriteLine($"[JsonlService] Invalid cache position for {key} — discarding cache.");
+                    AppLog.Write(LoadCacheSource, $"Invalid cache position for {key} — discarding cache.");
                     return;
                 }
             }
@@ -1067,11 +1149,11 @@ public sealed class JsonlService : IJsonlService, IDisposable
         }
         catch (JsonException ex)
         {
-            Debug.WriteLine($"[JsonlService] Corrupt cache file: {ex.Message}");
+            AppLog.Write(LoadCacheSource, ex, "Corrupt cache file — discarding.");
         }
         catch (IOException ex)
         {
-            Debug.WriteLine($"[JsonlService] Failed to load cache: {ex.Message}");
+            AppLog.Write(LoadCacheSource, ex, "Failed to load cache.");
         }
     }
 
@@ -1084,6 +1166,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
             var cache = new JsonlCache
             {
+                SchemaVersion = JsonlCache.CurrentSchemaVersion,
                 FilePositions = _filePositions
             };
 
@@ -1092,7 +1175,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[JsonlService] Failed to save cache: {ex.Message}");
+            AppLog.Write(SaveCacheSource, ex, "Failed to save cache.");
         }
     }
 

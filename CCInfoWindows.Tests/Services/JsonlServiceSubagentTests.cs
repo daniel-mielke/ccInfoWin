@@ -198,24 +198,24 @@ public class JsonlServiceSubagentTests : IDisposable
     /// Appends one assistant JSONL entry to filePath. Uses File.AppendAllText
     /// (closes handle before returning) so the subsequent File.SetLastWriteTimeUtc
     /// call is safe. Property names mirror JsonlServiceColdStartTests for
-    /// deserialization compatibility against the production JsonlEntry record.
+    /// deserialization compatibility against the production JsonlEntry record —
+    /// including message.id, which is the identity JsonlService deduplicates on.
     /// </summary>
     private static void WriteAssistantJsonlLine(string filePath, string sessionId, bool isSidechain, DateTimeOffset timestamp)
     {
-        var uuid = $"msg_{Guid.NewGuid():N}";
+        var uuid = Guid.NewGuid().ToString();
         var requestId = $"req_{Guid.NewGuid():N}";
-        var uniqueHash = $"{uuid}|{requestId}";
         var line = JsonSerializer.Serialize(new
         {
             uuid,
             requestId,
-            uniqueHash,
             sessionId,
             timestamp = timestamp.ToString("O"),
             isSidechain,
             type = "assistant",
             message = new
             {
+                id = $"msg_{Guid.NewGuid():N}",
                 model = "claude-sonnet-4-20250514",
                 usage = new
                 {
