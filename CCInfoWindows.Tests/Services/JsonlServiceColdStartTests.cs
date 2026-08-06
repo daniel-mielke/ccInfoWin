@@ -44,11 +44,11 @@ public class JsonlServiceColdStartTests : IDisposable
     /// <summary>
     /// When no JSONL entry carries a cwd field, JsonlService must derive a display name from the
     /// encoded project directory name via SessionNameHelper.DecodeProjectDirectory, and the session
-    /// must appear in Sessions under it. The validity filter in RebuildSessionsList only judges a
+    /// must appear in Sessions under it. The validity filter in BuildSessionList only judges a
     /// NON-empty Cwd; an empty one is kept precisely because there is nothing to judge.
     /// </summary>
     [Fact]
-    public async Task ParseFileIntoProject_NoEntryHasCwd_FallsBackToDecodedProjectDirName()
+    public async Task ApplyFileSlice_NoEntryHasCwd_FallsBackToDecodedProjectDirName()
     {
         const string ProjectDirName = "D--myProjects-ccInfoWin";
         var projectDir = CreateProjectSubdir(_tempDir, ProjectDirName);
@@ -77,7 +77,7 @@ public class JsonlServiceColdStartTests : IDisposable
     /// the session; the empty-Cwd clause in front of it is what this test locks.
     /// </summary>
     [Fact]
-    public async Task RebuildSessionsList_EmptyCwd_KeepsSessionWhenDisplayNameDerivable()
+    public async Task BuildSessionList_EmptyCwd_KeepsSessionWhenDisplayNameDerivable()
     {
         const string ProjectDirName = "D--myProjects-ccInfoWin";
         var projectDir = CreateProjectSubdir(_tempDir, ProjectDirName);
@@ -99,7 +99,7 @@ public class JsonlServiceColdStartTests : IDisposable
     /// after the DROPDOWN-03 filter change.
     /// </summary>
     [Fact]
-    public async Task RebuildSessionsList_NonEmptyCwdPointingAtDeletedDir_DropsSession()
+    public async Task BuildSessionList_NonEmptyCwdPointingAtDeletedDir_DropsSession()
     {
         const string ProjectDirName = "X--ghostpath";
         var projectDir = CreateProjectSubdir(_tempDir, ProjectDirName);
@@ -130,7 +130,7 @@ public class JsonlServiceColdStartTests : IDisposable
     /// is between two refresh cycles.
     /// </summary>
     [Fact]
-    public async Task ParseFileIntoProject_LinesWrittenDuringRace_AreNotSilentlyDropped()
+    public async Task ReadFileSlice_LinesWrittenDuringRace_AreNotSilentlyDropped()
     {
         const string ProjectDirName = "R--race";
         var projectDir = CreateProjectSubdir(_tempDir, ProjectDirName);
@@ -227,6 +227,103 @@ public class JsonlServiceColdStartTests : IDisposable
             FirstOutputTokens + SecondOutputTokens,
             svc.GetTokenSummary(ProjectDirName).OutputTokens);
         svc.Stop();
+    }
+
+    // -------------------------------------------------------------------------
+    // Publication of the cold-start scan (finding 28)
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// The DataUpdated contract the dashboard depends on, in both directions. The FIRST event arrives
+    /// while IsScanning is true: it is the only thing that makes the scanning indicator visible, because
+    /// MainViewModel samples IsScanning before awaiting InitializeAsync, when the flag is still clear.
+    /// The LAST event arrives with IsScanning false AND the scanned sessions already published, so the
+    /// refresh it triggers renders a populated picker instead of an empty one.
+    ///
+    /// Both halves are load-bearing: the review proposed moving the pre-scan raise to after the scan,
+    /// which would silently retire the indicator. The freeze it was blamed for came from the Sessions
+    /// getter blocking on the lock the scan held, and that is fixed at the getter.
+    /// </summary>
+    [Fact]
+    public async Task InitializeAsync_RaisesWhileScanningFirstAndWithPublishedSessionsLast()
+    {
+        const string ProjectDirName = "P--publishorder";
+        var projectDir = CreateProjectSubdir(_tempDir, ProjectDirName);
+        WriteAssistantJsonlLine(Path.Combine(projectDir, "order.jsonl"), "sess-o", cwd: null, outputTokens: 5);
+
+        var svc = BuildService(_tempDir);
+        var observed = new List<(bool IsScanning, int SessionCount)>();
+        svc.DataUpdated += (_, _) => observed.Add((svc.IsScanning, svc.Sessions.Count));
+
+        await svc.InitializeAsync();
+        svc.Stop();
+
+        Assert.Equal(2, observed.Count);
+        Assert.True(observed[0].IsScanning, "The first event must report a scan in progress.");
+        Assert.False(observed[^1].IsScanning);
+        Assert.Equal(1, observed[^1].SessionCount);
+    }
+
+    /// <summary>
+    /// The cold-start pass builds a private graph and swaps it in, so running it twice must land on the
+    /// same numbers. A swap that merged into the previous graph instead of replacing it would count every
+    /// entry twice for any line without a deduplication key. Documents the swap rather than catching the
+    /// old defect: supersede-by-identity already made the in-place merge idempotent for real Claude Code
+    /// lines, which is exactly why the swap is safe to make.
+    /// </summary>
+    [Fact]
+    public async Task InitializeAsync_RunTwice_PublishesTheSameAggregates()
+    {
+        const string ProjectDirName = "P--idempotent";
+        const long FirstOutputTokens = 70L;
+        const long SecondOutputTokens = 30L;
+
+        var projectDir = CreateProjectSubdir(_tempDir, ProjectDirName);
+        var sessionFile = Path.Combine(projectDir, "twice.jsonl");
+        WriteAssistantJsonlLine(sessionFile, "sess-i", cwd: null, FirstOutputTokens);
+        WriteAssistantJsonlLine(sessionFile, "sess-i", cwd: null, SecondOutputTokens);
+
+        var svc = BuildService(_tempDir);
+        await svc.InitializeAsync();
+
+        Assert.Single(svc.Sessions);
+        Assert.Equal(2, GetEntryCountForProject(svc, ProjectDirName));
+        Assert.Equal(FirstOutputTokens + SecondOutputTokens, svc.GetTokenSummary(ProjectDirName).OutputTokens);
+
+        await svc.InitializeAsync();
+        svc.Stop();
+
+        Assert.Single(svc.Sessions);
+        Assert.Equal(2, GetEntryCountForProject(svc, ProjectDirName));
+        Assert.Equal(FirstOutputTokens + SecondOutputTokens, svc.GetTokenSummary(ProjectDirName).OutputTokens);
+    }
+
+    /// <summary>
+    /// Stop cancels the scan token, so the source has to be replaced on the next Initialize. Cheap to
+    /// get wrong: one CancellationTokenSource for the service's lifetime passes every other test in this
+    /// file and leaves the dashboard permanently empty after the first Settings round-trip, which tears
+    /// the singleton down and re-initializes it. The second project is created while the service is
+    /// stopped, so only a scan that really ran can find it.
+    /// </summary>
+    [Fact]
+    public async Task InitializeAsync_AfterAStop_ScansAgain()
+    {
+        var firstDir = CreateProjectSubdir(_tempDir, "P--restart");
+        WriteAssistantJsonlLine(Path.Combine(firstDir, "first.jsonl"), "sess-r2", cwd: null, outputTokens: 12);
+
+        var svc = BuildService(_tempDir);
+        await svc.InitializeAsync();
+        Assert.Single(svc.Sessions);
+
+        svc.Stop();
+
+        var laterDir = CreateProjectSubdir(_tempDir, "P--restart-second");
+        WriteAssistantJsonlLine(Path.Combine(laterDir, "later.jsonl"), "sess-r3", cwd: null, outputTokens: 8);
+
+        await svc.InitializeAsync();
+        svc.Stop();
+
+        Assert.Equal(2, svc.Sessions.Count);
     }
 
     // -------------------------------------------------------------------------

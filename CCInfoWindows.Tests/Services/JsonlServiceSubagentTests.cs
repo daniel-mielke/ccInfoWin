@@ -16,7 +16,7 @@ public class JsonlServiceSubagentTests : IDisposable
     // Synthetic project name — decodes via SessionNameHelper.DecodeProjectDirectory
     // to "fixture" without depending on any real machine path. Hermetic for CI and
     // any maintainer layout. The fixture never creates the cwd its entries would name
-    // (they carry no cwd at all), so it also stays clear of the RebuildSessionsList
+    // (they carry no cwd at all), so it also stays clear of the BuildSessionList
     // validity filter; GetContextWindow is queried by project directory name directly.
     private const string ProjectDirName = "X--phase29-subagent-fixture";
     private const string CacheDirectoryName = "cache";
@@ -153,7 +153,7 @@ public class JsonlServiceSubagentTests : IDisposable
     /// stopped one directory short of the project, so the SESSION UUID became a _projectData key and
     /// therefore a SessionInfo.Id — a session named after a UUID fragment appeared in the picker
     /// whenever the visibility window was set to "Unlimited". Nothing was ever parsed out of the
-    /// file: subagent content is read on demand by FindSubagentFilesForNewestSession, which is why
+    /// file: subagent content is read on demand by FindSubagentFilesForSession, which is why
     /// the bar below still shows the agent.
     /// </summary>
     [Fact]
@@ -190,7 +190,7 @@ public class JsonlServiceSubagentTests : IDisposable
 
     /// <summary>
     /// Stages: {_tempDir}/{ProjectDirName}/{sessionUuid}.jsonl (main session,
-    /// one fresh assistant entry — required by FindSubagentFilesForNewestSession)
+    /// one fresh assistant entry — required by FindSubagentFilesForSession)
     /// + {_tempDir}/{ProjectDirName}/{sessionUuid}/subagents/agent-{id}.jsonl
     /// (the subagent file with one assistant entry at assistantTimestamp).
     /// Returns the absolute path of the subagent file so the caller can adjust

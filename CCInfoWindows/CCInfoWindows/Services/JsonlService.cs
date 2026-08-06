@@ -33,9 +33,10 @@ public sealed class JsonlService : IJsonlService, IDisposable
     // AppLog call-site tags — kept as constants so the log stays greppable when methods are renamed.
     private const string LoadCacheSource = "JsonlService.LoadCache";
     private const string SaveCacheSource = "JsonlService.SaveCache";
-    private const string ParseFileSource = "JsonlService.ParseFileIntoProject";
+    private const string CwdDiagnosticSource = "JsonlService.LogMissingCwdSurrogate";
     private const string SubagentContextSource = "JsonlService.BuildSubagentContext";
     private const string ContextWindowSource = "JsonlService.GetContextWindow";
+    private const string ScanSource = "JsonlService.ScanProjectsDirectory";
     private const string FileChangeSource = "JsonlService.ProcessPendingFileChanges";
     private const string FileDeletedSource = "JsonlService.OnFileDeleted";
     private const string WatcherErrorSource = "JsonlService.OnWatcherError";
@@ -70,6 +71,33 @@ public sealed class JsonlService : IJsonlService, IDisposable
     }
 
     /// <summary>
+    /// The scalars <see cref="BuildSessionList"/> needs, copied out of the project graph so the
+    /// display-name resolution and the <c>Directory.Exists</c> validity check behind it run with no
+    /// lock held. <see cref="ProjectData.EntryLog"/> is deliberately not part of this: nothing about
+    /// the picker depends on it, and copying it would be the expensive half.
+    /// </summary>
+    private readonly record struct SessionSeed(
+        string ProjectDirName,
+        string? Cwd,
+        string? ModelName,
+        DateTimeOffset LastActivity);
+
+    /// <summary>
+    /// One JSONL file's parsed content plus the stream position the next incremental read resumes
+    /// from. Produced with no lock held; consumed by <see cref="ApplyFileSlice"/> under one.
+    /// </summary>
+    private sealed record FileSlice(List<JsonlEntry> Entries, long NewPosition);
+
+    /// <summary>
+    /// The complete result of a cold-start scan, built against a private graph so the scan's disk
+    /// I/O never touches published state. Published in one step by <see cref="PublishScanResult"/>.
+    /// </summary>
+    private sealed record ScanResult(
+        Dictionary<string, ProjectData> Projects,
+        Dictionary<string, FilePositionMarker> FilePositions,
+        IReadOnlyList<SessionInfo> Sessions);
+
+    /// <summary>
     /// Compact record of a single JSONL assistant entry for time-period aggregation.
     /// </summary>
     private sealed class EntryLogItem
@@ -87,19 +115,34 @@ public sealed class JsonlService : IJsonlService, IDisposable
     // -------------------------------------------------------------------------
     // Fields
     // -------------------------------------------------------------------------
+    //
+    // Concurrency contract — the reason this class has three locks instead of one:
+    //
+    //   _writerLock   Held for a whole write pass (the cold-start scan, or one debounce batch),
+    //                 disk I/O included. Only writers take it, so at most one pass mutates the
+    //                 graph at a time and a reader never waits behind a file read.
+    //   _sessionsLock Guards _projectData and _filePositions. Held only for in-memory work:
+    //                 never across a filesystem call, and never across an AppLog.Write, which
+    //                 opens a file per entry.
+    //   _debounceLock Guards the pending-change set and the debounce timer handle.
+    //
+    // _sessions is published by reference and never mutated after publication, so the Sessions
+    // getter — the UI thread's first act on every DataUpdated — takes no lock at all.
 
     private readonly string _projectsDirectory;
     private readonly string _cacheDirectory;
     private readonly IPricingService _pricingService;
     private readonly Lock _sessionsLock = new();
+    private readonly Lock _writerLock = new();
     private readonly object _debounceLock = new();
     private readonly HashSet<string> _pendingChangedFiles = new(StringComparer.OrdinalIgnoreCase);
 
-    private List<SessionInfo> _sessions = [];
+    private IReadOnlyList<SessionInfo> _sessions = [];
     private Dictionary<string, ProjectData> _projectData = [];
     private Dictionary<string, FilePositionMarker> _filePositions = [];
     private FileSystemWatcher? _watcher;
     private System.Threading.Timer? _debounceTimer;
+    private CancellationTokenSource _scanCts = new();
     private int _isScanning; // 0 = idle, 1 = scanning; use Interlocked for atomic CAS
     private int _watcherRestartCount;
 
@@ -128,14 +171,12 @@ public sealed class JsonlService : IJsonlService, IDisposable
     // IJsonlService
     // -------------------------------------------------------------------------
 
-    public IReadOnlyList<SessionInfo> Sessions
-    {
-        get
-        {
-            lock (_sessionsLock)
-                return _sessions.AsReadOnly();
-        }
-    }
+    /// <summary>
+    /// The published list, read without taking a lock. Every entry is created by
+    /// <see cref="BuildSessionList"/> and never mutated afterwards, so handing the reference out is
+    /// safe and the caller cannot observe a half-built list.
+    /// </summary>
+    public IReadOnlyList<SessionInfo> Sessions => Volatile.Read(ref _sessions);
 
     public bool IsScanning => Interlocked.CompareExchange(ref _isScanning, 0, 0) == 1;
 
@@ -143,28 +184,43 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
     public ContextWindowData GetContextWindow(string projectDirName)
     {
+        var sessionFile = SnapshotNewestSessionFile(projectDirName);
+        if (sessionFile is null)
+            return ContextWindowData.Empty;
+
+        // Everything below runs with NO lock held: this is a tail read of up to TailWindowBytes plus
+        // a subagent directory glob, and the caller is a UI refresh tick. Holding _sessionsLock
+        // across it made every Sessions read queue behind the file system.
+        //
+        // The pointer is therefore a snapshot: the file it names can be deleted, renamed or locked
+        // between the snapshot and the read, so this must degrade rather than throw.
+        try
+        {
+            return BuildContextWindow(sessionFile);
+        }
+        catch (IOException ex)
+        {
+            return HandleContextWindowFailure(projectDirName, sessionFile, ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return HandleContextWindowFailure(projectDirName, sessionFile, ex);
+        }
+    }
+
+    /// <summary>
+    /// Copies the newest-session pointer out of the graph. A path is an immutable string, so once
+    /// copied the read that follows needs no lock — and this is the only lock the context-window
+    /// query takes.
+    /// </summary>
+    private string? SnapshotNewestSessionFile(string projectDirName)
+    {
         lock (_sessionsLock)
         {
-            if (!_projectData.TryGetValue(projectDirName, out var data))
-                return ContextWindowData.Empty;
-
-            if (string.IsNullOrEmpty(data.NewestSessionFile))
-                return ContextWindowData.Empty;
-
-            // The pointer is a snapshot: the file it names can be deleted, renamed or locked at
-            // any time, and every caller is a UI refresh tick that must degrade rather than throw.
-            try
-            {
-                return BuildContextWindow(data);
-            }
-            catch (IOException ex)
-            {
-                return HandleContextWindowFailure(data, ex);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return HandleContextWindowFailure(data, ex);
-            }
+            return _projectData.TryGetValue(projectDirName, out var data)
+                   && !string.IsNullOrEmpty(data.NewestSessionFile)
+                ? data.NewestSessionFile
+                : null;
         }
     }
 
@@ -184,17 +240,20 @@ public sealed class JsonlService : IJsonlService, IDisposable
         if (Interlocked.CompareExchange(ref _isScanning, 1, 0) != 0)
             return;
 
+        var scanToken = ResetScanCancellation();
+
         try
         {
-            LoadCache();
+            // Raised BEFORE the scan on purpose: this is the only signal that turns the scanning
+            // indicator on, because the caller samples IsScanning before awaiting this method and the
+            // CAS above has only just set it. The review proposed moving this to after the scan — it
+            // was the pre-scan event that froze the window, but the cause was the Sessions getter
+            // blocking on the lock the scan held, not the ordering. With publication by reference the
+            // handler this queues no longer waits for anything, so the signal can stay where the UI
+            // needs it.
             RaiseDataUpdated();
 
-            await Task.Run(DiscoverSessions);
-
-            lock (_sessionsLock)
-            {
-                SaveCache();
-            }
+            await Task.Run(() => RunColdStartPass(scanToken));
         }
         finally
         {
@@ -202,16 +261,59 @@ public sealed class JsonlService : IJsonlService, IDisposable
             RaiseDataUpdated();
         }
 
-        StartWatching();
+        // A cancelled scan means Stop() ran: honour it instead of resurrecting the watcher it just
+        // disposed.
+        if (!scanToken.IsCancellationRequested)
+            StartWatching();
     }
 
     public void Stop()
     {
+        CancelRunningScan();
         DisposeWatcher();
         DisposeDebounceTimer();
     }
 
-    public void Dispose() => Stop();
+    public void Dispose()
+    {
+        Stop();
+        Volatile.Read(ref _scanCts).Dispose();
+    }
+
+    /// <summary>
+    /// Hands the scan a token <see cref="Stop"/> can cancel. An already-cancelled source is replaced
+    /// so a Stop before this scan cannot pre-cancel it; only the winner of the <c>_isScanning</c> CAS
+    /// reaches here, so there is no second writer to race. The replaced source is not disposed: it
+    /// carries no timer and no linked registration, and leaving it alive is what keeps a concurrent
+    /// <see cref="Stop"/> from cancelling a disposed instance.
+    /// </summary>
+    private CancellationToken ResetScanCancellation()
+    {
+        var current = Volatile.Read(ref _scanCts);
+        if (!current.IsCancellationRequested)
+            return current.Token;
+
+        var replacement = new CancellationTokenSource();
+        Volatile.Write(ref _scanCts, replacement);
+        return replacement.Token;
+    }
+
+    /// <summary>
+    /// A cold-start scan is seconds of disk work on a large corpus, and Stop is either the page
+    /// unloading or the process shutting down. Asking the pass to abandon its work beats finishing a
+    /// scan whose result nobody will read.
+    /// </summary>
+    private void CancelRunningScan()
+    {
+        try
+        {
+            Volatile.Read(ref _scanCts).Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Dispose() already ran — the same shape the debounce timer's Change() guards against.
+        }
+    }
 
     // -------------------------------------------------------------------------
     // Statistics aggregation
@@ -466,83 +568,171 @@ public sealed class JsonlService : IJsonlService, IDisposable
     // Session discovery
     // -------------------------------------------------------------------------
 
-    private void DiscoverSessions()
+    /// <summary>
+    /// One cold-start pass: adopt the cache, scan the tree, publish the result, persist the read
+    /// positions. Runs under <c>_writerLock</c> so a debounce batch cannot interleave with it, and
+    /// so <see cref="LoadCache"/> — which can deserialize up to <see cref="MaxCacheFileSizeBytes"/>
+    /// of JSON — is off the UI thread and cannot race a concurrent read of <c>_filePositions</c>.
+    /// </summary>
+    private void RunColdStartPass(CancellationToken cancellationToken)
     {
-        if (!Directory.Exists(_projectsDirectory))
-            return;
-
-        lock (_sessionsLock)
+        lock (_writerLock)
         {
-            foreach (var projectDir in Directory.GetDirectories(_projectsDirectory))
-            {
-                var projectDirName = Path.GetFileName(projectDir);
-                var jsonlFiles = Directory.GetFiles(projectDir, JsonlFilePattern)
-                    .Where(f => !IsSubagentFile(f))
-                    .ToArray();
+            LoadCache();
 
-                if (jsonlFiles.Length == 0)
-                    continue;
+            var result = ScanProjectsDirectory(cancellationToken);
+            if (result is null)
+                return;
 
-                if (!_projectData.TryGetValue(projectDirName, out var data))
-                {
-                    data = new ProjectData { ProjectDirName = projectDirName };
-                    _projectData[projectDirName] = data;
-                }
-
-                foreach (var file in jsonlFiles)
-                {
-                    // Always do a full read on startup to rebuild _projectData from scratch.
-                    // Cache positions are only useful for live file-watcher incremental updates.
-                    ParseFileIntoProject(file, data, forceFullRead: true);
-
-                    // Track the newest session file for subagent discovery
-                    var modTime = File.GetLastWriteTimeUtc(file);
-                    if (modTime > data.NewestSessionModTime)
-                    {
-                        data.NewestSessionModTime = new DateTimeOffset(modTime, TimeSpan.Zero);
-                        data.NewestSessionFile = file;
-                    }
-                }
-            }
-
-            RebuildSessionsList();
+            PublishScanResult(result);
+            SaveCacheSnapshot();
         }
     }
 
-    private void ParseFileIntoProject(string filePath, ProjectData data, bool forceFullRead = false)
+    /// <summary>
+    /// Reads and parses the whole tree into a PRIVATE project graph, then builds the session list
+    /// from it — all with no lock held, because nothing here is reachable from another thread yet.
+    /// Returns null when there is nothing to publish: no projects directory, or the pass was
+    /// cancelled, in which case the partial graph is discarded rather than published.
+    /// </summary>
+    private ScanResult? ScanProjectsDirectory(CancellationToken cancellationToken)
     {
-        _filePositions.TryGetValue(filePath, out var marker);
-        var isIncremental = !forceFullRead && marker is not null;
-        IEnumerable<string> lines;
+        if (!Directory.Exists(_projectsDirectory))
+            return null;
+
+        // Built from scratch: every file is force-read, so a merge into the previous graph would add
+        // nothing a re-read cannot supply, while keeping projects whose directory has since gone.
+        var scannedProjects = new Dictionary<string, ProjectData>();
+        var scannedPositions = new Dictionary<string, FilePositionMarker>();
+
+        foreach (var projectDir in Directory.GetDirectories(_projectsDirectory))
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                AppLog.Write(ScanSource, "Scan cancelled — partial result discarded.");
+                return null;
+            }
+
+            var projectDirName = Path.GetFileName(projectDir);
+            var jsonlFiles = Directory.GetFiles(projectDir, JsonlFilePattern)
+                .Where(f => !IsSubagentFile(f))
+                .ToArray();
+
+            if (jsonlFiles.Length == 0)
+                continue;
+
+            var data = GetOrCreateProjectData(scannedProjects, projectDirName);
+
+            foreach (var file in jsonlFiles)
+            {
+                // Always do a full read on startup to rebuild the graph from scratch.
+                // Cache positions are only useful for live file-watcher incremental updates.
+                var slice = ReadFileSlice(file, knownPosition: null, forceFullRead: true);
+
+                if (ApplyFileSlice(data, file, slice, scannedPositions))
+                    LogMissingCwdSurrogate(projectDirName);
+
+                AdvanceNewestSessionPointer(data, file, File.GetLastWriteTimeUtc(file));
+            }
+        }
+
+        return new ScanResult(
+            scannedProjects,
+            scannedPositions,
+            BuildSessionList(SnapshotSessionSeeds(scannedProjects)));
+    }
+
+    /// <summary>
+    /// Swaps the scanned graph in and merges its read positions into the persisted map. Merging
+    /// rather than replacing keeps markers the cache supplied for files this scan never saw — the
+    /// map is not a pruning mechanism, and a dead marker costs nothing because
+    /// <see cref="ProcessSingleFile"/> drops vanished files before it reads one.
+    /// </summary>
+    private void PublishScanResult(ScanResult result)
+    {
+        lock (_sessionsLock)
+        {
+            _projectData = result.Projects;
+
+            foreach (var (filePath, marker) in result.FilePositions)
+                _filePositions[filePath] = marker;
+        }
+
+        PublishSessions(result.Sessions);
+    }
+
+    private static ProjectData GetOrCreateProjectData(
+        Dictionary<string, ProjectData> projects,
+        string projectDirName)
+    {
+        if (projects.TryGetValue(projectDirName, out var data))
+            return data;
+
+        data = new ProjectData { ProjectDirName = projectDirName };
+        projects[projectDirName] = data;
+        return data;
+    }
+
+    private static void AdvanceNewestSessionPointer(ProjectData data, string filePath, DateTime modTimeUtc)
+    {
+        var modTime = new DateTimeOffset(modTimeUtc, TimeSpan.Zero);
+        if (modTime <= data.NewestSessionModTime)
+            return;
+
+        data.NewestSessionModTime = modTime;
+        data.NewestSessionFile = filePath;
+    }
+
+    /// <summary>
+    /// Reads and parses one file. Pure I/O plus deserialization over local state only, so it runs
+    /// with no lock held — it is the half of the old ParseFileIntoProject that touched the disk.
+    /// <paramref name="knownPosition"/> null with <paramref name="forceFullRead"/> false means the
+    /// file is new to us: only its tail is read, which is the cheap path for a watcher event naming a
+    /// file the scan never saw.
+    /// </summary>
+    private static FileSlice ReadFileSlice(string filePath, long? knownPosition, bool forceFullRead)
+    {
+        List<string> lines;
         long newPosition;
 
-        if (isIncremental && marker is not null)
+        if (forceFullRead)
         {
-            var (incrementalLines, pos) = ReadIncrementalLines(filePath, marker.LastReadPosition);
-            lines = incrementalLines;
-            newPosition = pos;
+            (lines, newPosition) = ReadAllLines(filePath);
         }
-        else if (forceFullRead)
+        else if (knownPosition.HasValue)
         {
-            var (allLines, endPos) = ReadAllLines(filePath);
-            lines = allLines;
-            newPosition = endPos;
+            (lines, newPosition) = ReadIncrementalLines(filePath, knownPosition.Value);
         }
         else
         {
-            var tailLines = ReadTailLines(filePath).ToList();
-            lines = tailLines;
+            lines = ReadTailLines(filePath).ToList();
             newPosition = new FileInfo(filePath).Length;
         }
 
-        var entries = ParseJsonlEntries(lines).ToList();
-        if (entries.Count == 0)
-        {
-            UpdateFilePosition(filePath, newPosition);
-            return;
-        }
+        return new FileSlice(ParseJsonlEntries(lines).ToList(), newPosition);
+    }
 
-        foreach (var entry in entries)
+    /// <summary>
+    /// Applies an already-parsed slice to a project. Pure memory mutation: the debounce path calls
+    /// this with <c>_sessionsLock</c> held, so it must not reach the filesystem — not even through
+    /// AppLog, which opens a file per entry.
+    /// </summary>
+    /// <returns>
+    /// True when the project still has no cwd, so the caller can emit the DROPDOWN-02 surrogate
+    /// diagnostic after releasing the lock.
+    /// </returns>
+    private static bool ApplyFileSlice(
+        ProjectData data,
+        string filePath,
+        FileSlice slice,
+        Dictionary<string, FilePositionMarker> positions)
+    {
+        positions[filePath] = BuildPositionMarker(slice.NewPosition);
+
+        if (slice.Entries.Count == 0)
+            return false;
+
+        foreach (var entry in slice.Entries)
         {
             // DROPDOWN-02: resolve Cwd from the FIRST non-empty cwd across ALL parsed entries.
             // Tail-window reads frequently land on entries that omit the cwd field; iterating all
@@ -553,20 +743,22 @@ public sealed class JsonlService : IJsonlService, IDisposable
             ApplyEntryToProjectData(entry, data);
         }
 
-        // DROPDOWN-02 diagnostic: when no entry in this file carries a cwd field, log the
-        // surrogate that GetDisplayName will derive from the encoded project directory name.
-        // data.Cwd intentionally stays empty here so the DROPDOWN-03 filter (IsNullOrEmpty path)
-        // keeps the session visible; DisplayName is resolved by RebuildSessionsList via
-        // SessionNameHelper.GetDisplayName(cwd: null, fallbackDirName: projectDirName).
-        if (string.IsNullOrEmpty(data.Cwd) && !string.IsNullOrEmpty(data.ProjectDirName))
-        {
-            var decoded = SessionNameHelper.DecodeProjectDirectory(data.ProjectDirName);
-            AppLog.Write(
-                ParseFileSource,
-                $"No cwd in '{data.ProjectDirName}'; display surrogate: '{decoded ?? "(none)"}'");
-        }
+        return string.IsNullOrEmpty(data.Cwd) && !string.IsNullOrEmpty(data.ProjectDirName);
+    }
 
-        UpdateFilePosition(filePath, newPosition);
+    /// <summary>
+    /// DROPDOWN-02 diagnostic: when no entry in a file carries a cwd field, log the surrogate that
+    /// GetDisplayName will derive from the encoded project directory name. Cwd intentionally stays
+    /// empty so the DROPDOWN-03 filter (IsNullOrEmpty path) keeps the session visible; DisplayName is
+    /// resolved by <see cref="BuildSessionList"/> via
+    /// SessionNameHelper.GetDisplayName(cwd: null, fallbackDirName: projectDirName).
+    /// </summary>
+    private static void LogMissingCwdSurrogate(string projectDirName)
+    {
+        var decoded = SessionNameHelper.DecodeProjectDirectory(projectDirName);
+        AppLog.Write(
+            CwdDiagnosticSource,
+            $"No cwd in '{projectDirName}'; display surrogate: '{decoded ?? "(none)"}'");
     }
 
     private static void ApplyEntryToProjectData(JsonlEntry entry, ProjectData data)
@@ -662,14 +854,12 @@ public sealed class JsonlService : IJsonlService, IDisposable
         || filePath.Contains('/' + SubagentsDirectoryName + '/');
 
 
-    private List<string> FindSubagentFilesForNewestSession(ProjectData data)
+    private static List<string> FindSubagentFilesForSession(string sessionFile)
     {
         var result = new List<string>();
-        if (string.IsNullOrEmpty(data.NewestSessionFile))
-            return result;
 
         // Primary: {sessionUUID}/subagents/agent-*.jsonl
-        var sessionDir = Path.ChangeExtension(data.NewestSessionFile, null);
+        var sessionDir = Path.ChangeExtension(sessionFile, null);
         var subagentDir = Path.Combine(sessionDir, SubagentsDirectoryName);
         if (Directory.Exists(subagentDir))
             result.AddRange(Directory.GetFiles(subagentDir, AgentFilePattern));
@@ -677,7 +867,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
         // Fallback: project dir level agent files
         if (result.Count == 0)
         {
-            var projectDir = Path.GetDirectoryName(data.NewestSessionFile);
+            var projectDir = Path.GetDirectoryName(sessionFile);
             if (projectDir != null)
             {
                 var projectSubagentDir = Path.Combine(projectDir, SubagentsDirectoryName);
@@ -760,10 +950,8 @@ public sealed class JsonlService : IJsonlService, IDisposable
             : fileName;
     }
 
-    private ContextWindowData BuildContextWindow(ProjectData data)
+    private ContextWindowData BuildContextWindow(string sessionFile)
     {
-        var sessionFile = data.NewestSessionFile!;
-
         var entry = ReadLastAssistantEntryFromFile(sessionFile);
         if (entry is null)
             return ContextWindowData.Empty;
@@ -772,7 +960,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
         var modelName = ResolveModelName(sessionFile, entry);
         var maxTokens = ModelContextLimits.GetMaxContextTokens(
             modelName, _pricingService.GetPrice, observedTokens: totalTokens);
-        var subagentFiles = FindSubagentFilesForNewestSession(data);
+        var subagentFiles = FindSubagentFilesForSession(sessionFile);
         var subagents = BuildSubagentContext(subagentFiles, _pricingService);
 
         return new ContextWindowData
@@ -790,16 +978,35 @@ public sealed class JsonlService : IJsonlService, IDisposable
     /// read is not retried on every subsequent tick; the next write anywhere in the project
     /// re-establishes it via <see cref="ProcessSingleFile"/>. A file that merely failed to open
     /// keeps its pointer, so a transient sharing conflict does not blank the context bar.
+    ///
+    /// The log entry is written before the lock is taken: AppLog opens a file per entry, and the
+    /// whole point of this path is that a failing disk read no longer blocks the session list.
     /// </summary>
-    private static ContextWindowData HandleContextWindowFailure(ProjectData data, Exception ex)
+    private ContextWindowData HandleContextWindowFailure(string projectDirName, string sessionFile, Exception ex)
     {
-        var sessionFile = data.NewestSessionFile;
         AppLog.Write(ContextWindowSource, ex, $"Failed to read newest session file '{sessionFile}'.");
 
-        if (sessionFile is not null && !File.Exists(sessionFile))
-            ClearNewestSessionPointer(data);
+        if (!File.Exists(sessionFile))
+            ClearNewestSessionPointerIfUnchanged(projectDirName, sessionFile);
 
         return ContextWindowData.Empty;
+    }
+
+    /// <summary>
+    /// Clears the pointer only while it still names the file that failed: the read ran unlocked, so a
+    /// write pass may have advanced the pointer to a live file in the meantime and clearing that one
+    /// would blank a context bar that has nothing wrong with it.
+    /// </summary>
+    private void ClearNewestSessionPointerIfUnchanged(string projectDirName, string sessionFile)
+    {
+        lock (_sessionsLock)
+        {
+            if (_projectData.TryGetValue(projectDirName, out var data)
+                && string.Equals(data.NewestSessionFile, sessionFile, StringComparison.OrdinalIgnoreCase))
+            {
+                ClearNewestSessionPointer(data);
+            }
+        }
     }
 
     private static void ClearNewestSessionPointer(ProjectData data)
@@ -844,8 +1051,9 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
     /// <summary>
     /// True when <paramref name="cwd"/> names a project directory that still exists. Called from
-    /// <see cref="RebuildSessionsList"/> while <c>_sessionsLock</c> is held, so every case that
-    /// cannot be answered without a blocking filesystem round-trip is rejected up front.
+    /// <see cref="BuildSessionList"/>, which runs with no lock held — but a blocking filesystem
+    /// round-trip still stalls the write pass that is building the list, so every case that cannot be
+    /// answered without one is rejected up front.
     /// </summary>
     private static bool IsValidProjectDirectory(string cwd)
     {
@@ -863,32 +1071,63 @@ public sealed class JsonlService : IJsonlService, IDisposable
         return Directory.Exists(cwd);
     }
 
-    private void RebuildSessionsList()
+    /// <summary>
+    /// Rebuilds and publishes the session list from the current graph. The snapshot is taken under
+    /// the lock; the display-name resolution and the <c>Directory.Exists</c> validity check behind it
+    /// run outside it.
+    /// </summary>
+    private void RefreshPublishedSessions()
     {
-        _sessions = _projectData
-            .Where(kvp => !string.IsNullOrEmpty(kvp.Key))
-            .Select(kvp =>
-            {
-                var displayName = SessionNameHelper.GetDisplayName(kvp.Value.Cwd, kvp.Key);
-                if (displayName is null)
-                    return null;
+        List<SessionSeed> seeds;
+        lock (_sessionsLock)
+        {
+            seeds = SnapshotSessionSeeds(_projectData);
+        }
 
-                return new SessionInfo
-                {
-                    Id = kvp.Key,
-                    Cwd = kvp.Value.Cwd ?? string.Empty,
-                    DisplayName = displayName,
-                    LastActivity = kvp.Value.LastActivity,
-                    ModelName = kvp.Value.ModelName
-                };
-            })
-            // DROPDOWN-03: keep when Cwd is empty (DisplayName already resolved via fallback in
-            // ParseFileIntoProject) OR when the Cwd path is a project directory that still exists.
-            // Drop only when Cwd is non-empty AND IsValidProjectDirectory rejects it.
-            .Where(s => s is not null && (string.IsNullOrEmpty(s.Cwd) || IsValidProjectDirectory(s.Cwd)))
-            .OrderByDescending(s => s!.LastActivity)
-            .ToList()!;
+        PublishSessions(BuildSessionList(seeds));
     }
+
+    private static List<SessionSeed> SnapshotSessionSeeds(Dictionary<string, ProjectData> projectData) =>
+        projectData
+            .Where(kvp => !string.IsNullOrEmpty(kvp.Key))
+            .Select(kvp => new SessionSeed(kvp.Key, kvp.Value.Cwd, kvp.Value.ModelName, kvp.Value.LastActivity))
+            .ToList();
+
+    private static IReadOnlyList<SessionInfo> BuildSessionList(List<SessionSeed> seeds)
+    {
+        var sessions = new List<SessionInfo>(seeds.Count);
+
+        foreach (var seed in seeds)
+        {
+            var displayName = SessionNameHelper.GetDisplayName(seed.Cwd, seed.ProjectDirName);
+            if (displayName is null)
+                continue;
+
+            // DROPDOWN-03: keep when Cwd is empty (DisplayName already resolved via the encoded
+            // project directory name) OR when the Cwd path is a project directory that still exists.
+            // Drop only when Cwd is non-empty AND IsValidProjectDirectory rejects it.
+            if (!string.IsNullOrEmpty(seed.Cwd) && !IsValidProjectDirectory(seed.Cwd))
+                continue;
+
+            sessions.Add(new SessionInfo
+            {
+                Id = seed.ProjectDirName,
+                Cwd = seed.Cwd ?? string.Empty,
+                DisplayName = displayName,
+                LastActivity = seed.LastActivity,
+                ModelName = seed.ModelName
+            });
+        }
+
+        // OrderByDescending, not List.Sort: the sort must be stable or two sessions sharing a
+        // LastActivity would swap places between refreshes and reshuffle the picker.
+        // AsReadOnly because the reference itself is handed to every caller of Sessions — the list is
+        // shared, not copied, so it must not be castable back to a mutable List.
+        return sessions.OrderByDescending(session => session.LastActivity).ToList().AsReadOnly();
+    }
+
+    private void PublishSessions(IReadOnlyList<SessionInfo> sessions) =>
+        Volatile.Write(ref _sessions, sessions);
 
     // -------------------------------------------------------------------------
     // Test seams (internal — not part of IJsonlService; used by unit tests only)
@@ -946,11 +1185,12 @@ public sealed class JsonlService : IJsonlService, IDisposable
     {
         await Task.Run(() =>
         {
-            lock (_sessionsLock)
+            lock (_writerLock)
             {
                 foreach (var filePath in filePaths)
                     ProcessSingleFileGuarded(filePath);
-                RebuildSessionsList();
+
+                RefreshPublishedSessions();
             }
         });
     }
@@ -961,6 +1201,11 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
     private void StartWatching()
     {
+        // A re-Initialize without an intervening Stop would otherwise leak the previous watcher: the
+        // field is overwritten, but the old instance keeps its directory handle and keeps raising
+        // events into these same handlers, so every round-trip doubled the event rate.
+        DisposeWatcher();
+
         if (!Directory.Exists(_projectsDirectory))
             Directory.CreateDirectory(_projectsDirectory);
 
@@ -994,18 +1239,36 @@ public sealed class JsonlService : IJsonlService, IDisposable
                     state: null,
                     dueTime: DebounceMilliseconds,
                     period: System.Threading.Timeout.Infinite);
+                return;
             }
-            else
-            {
-                try
-                {
-                    _debounceTimer.Change(DebounceMilliseconds, System.Threading.Timeout.Infinite);
-                }
-                catch (ObjectDisposedException)
-                {
-                    // Timer was disposed between null-check and Change() — safe to ignore
-                }
-            }
+
+            RestartDebounceInterval(_debounceTimer);
+        }
+    }
+
+    /// <summary>
+    /// Restarts the debounce interval on an EXISTING timer only. Deliberately no create-if-missing
+    /// branch: <see cref="Stop"/> disposes the timer and nulls the field, and resurrecting it here
+    /// would restart the debounce loop after shutdown.
+    /// </summary>
+    private void RescheduleDebounceTimer()
+    {
+        lock (_debounceLock)
+        {
+            if (_debounceTimer is not null)
+                RestartDebounceInterval(_debounceTimer);
+        }
+    }
+
+    private static void RestartDebounceInterval(System.Threading.Timer timer)
+    {
+        try
+        {
+            timer.Change(DebounceMilliseconds, System.Threading.Timeout.Infinite);
+        }
+        catch (ObjectDisposedException)
+        {
+            // Timer was disposed between null-check and Change() — safe to ignore
         }
     }
 
@@ -1015,6 +1278,11 @@ public sealed class JsonlService : IJsonlService, IDisposable
     /// per-project newest-file pointer, which would otherwise name a vanished path for the whole
     /// process lifetime. Deleting a directory reports the directory rather than each file it held,
     /// so <see cref="GetContextWindow"/> keeps its own guard for what this handler cannot see.
+    ///
+    /// Deliberately does NOT take <c>_writerLock</c>: this runs on the watcher's event thread, and
+    /// blocking it for the duration of a cold-start scan risks overflowing the watcher's internal
+    /// buffer. The cost is that a scan publishing right after this handler ran can reinstate the
+    /// pointer it cleared, which the guard in <see cref="GetContextWindow"/> then clears again.
     /// </summary>
     private void OnFileDeleted(object sender, FileSystemEventArgs e)
     {
@@ -1045,35 +1313,48 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
     private void ProcessPendingFileChanges()
     {
-        // Skip if initial scan is still running — avoid double-processing
-        if (Interlocked.CompareExchange(ref _isScanning, 0, 0) == 1)
-            return;
-
-        List<string> filesToProcess;
-        lock (_debounceLock)
+        // Another write pass owns the graph: the cold-start scan, or an overlapping debounce callback
+        // (Change() on a timer whose callback is already running schedules a second one). Re-arming
+        // instead of blocking keeps this thread-pool thread free AND keeps the pending set intact, so
+        // the batch lands as soon as that pass finishes. The predecessor skipped the batch outright on
+        // a racy _isScanning read, which left those changes waiting for the next write to the tree.
+        if (!_writerLock.TryEnter())
         {
-            filesToProcess = [.. _pendingChangedFiles];
-            _pendingChangedFiles.Clear();
+            RescheduleDebounceTimer();
+            return;
         }
 
         try
         {
-            lock (_sessionsLock)
+            foreach (var filePath in DrainPendingFiles())
             {
-                foreach (var filePath in filesToProcess)
-                {
-                    ProcessSingleFileGuarded(filePath);
-                }
-
-                RebuildSessionsList();
-                SaveCache();
+                ProcessSingleFileGuarded(filePath);
             }
 
-            RaiseDataUpdated();
+            RefreshPublishedSessions();
+            SaveCacheSnapshot();
         }
         catch (Exception ex)
         {
             AppLog.Write(FileChangeSource, ex, "Error processing pending file changes.");
+        }
+        finally
+        {
+            _writerLock.Exit();
+        }
+
+        // Raised outside the lock and outside the catch: a subscriber runs arbitrary code, and the UI
+        // needs the refresh even when persisting the batch failed.
+        RaiseDataUpdated();
+    }
+
+    private List<string> DrainPendingFiles()
+    {
+        lock (_debounceLock)
+        {
+            var drained = new List<string>(_pendingChangedFiles);
+            _pendingChangedFiles.Clear();
+            return drained;
         }
     }
 
@@ -1101,7 +1382,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
             return;
 
         // Subagent files ({projectDir}/{sessionUUID}/subagents/agent-*.jsonl) are deliberately not
-        // registered here. Their content is read on demand by FindSubagentFilesForNewestSession,
+        // registered here. Their content is read on demand by FindSubagentFilesForSession,
         // which re-globs the directory on every GetContextWindow call, so the only effect of
         // walking up from one was a _projectData entry keyed on the session UUID — a phantom
         // session in the picker. The caller still refreshes and raises DataUpdated afterwards, so
@@ -1121,19 +1402,31 @@ public sealed class JsonlService : IJsonlService, IDisposable
         if (string.IsNullOrEmpty(projectDirName))
             return;
 
-        if (!_projectData.TryGetValue(projectDirName, out var data))
+        // Read and parse with NO lock held — an active session file is up to TailWindowBytes and a UI
+        // refresh tick must not queue behind it. Reading before the ProjectData is created also means a
+        // file that cannot be opened leaves no empty project behind.
+        var slice = ReadFileSlice(filePath, SnapshotFilePosition(filePath), forceFullRead: false);
+        var modTimeUtc = File.GetLastWriteTimeUtc(filePath);
+
+        bool cwdUnresolved;
+        lock (_sessionsLock)
         {
-            data = new ProjectData { ProjectDirName = projectDirName };
-            _projectData[projectDirName] = data;
+            var data = GetOrCreateProjectData(_projectData, projectDirName);
+            cwdUnresolved = ApplyFileSlice(data, filePath, slice, _filePositions);
+            AdvanceNewestSessionPointer(data, filePath, modTimeUtc);
         }
 
-        ParseFileIntoProject(filePath, data);
+        if (cwdUnresolved)
+            LogMissingCwdSurrogate(projectDirName);
+    }
 
-        var modTime = File.GetLastWriteTimeUtc(filePath);
-        if (modTime > data.NewestSessionModTime)
+    private long? SnapshotFilePosition(string filePath)
+    {
+        lock (_sessionsLock)
         {
-            data.NewestSessionModTime = new DateTimeOffset(modTime, TimeSpan.Zero);
-            data.NewestSessionFile = filePath;
+            return _filePositions.TryGetValue(filePath, out var marker)
+                ? marker.LastReadPosition
+                : null;
         }
     }
 
@@ -1213,7 +1506,10 @@ public sealed class JsonlService : IJsonlService, IDisposable
                 }
             }
 
-            _filePositions = positions;
+            lock (_sessionsLock)
+            {
+                _filePositions = positions;
+            }
         }
         catch (JsonException ex)
         {
@@ -1225,7 +1521,24 @@ public sealed class JsonlService : IJsonlService, IDisposable
         }
     }
 
-    private void SaveCache()
+    /// <summary>
+    /// Copies the read positions under the lock and serializes the copy outside it: the serializer
+    /// enumerates the dictionary, which a concurrent write pass must not be able to mutate mid-write,
+    /// and the file write itself has no business holding a lock the UI reads through. Called only from
+    /// a <c>_writerLock</c> holder, so two passes cannot write the cache file at the same time.
+    /// </summary>
+    private void SaveCacheSnapshot()
+    {
+        Dictionary<string, FilePositionMarker> snapshot;
+        lock (_sessionsLock)
+        {
+            snapshot = new Dictionary<string, FilePositionMarker>(_filePositions);
+        }
+
+        SaveCache(snapshot);
+    }
+
+    private void SaveCache(Dictionary<string, FilePositionMarker> filePositions)
     {
         try
         {
@@ -1235,7 +1548,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
             var cache = new JsonlCache
             {
                 SchemaVersion = JsonlCache.CurrentSchemaVersion,
-                FilePositions = _filePositions
+                FilePositions = filePositions
             };
 
             var json = JsonSerializer.Serialize(cache, CacheSerializerOptions);
@@ -1249,15 +1562,13 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
     private string CacheFilePath() => Path.Combine(_cacheDirectory, CacheFileName);
 
-    private void UpdateFilePosition(string filePath, long newPosition)
-    {
-        _filePositions[filePath] = new FilePositionMarker
+    private static FilePositionMarker BuildPositionMarker(long newPosition) =>
+        new()
         {
             LastReadPosition = newPosition,
             FileSize = newPosition,
             LastWriteTime = DateTimeOffset.UtcNow
         };
-    }
 
     // -------------------------------------------------------------------------
     // Event helpers

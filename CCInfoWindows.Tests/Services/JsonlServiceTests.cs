@@ -296,6 +296,97 @@ public class JsonlServiceTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
+    // Lock scope (finding 28)
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// GetContextWindow used to hold _sessionsLock across its whole body — a tail read of up to 1 MB
+    /// plus a subagent directory glob — so the UI thread's first act after every DataUpdated, the
+    /// Sessions getter, queued behind the filesystem.
+    ///
+    /// The pricing lookup is the seam this test parks on: GetMaxContextTokens invokes it from inside
+    /// GetContextWindow, after the file read. Parking there reproduces "a context read is in flight"
+    /// exactly, with no sleep and without depending on how long a real read happens to take. Against
+    /// the pre-fix code the Sessions read below never returns and this fails on its probe timeout;
+    /// against the current code it returns while the context read is still parked. The timeouts are
+    /// failure detectors only — nothing in the passing path waits on one.
+    /// </summary>
+    [Fact]
+    public async Task Sessions_WhileAContextReadIsInFlight_IsNotBlockedByIt()
+    {
+        const string SessionId = "lck3aaaa-0000-0000-0000-000000000073";
+        var projectDir = CreateProjectSessionDir(SessionId);
+        var projectDirName = Path.GetFileName(projectDir);
+        await File.WriteAllLinesAsync(Path.Combine(projectDir, $"{SessionId}.jsonl"),
+        [
+            // cwd must be a directory that exists: RebuildSessionsList drops a session whose non-empty
+            // cwd fails IsValidProjectDirectory, and the helper's default is a Unix path that does not.
+            BuildAssistantEntry(SessionId, "uuid-ctx-1", "req-ctx-1", cwd: projectDir, inputTokens: 5000, outputTokens: 100)
+        ]);
+
+        using var pricingReached = new ManualResetEventSlim(false);
+        using var releasePricing = new ManualResetEventSlim(false);
+
+        var service = BuildService(BuildParkingPricingService(pricingReached, releasePricing));
+        await service.InitializeAsync();
+
+        // No watcher for the duration of the assertion: a debounce batch is a second writer and would
+        // muddy what the probe below is measuring.
+        service.Stop();
+
+        var contextRead = Task.Run(() => service.GetContextWindow(projectDirName));
+
+        try
+        {
+            Assert.True(
+                pricingReached.Wait(BlockingProbeTimeout),
+                "GetContextWindow never reached the pricing lookup — the seam this test parks on is gone.");
+
+            var sessionsRead = Task.Run(() => service.Sessions.Count);
+
+            Assert.True(
+                sessionsRead.Wait(BlockingProbeTimeout),
+                "Sessions blocked while a context-window read was in flight — the read holds the lock again.");
+            Assert.Equal(1, await sessionsRead);
+        }
+        finally
+        {
+            releasePricing.Set();
+            // Let the parked call leave the gate before the events it waits on are disposed.
+            await Task.WhenAny(contextRead, Task.Delay(BlockingProbeTimeout));
+        }
+
+        Assert.Equal(5000L, (await contextRead).TotalTokens);
+    }
+
+    /// <summary>
+    /// Generous upper bound for "this call should already have returned". Only the failure path ever
+    /// waits this long.
+    /// </summary>
+    private static readonly TimeSpan BlockingProbeTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// A pricing service whose GetPrice parks until released, so a test can hold one JsonlService
+    /// operation open at a known point and observe what else can still run.
+    /// </summary>
+    private static IPricingService BuildParkingPricingService(
+        ManualResetEventSlim reached,
+        ManualResetEventSlim release)
+    {
+        var mock = new Mock<IPricingService>();
+        mock.Setup(p => p.GetPrice(It.IsAny<string>())).Returns<string>(_ =>
+        {
+            reached.Set();
+            release.Wait();
+            return null;
+        });
+        mock.Setup(p => p.EnsurePricesLoadedAsync()).Returns(Task.CompletedTask);
+        mock.SetupGet(p => p.Source).Returns(PricingSource.Unknown);
+        mock.SetupGet(p => p.LastFetch).Returns((DateTimeOffset?)null);
+        return mock.Object;
+    }
+
+    // -------------------------------------------------------------------------
     // GetTokenSummary (output_tokens sum with dedup by message.id + requestId)
     // -------------------------------------------------------------------------
 
@@ -491,7 +582,7 @@ public class JsonlServiceTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
-    // DiscoverSessions
+    // Session discovery
     // -------------------------------------------------------------------------
 
     [Fact]
@@ -570,7 +661,7 @@ public class JsonlServiceTests : IDisposable
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task RebuildSessionsList_ExcludesDeletedDirectories()
+    public async Task BuildSessionList_ExcludesDeletedDirectories()
     {
         const string SurvivingSession = "aaa00001-0000-0000-0000-000000000001";
         const string OrphanSession = "bbb00002-0000-0000-0000-000000000002";
@@ -594,11 +685,12 @@ public class JsonlServiceTests : IDisposable
 
     /// <summary>
     /// UNC paths are rejected before the filesystem call: Directory.Exists blocks on SMB name
-    /// resolution for tens of seconds when the host is unreachable, and it runs while the sessions
-    /// lock is held.
+    /// resolution for tens of seconds when the host is unreachable. The session list is no longer built
+    /// under the sessions lock, but it is still built inside a write pass, so the stall would hold up
+    /// every subsequent refresh.
     /// </summary>
     [Fact]
-    public async Task RebuildSessionsList_ExcludesUncPaths()
+    public async Task BuildSessionList_ExcludesUncPaths()
     {
         const string SessionId = "ccc00003-0000-0000-0000-000000000003";
         CreateSessionFile(SessionId, cwd: @"\\server\share\project");
@@ -616,7 +708,7 @@ public class JsonlServiceTests : IDisposable
     /// therefore keep the session.
     /// </summary>
     [Fact]
-    public async Task RebuildSessionsList_ExcludesRelativeCwd()
+    public async Task BuildSessionList_ExcludesRelativeCwd()
     {
         const string SessionId = "fff00006-0000-0000-0000-000000000006";
         CreateSessionFile(SessionId, cwd: ".");
@@ -628,7 +720,7 @@ public class JsonlServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task RebuildSessionsList_EmptyCwd_KeepsSessionWithDecodedDisplayName()
+    public async Task BuildSessionList_EmptyCwd_KeepsSessionWithDecodedDisplayName()
     {
         // DROPDOWN-03: sessions with empty cwd are kept when a display name can be derived
         // from the encoded project directory name. The old behaviour (Assert.Empty) described

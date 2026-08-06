@@ -8,7 +8,11 @@ namespace CCInfoWindows.Services.Interfaces;
 /// </summary>
 public interface IJsonlService
 {
-    /// <summary>All discovered sessions, updated as files are scanned.</summary>
+    /// <summary>
+    /// All discovered sessions. Each read returns an immutable snapshot that is replaced wholesale
+    /// when a scan or a file-change batch completes, so a held reference never changes underneath the
+    /// caller — re-read the property after <see cref="DataUpdated"/> to see new data.
+    /// </summary>
     IReadOnlyList<SessionInfo> Sessions { get; }
 
     /// <summary>True while the initial directory scan is in progress.</summary>
@@ -24,10 +28,16 @@ public interface IJsonlService
     /// </summary>
     ContextWindowData GetContextWindow(string sessionId);
 
-    /// <summary>Performs initial directory scan and starts the file watcher.</summary>
+    /// <summary>
+    /// Performs the initial directory scan and starts the file watcher. Returns immediately when a scan
+    /// is already in progress. A scan cancelled by <see cref="Stop"/> publishes nothing and leaves the
+    /// previous snapshot in place.
+    /// </summary>
     Task InitializeAsync();
 
-    /// <summary>Stops the file watcher and releases resources.</summary>
+    /// <summary>
+    /// Stops the file watcher, cancels a scan still in flight, and releases resources.
+    /// </summary>
     void Stop();
 
     /// <summary>
