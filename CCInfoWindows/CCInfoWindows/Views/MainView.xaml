@@ -567,7 +567,8 @@
                                    Foreground="{ThemeResource PrimaryTextBrush}"
                                    TextTrimming="CharacterEllipsis" MaxLines="1"
                                    Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
-                        <Border Grid.Row="0" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
+                        <Border x:Name="ModelsShimmer"
+                                Grid.Row="0" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
                                 HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
@@ -583,7 +584,8 @@
                                    FontSize="13" FontWeight="Medium" HorizontalAlignment="Right"
                                    Foreground="{ThemeResource PrimaryTextBrush}"
                                    Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
-                        <Border Grid.Row="2" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
+                        <Border x:Name="InputShimmer"
+                                Grid.Row="2" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
                                 HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
@@ -595,7 +597,8 @@
                                    FontSize="13" FontWeight="Medium" HorizontalAlignment="Right"
                                    Foreground="{ThemeResource PrimaryTextBrush}"
                                    Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
-                        <Border Grid.Row="3" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
+                        <Border x:Name="OutputShimmer"
+                                Grid.Row="3" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
                                 HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
@@ -607,7 +610,8 @@
                                    FontSize="13" FontWeight="Medium" HorizontalAlignment="Right"
                                    Foreground="{ThemeResource PrimaryTextBrush}"
                                    Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
-                        <Border Grid.Row="4" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
+                        <Border x:Name="CacheWriteShimmer"
+                                Grid.Row="4" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
                                 HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
@@ -619,7 +623,8 @@
                                    FontSize="13" FontWeight="Medium" HorizontalAlignment="Right"
                                    Foreground="{ThemeResource PrimaryTextBrush}"
                                    Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
-                        <Border Grid.Row="5" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
+                        <Border x:Name="CacheReadShimmer"
+                                Grid.Row="5" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
                                 HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
@@ -636,7 +641,8 @@
                                    Foreground="{ThemeResource PrimaryTextBrush}"
                                    Margin="0,0,0,0"
                                    Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
-                        <Border Grid.Row="7" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
+                        <Border x:Name="TotalShimmer"
+                                Grid.Row="7" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
                                 HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
@@ -648,7 +654,8 @@
                                    FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right"
                                    Foreground="{ThemeResource PrimaryTextBrush}"
                                    Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
-                        <Border Grid.Row="8" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
+                        <Border x:Name="CostShimmer"
+                                Grid.Row="8" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
                                 HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 

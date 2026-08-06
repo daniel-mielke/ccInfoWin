@@ -1,4 +1,5 @@
 using System.Net.Http;
+using CCInfoWindows.Helpers;
 using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
 using CCInfoWindows.ViewModels;
@@ -15,6 +16,11 @@ namespace CCInfoWindows;
 /// </summary>
 public partial class App : Application
 {
+    private const string LaunchLogSource = "App.OnLaunched";
+    private const string UnhandledExceptionLogSource = "App.OnUnhandledException";
+    private const string LocalizerLogSource = "App.InitializeLocalizerAsync";
+    private const string DefaultLanguage = "en-US";
+
     public static IServiceProvider Services { get; private set; } = null!;
     public static Window? MainWindow { get; private set; }
 
@@ -33,12 +39,32 @@ public partial class App : Application
 
     private static void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
     {
-        var logPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "CCInfoWindows", "crash.log");
-        Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
-        File.AppendAllText(logPath, $"[{DateTime.Now:O}] {e.Exception.GetType().Name}: {e.Exception.Message}\n{e.Exception.StackTrace}\n\n");
+        AppLog.Write(UnhandledExceptionLogSource, e.Exception);
+        AppendToCrashLog($"{e.Exception.GetType().Name}: {e.Exception.Message}\n{e.Exception.StackTrace}\n");
+
+        // Deliberately kept: WinUI 3 offers no signal for whether an exception is fatal, and for a usage
+        // monitor a process that vanishes mid-session is worse than one that survives a failed background
+        // tick. What made recurring failures invisible was the missing log, not this flag — every occurrence
+        // now also lands in the size-capped app.log.
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Appends one entry to the crash log. Guarded because it runs inside the last-chance exception handler:
+    /// a failing write here (full disk, locked file) would turn a handled exception into a process kill.
+    /// </summary>
+    private static void AppendToCrashLog(string message)
+    {
+        try
+        {
+            Directory.CreateDirectory(AppPaths.DataDirectory);
+            File.AppendAllText(AppPaths.CrashLogFile, $"[{DateTime.Now:O}] {message}\n");
+        }
+        catch (Exception ex)
+        {
+            // The original failure is already in app.log; losing its crash.log copy is not worth a crash.
+            AppLog.Write("App.AppendToCrashLog", ex);
+        }
     }
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
@@ -65,11 +91,8 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            var logPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "CCInfoWindows", "crash.log");
-            Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
-            File.AppendAllText(logPath, $"[{DateTime.Now:O}] OnLaunched failed: {ex.GetType().Name}: {ex.Message}\n\n");
+            AppLog.Write(LaunchLogSource, ex);
+            AppendToCrashLog($"OnLaunched failed: {ex.GetType().Name}: {ex.Message}");
             Exit();
         }
     }
@@ -86,7 +109,7 @@ public partial class App : Application
             .AddStringResourcesFolderForLanguageDictionaries(stringsFolderPath)
             .SetOptions(options =>
             {
-                options.DefaultLanguage = "en-US";
+                options.DefaultLanguage = DefaultLanguage;
             })
             .Build();
 
@@ -95,7 +118,31 @@ public partial class App : Application
 
         if (!string.IsNullOrEmpty(appSettings.Language))
         {
-            await Localizer.Get().SetLanguage(appSettings.Language);
+            await ApplyPersistedLanguageAsync(appSettings.Language);
+        }
+    }
+
+    /// <summary>
+    /// Applies a persisted language and degrades to the localizer default when the value is not one the app
+    /// ships. settings.json lives in user-writable %LOCALAPPDATA%, so it is untrusted input: WinUI3Localizer
+    /// throws for an unknown language, and an escaping throw here reaches OnLaunched's catch, which calls
+    /// Exit() — one bad string would make the app refuse to start on every launch with no UI way back.
+    /// This is the second layer behind SettingsService's allow-list, for callers that bypass it.
+    /// </summary>
+    private static async Task ApplyPersistedLanguageAsync(string language)
+    {
+        try
+        {
+            await Localizer.Get().SetLanguage(language);
+        }
+        catch (Exception ex)
+        {
+            // The rejected value is logged so the user can repair settings.json; AppLog folds control
+            // characters, so a hand-edited value cannot forge a second log entry.
+            AppLog.Write(
+                LocalizerLogSource,
+                ex,
+                $"unsupported persisted language '{language}', falling back to {DefaultLanguage}");
         }
     }
 

@@ -1,7 +1,7 @@
 using System.ComponentModel;
-using System.Diagnostics;
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Messages;
+using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
 using CCInfoWindows.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,7 +12,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.Web.WebView2.Core;
 using CommunityToolkit.Mvvm.Messaging;
-using Windows.UI;
 using WinUI3Localizer;
 
 namespace CCInfoWindows.Views;
@@ -23,11 +22,38 @@ namespace CCInfoWindows.Views;
 /// </summary>
 public sealed partial class MainView : Page
 {
-    private static readonly Color ShimmerBaseColor = Color.FromArgb(0xFF, 0x38, 0x38, 0x3A);
-    private static readonly Color ShimmerHighlightColor = Color.FromArgb(0xFF, 0x55, 0x55, 0x58);
+    private const string BootstrapLogSource = "MainView.OnLoaded";
+    private const string TeardownLogSource = "MainView.OnUnloaded";
+    private const string BridgeLogSource = "MainView.InitializeBridgeAsync";
+
+    /// <summary>Single-segment key — WinUI3Localizer 2.3.0 splits resw keys at the first dot.</summary>
+    private const string BootstrapFailureMessageKey = "DashboardStartupFailedMessage";
+
+    /// <summary>
+    /// Last resort for the banner text: the localizer host is itself part of the startup that may have
+    /// failed, and an error InfoBar with an empty message tells the user nothing.
+    /// </summary>
+    private const string BootstrapFailureFallbackMessage =
+        "The dashboard could not be started. Please restart the app.";
+
+    /// <summary>
+    /// Bounds the wait for the bridge WebView2 to finish loading claude.ai. Matches WebViewBridge's
+    /// per-request timeout; without it an offline or captive-portal start gates the dashboard forever.
+    /// </summary>
+    private static readonly TimeSpan BridgeNavigationTimeout = TimeSpan.FromSeconds(30);
+
+    private static readonly TimeSpan ShimmerPulseDuration = TimeSpan.FromSeconds(0.8);
+    private const double ShimmerDimOpacity = 0.4;
 
     private Storyboard? _shimmerStoryboard;
     private bool _stopOnComplete;
+
+    /// <summary>
+    /// Cancelled by <see cref="OnUnloaded"/>. The bootstrap below is multi-second on a cold start while the
+    /// Settings gear stays enabled, so teardown can win the race; without this an in-flight bootstrap would
+    /// finish on a detached ViewModel and start timers nothing can ever stop again.
+    /// </summary>
+    private CancellationTokenSource? _bootstrapCancellation;
 
     public MainViewModel ViewModel { get; }
 
@@ -46,28 +72,21 @@ public sealed partial class MainView : Page
         Unloaded += OnUnloaded;
     }
 
+    /// <summary>
+    /// Pulses the statistics skeleton placeholders while a tab aggregates.
+    /// </summary>
     private void StartShimmerAnimation()
     {
-        _shimmerStoryboard?.Stop();
+        StopShimmerAnimation();
 
-        var shimmerBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(ShimmerBaseColor);
-
-        var animation = new ColorAnimation
+        var storyboard = new Storyboard();
+        foreach (var placeholder in ShimmerPlaceholders())
         {
-            From = ShimmerBaseColor,
-            To = ShimmerHighlightColor,
-            Duration = new Duration(TimeSpan.FromSeconds(0.8)),
-            AutoReverse = true,
-            RepeatBehavior = RepeatBehavior.Forever,
-            EnableDependentAnimation = true
-        };
+            storyboard.Children.Add(CreateShimmerPulse(placeholder));
+        }
 
-        Storyboard.SetTarget(animation, shimmerBrush);
-        Storyboard.SetTargetProperty(animation, "Color");
-
-        _shimmerStoryboard = new Storyboard();
-        _shimmerStoryboard.Children.Add(animation);
-        _shimmerStoryboard.Begin();
+        _shimmerStoryboard = storyboard;
+        storyboard.Begin();
     }
 
     private void StopShimmerAnimation()
@@ -76,8 +95,49 @@ public sealed partial class MainView : Page
         _shimmerStoryboard = null;
     }
 
+    /// <summary>
+    /// The skeleton rectangles of the statistics table, in row order.
+    /// </summary>
+    private IEnumerable<Border> ShimmerPlaceholders()
+    {
+        yield return ModelsShimmer;
+        yield return InputShimmer;
+        yield return OutputShimmer;
+        yield return CacheWriteShimmer;
+        yield return CacheReadShimmer;
+        yield return TotalShimmer;
+        yield return CostShimmer;
+    }
+
+    /// <summary>
+    /// Fades one placeholder in and out forever. Opacity is composition-backed, so the pulse runs off the
+    /// UI thread and needs no EnableDependentAnimation — unlike animating the shared ShimmerBaseBrush colour,
+    /// which would also freeze on a theme switch and hard-code one theme's palette.
+    /// </summary>
+    private static DoubleAnimation CreateShimmerPulse(Border placeholder)
+    {
+        var animation = new DoubleAnimation
+        {
+            From = 1.0,
+            To = ShimmerDimOpacity,
+            Duration = new Duration(ShimmerPulseDuration),
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever
+        };
+
+        Storyboard.SetTarget(animation, placeholder);
+        Storyboard.SetTargetProperty(animation, "Opacity");
+
+        return animation;
+    }
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // Disposed only after the finally below has cleared the field, so OnUnloaded can never
+        // cancel through a disposed source.
+        using var bootstrap = new CancellationTokenSource();
+        _bootstrapCancellation = bootstrap;
+
         try
         {
             ViewModel.PropertyChanged += OnViewModelPropertyChanged;
@@ -92,32 +152,130 @@ public sealed partial class MainView : Page
             // destroyed on navigation — IsInitialized stays true (null-check only) while every
             // fetch() times out, surfacing as "API request failed" + an empty org picker.
             var bridge = App.Services.GetRequiredService<IWebViewBridge>();
-            await InitializeBridgeAsync(bridge);
+            var bridgeReady = await InitializeBridgeAsync(bridge, bootstrap.Token);
+
+            if (bootstrap.IsCancellationRequested) return;
+
+            if (!bridgeReady)
+            {
+                // The dashboard still initializes: local JSONL statistics and the cached usage snapshot
+                // remain useful, and the banner tells the user that the live data will not arrive.
+                ReportBootstrapFailure("the API bridge never reached claude.ai");
+            }
 
             await ViewModel.InitializeAsync();
+
+            if (bootstrap.IsCancellationRequested)
+            {
+                // Teardown ran while InitializeAsync was still going, so its StopTimers() call found
+                // nothing to stop. Everything InitializeAsync just started would otherwise poll,
+                // persist history and raise threshold toasts for the rest of the process lifetime.
+                // StopTimers also stops the singleton JSONL and update services, which a newer MainView
+                // may already be using — the permanent zombie poller is the worse of the two, and the
+                // overlap disappears once service startup moves out of the transient ViewModel.
+                ViewModel.StopTimers();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Teardown won the race before anything was started; OnUnloaded already released the page.
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[MainView] OnLoaded failed: {ex.Message}");
+            ReportBootstrapFailure("dashboard bootstrap failed", ex);
+        }
+        finally
+        {
+            if (ReferenceEquals(_bootstrapCancellation, bootstrap))
+            {
+                _bootstrapCancellation = null;
+            }
         }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        // Unblocks a bootstrap still waiting for the bridge navigation and makes every later
+        // checkpoint in OnLoaded bail out.
+        _bootstrapCancellation?.Cancel();
+
         UsageChart.RemoveFromVisualTree();
         ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
         SpinnerStoryboard.Completed -= OnSpinnerCompleted;
         WeakReferenceMessenger.Default.Unregister<ChartInvalidateMessage>(this);
+        StopShimmerAnimation();
         ViewModel.StopTimers();
+
+        ReleaseBridgeWebView();
     }
 
     /// <summary>
-    /// Initializes a hidden WebView2, navigates to claude.ai to acquire Cloudflare cookies,
-    /// then binds it to the WebViewBridge for API fetch calls.
+    /// Records a bootstrap failure in app.log and raises the dashboard's error banner. The banner text stays
+    /// generic per CLAUDE.md — the exception, including its stack, goes to the log only.
     /// </summary>
-    private async Task InitializeBridgeAsync(IWebViewBridge bridge)
+    private void ReportBootstrapFailure(string reason, Exception? exception = null)
     {
-        var udfPath = Helpers.AppPaths.WebView2UserDataFolder;
+        if (exception is null)
+        {
+            AppLog.Write(BootstrapLogSource, reason);
+        }
+        else
+        {
+            AppLog.Write(BootstrapLogSource, exception, reason);
+        }
+
+        ViewModel.ApiErrorMessage = BootstrapFailureMessage();
+        ViewModel.HasApiError = true;
+    }
+
+    private static string BootstrapFailureMessage()
+    {
+        try
+        {
+            var localized = Localizer.Get().GetLocalizedString(BootstrapFailureMessageKey);
+            return string.IsNullOrWhiteSpace(localized) ? BootstrapFailureFallbackMessage : localized;
+        }
+        catch (Exception ex)
+        {
+            // Localizer.Get() throws when the localizer host never built — which is one of the startup
+            // failures this banner exists to report.
+            AppLog.Write(BootstrapLogSource, ex, "localized bootstrap-failure text unavailable");
+            return BootstrapFailureFallbackMessage;
+        }
+    }
+
+    /// <summary>
+    /// Closes the native browser instance behind the hidden bridge WebView2. Without this every navigation
+    /// away orphans a claude.ai renderer until finalization. The bridge is unbound first so it can never be
+    /// left holding a closed CoreWebView2.
+    /// </summary>
+    private void ReleaseBridgeWebView()
+    {
+        // A null CoreWebView2 means this page never bound the bridge. During the login flow the bridge
+        // belongs to LoginView, and resetting it here would break the session it just established.
+        if (ApiBridgeWebView.CoreWebView2 is null) return;
+
+        try
+        {
+            App.Services.GetRequiredService<IWebViewBridge>().Reset();
+            ApiBridgeWebView.Close();
+        }
+        catch (Exception ex)
+        {
+            // Teardown runs from a framework event: an escaping exception would become an unhandled one.
+            AppLog.Write(TeardownLogSource, ex, "releasing the bridge WebView2 failed");
+        }
+    }
+
+    /// <summary>
+    /// Initializes the hidden WebView2, navigates to claude.ai to acquire Cloudflare cookies, then binds it
+    /// to the WebViewBridge for API fetch calls. Returns false when the WebView never reached a loaded
+    /// claude.ai page; the bridge is then left unbound so requests fail immediately instead of paying a
+    /// 30 s timeout each from a Chromium error page.
+    /// </summary>
+    private async Task<bool> InitializeBridgeAsync(IWebViewBridge bridge, CancellationToken cancellationToken)
+    {
+        var udfPath = AppPaths.WebView2UserDataFolder;
         Directory.CreateDirectory(udfPath);
 
         // Idempotent: on a re-login OnLoaded runs again on the same MainView instance, so
@@ -132,25 +290,57 @@ public sealed partial class MainView : Page
                 options: null);
             await ApiBridgeWebView.EnsureCoreWebView2Async(env);
 
-            var tcs = new TaskCompletionSource();
-            void handler(object s, object args)
+            if (!await NavigateBridgeToClaudeAsync(cancellationToken))
             {
-                tcs.TrySetResult();
-                ApiBridgeWebView.NavigationCompleted -= handler;
+                return false;
             }
-            ApiBridgeWebView.NavigationCompleted += handler;
-            ApiBridgeWebView.CoreWebView2!.Navigate("https://claude.ai");
-            await tcs.Task;
         }
 
         var coreWebView = ApiBridgeWebView.CoreWebView2;
         if (coreWebView is null)
         {
-            Debug.WriteLine("[MainView] bridge init failed: CoreWebView2 unavailable");
-            return;
+            AppLog.Write(BridgeLogSource, "CoreWebView2 unavailable after initialization -- bridge left unbound");
+            return false;
         }
 
         bridge.Initialize(coreWebView, DispatcherQueue.GetForCurrentThread());
+        return true;
+    }
+
+    /// <summary>
+    /// Navigates the bridge WebView2 to claude.ai and reports whether the page actually loaded.
+    /// </summary>
+    private async Task<bool> NavigateBridgeToClaudeAsync(CancellationToken cancellationToken)
+    {
+        var navigation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        void OnNavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
+        {
+            if (!args.IsSuccess)
+            {
+                AppLog.Write(BridgeLogSource, $"navigation failed: {args.WebErrorStatus}");
+            }
+
+            navigation.TrySetResult(args.IsSuccess);
+        }
+
+        ApiBridgeWebView.NavigationCompleted += OnNavigationCompleted;
+        try
+        {
+            ApiBridgeWebView.CoreWebView2!.Navigate(ClaudeAiUrlPolicy.Origin);
+            return await navigation.Task.WaitAsync(BridgeNavigationTimeout, cancellationToken);
+        }
+        catch (TimeoutException)
+        {
+            AppLog.Write(
+                BridgeLogSource,
+                $"navigation did not complete within {BridgeNavigationTimeout.TotalSeconds:F0} s");
+            return false;
+        }
+        finally
+        {
+            ApiBridgeWebView.NavigationCompleted -= OnNavigationCompleted;
+        }
     }
 
     private void UsageChart_Draw(CanvasControl sender, CanvasDrawEventArgs args)

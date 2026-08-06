@@ -17,14 +17,6 @@ namespace CCInfoWindows;
 /// </summary>
 public sealed partial class MainWindow : Window, IRecipient<ThemeChangedMessage>, IRecipient<ResetWindowSizeMessage>
 {
-    /// <summary>
-    /// WebView2 User Data Folder path for cookie/cache isolation.
-    /// Used by Plan 02 (LoginView) for WebView2 initialization.
-    /// </summary>
-    public static readonly string WebView2UserDataFolder = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "CCInfoWindows", "WebView2");
-
     private readonly ISettingsService _settingsService;
     private readonly INavigationService _navigationService;
     private readonly IUsageHistoryService _historyService;

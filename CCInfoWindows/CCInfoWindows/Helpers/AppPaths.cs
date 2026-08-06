@@ -18,4 +18,9 @@ public static class AppPaths
     /// Root directory for application-local data (caches, logs, settings).
     /// </summary>
     public static string DataDirectory => AppDataRoot;
+
+    /// <summary>
+    /// Crash log written by App.OnUnhandledException. Handled failures go to AppLog instead.
+    /// </summary>
+    public static string CrashLogFile => Path.Combine(AppDataRoot, "crash.log");
 }

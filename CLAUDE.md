@@ -114,6 +114,13 @@ dotnet build CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj -c Release -o CCIn
 - **.gitignore enforced** -- settings.json, WebView2/, *.pfx, *.snk, .env excluded
 - **Network calls only to** (HTTPS, complete list) -- `claude.ai` (usage API + login inside WebView2, which additionally loads whatever subresources that page references), `api.github.com` (`UpdateService` release check), `raw.githubusercontent.com` (`LiteLLMPricingService` price list), `github.com` (release page and upstream credits link, handed to the default browser via `Process.Start`)
 
+## Diagnostics Channel
+
+- **Handled failures go to `AppLog`** -- `AppLog.Write(source, ex)` / `AppLog.Write(source, message)` appends to `%LOCALAPPDATA%\CCInfoWindows\app.log` (1 MiB, single roll to `app.log.1`). `source` is a short call-site tag like `"MainView.OnLoaded"`. It never throws, is thread-safe, and works before the DI container exists. Every `catch` that degrades instead of rethrowing MUST call it with the exception -- a bare `catch { }` is a bug.
+- **`Debug.WriteLine` is not a diagnostic channel** -- it carries `[Conditional("DEBUG")]`, so the compiler erases it from the Release build the users run. A catch body whose only statement is `Debug.WriteLine` is an empty catch body in production.
+- **Unhandled exceptions** keep going to `crash.log` via `App.OnUnhandledException`, which also mirrors them into `app.log`. `AppPaths` owns both paths -- never rebuild `%LOCALAPPDATA%\CCInfoWindows` by hand.
+- **Never pass a token or raw credential to the log** -- the sink's `sk-ant-*` redaction is defence in depth, not a licence.
+
 ## Clean Code Rules (authoritative)
 
 Based on Robert C. Martin's Clean Code principles. All generated code MUST follow these rules:
