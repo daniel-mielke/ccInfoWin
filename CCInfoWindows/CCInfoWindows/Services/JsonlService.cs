@@ -44,6 +44,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
     private const string FileChangeSource = "JsonlService.ProcessPendingFileChanges";
     private const string FileDeletedSource = "JsonlService.OnFileDeleted";
     private const string WatcherErrorSource = "JsonlService.OnWatcherError";
+    private const string InitializeSource = "JsonlService.InitializeAsync";
 
     // -------------------------------------------------------------------------
     // Internal per-project aggregation (keyed by project directory name)
@@ -266,8 +267,20 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
         // A cancelled scan means Stop() ran: honour it instead of resurrecting the watcher it just
         // disposed.
-        if (!scanToken.IsCancellationRequested)
+        if (scanToken.IsCancellationRequested)
+            return;
+
+        // Guarded like the restart path in OnWatcherError: the cold-start pass has already published
+        // its data, so a watcher that cannot start costs live updates, not the dashboard. Since the
+        // app host starts this fire-and-forget, an escaping exception would be lost entirely.
+        try
+        {
             StartWatching();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(InitializeSource, ex, "Watcher did not start — live updates unavailable until restart.");
+        }
     }
 
     public void Stop()
