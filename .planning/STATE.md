@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: macOS ccInfo v1.15.2 Feature Parity
-status: uat_complete_except_u11
+status: uat_complete
 workflow: ultracode / plan-mode (NOT GSD -- see CLAUDE.md "Workflows")
 roadmap: .planning/milestones/v1.6-ROADMAP.md
-stopped_at: Visual UAT executed. U1-U10 pass (U6 failed and was fixed). U11 toast delivery unverifiable -- no toast surfaces in this Windows session, not even a stock PowerShell probe.
+stopped_at: Visual UAT complete. U1-U11 all pass; U6 failed and was fixed (axis label gutter). Ready for the v1.6 ship tag.
 last_updated: "2026-08-06T07:30:00.000Z"
 last_activity: 2026-08-06 -- visual UAT U1-U11, U6 axis-label regression fixed, 434/434 tests green
 progress:
@@ -34,7 +34,7 @@ Phase: alle 6 (0-5) abgeschlossen — **Code komplett, visuelle UAT durchgeführ
 Status: implementiert und committet 2026-08-05, UAT 2026-08-06
 Last activity: 2026-08-06 -- UAT U1-U11, U6-Regression gefixt, 434/434 Tests grün
 
-**Nächster Schritt:** U11 (Toast-Sichtbarkeit) manuell bestätigen, dann Ship-Tag.
+**Nächster Schritt:** v1.6 Ship-Tag.
 
 ### Laufzeitbeleg Phase 4 (aus `%LOCALAPPDATA%\CCInfoWindows\notification-state.json`)
 
@@ -80,7 +80,7 @@ zugesagten Ergebnisse. Implementiert ist die Veto-Semantik.
 | 1 | Kontextfenster aus `max_input_tokens` (v1.14.2) + Upstream-Pricing-Datei | **fertig** |
 | 2 | Sonnet-Context-Setting zurückbauen (v1.14.2) | **fertig** (UAT U10 bestanden) |
 | 3 | Chart-Redesign: monotone-cubic, Fade-Fill, Glow, Insets (v1.13.0 + v1.14.0) | **fertig** (UAT U1–U9 bestanden, U6-Regression gefixt) |
-| 4 | Notifications: 80/95-Thresholds + Window-Reset (v1.5.0 + v1.15.0/1/2) | **fertig** (U11 Toast-Sichtbarkeit umgebungsbedingt offen) |
+| 4 | Notifications: 80/95-Thresholds + Window-Reset (v1.5.0 + v1.15.0/1/2) | **fertig** (UAT U11 bestanden, Toast am Schirm bestätigt) |
 | 5 | Restfixes: `.Distinct()`, Steilheitsfilter, Output-Tier, Re-Aggregate | **fertig** |
 
 ### Verify-Umgebung (für Folgephasen)
@@ -95,8 +95,11 @@ zugesagten Ergebnisse. Implementiert ist die Veto-Semantik.
 - **`screenshot_control target=window` schneidet bei 1.25-DPI rechts ab** — es liefert 625×1180,
   das Fenster ist aber 781×1475 physisch. Stattdessen `target=region x=75 y=20 width=790 height=1480`
   nehmen; `set_bounds` meldet die *sichtbare* Rahmenbreite zurück (765×1467), nicht die logische.
-- Toasts fängt GDI-Capture (`Graphics.CopyFromScreen`) nicht zuverlässig ein, und `screenshot_control`
-  in dieser Sitzung ebenso wenig — für Toast-Prüfungen ist ein Mensch nötig.
+- **Toasts sind per Screenshot nicht prüfbar** — weder `Graphics.CopyFromScreen` noch
+  `screenshot_control` erfassen das Banner (empirisch: 24 Frames über 10 s, null geänderte Pixel,
+  während der Toast real sichtbar war). Auch `wpndatabase.db` bekommt keinen neuen Zeitstempel.
+  Beides sind falsche Negative. Gültige Belege: ein Mensch sieht hin, oder ein Zustands-Seiteneffekt
+  (z. B. die Fenster-Rotation in `notification-state.json`).
 - **Gesperrte Workstation blockiert Screenshots.** Läuft `LogonUI.exe`, komponiert DWM für
   die Sitzung nicht mehr und `screenshot_control` liefert ein schwarzes Bild — die App läuft
   dabei normal weiter. Prüfen mit `Get-Process LogonUI`. Ersatz: `mcp__windows-mcp__ui_find`
@@ -119,7 +122,7 @@ zugesagten Ergebnisse. Implementiert ist die Veto-Semantik.
 | U8 | beide Themes | **PASS** | helles Theme über den Dark-Mode-Schalter geprüft, U1/U4/U6 dort identisch sauber |
 | U9 | Export deckungsgleich | **PASS** | Export-Replik derselben Punktliste deckt sich mit dem Live-Chart; gemeinsamer Code-Pfad, `ChartAreaHeight == 144` per Test gepinnt |
 | U10 | Settings → Allgemein | **PASS** (Zahl im Kriterium falsch) | Sonnet-Zeile weg, Divider gleichmäßig 61 px. Es sind **8 → 7** Zeilen, nicht 7 → 6 — `git show 1571dd3` entfernt genau ein `<Grid Height="40">` plus einen Divider |
-| U11 | Toast-Rauchtest | **NICHT VERIFIZIERBAR** | App-Pfad läuft nachweislich durch, aber in dieser Windows-Sitzung erscheint überhaupt kein Toast — auch kein PowerShell-Probe-Toast mit Standard-AUMID. Details unten |
+| U11 | Toast-Rauchtest | **PASS** | Toast „Nutzungsfenster zurückgesetzt" vom User am Bildschirm bestätigt (2026-08-06 09:50). Unpackaged Toasts funktionieren. Details unten |
 
 **U6 — Ursache und Fix**
 
@@ -134,20 +137,32 @@ Fix: `ChartRenderer.LeftMargin` 22 → 32 (Gutter 28 px), plus `ExportHelperTest
 als `[Theory]` über „100%"/„50%"/„0%", die die echte Textbreite gegen `ChartDrawing.AxisLabelRectWidth`
 misst. Kein Test hing an der 22 — alle referenzieren die Konstante. Kosten: ~3,4 % Plotbreite.
 
-**U11 — was belegt ist und was fehlt**
+**U11 — bestanden, mit einer wichtigen Werkzeug-Lehre**
 
-Belegt: der Reset-Toast-Pfad läuft vollständig durch. `notification-state.json` mit veralteter
-`windowId` präpariert → nächster Poll rotierte das Fenster auf disk (zweimal reproduziert), und die
-Rotation ist im Code **erst nach** `SendResetToastIfDue(...)` erreichbar. `AppNotificationManager`
-ist unpackaged funktionsfähig: die AUMID der exakten Release-exe steht unter
-`HKCU\Software\Classes\AppUserModelId`, d. h. `IsSupported()` war true und `Register()` lief.
-Alle acht Notification-Resource-Keys existieren in beiden Sprachdateien.
+Der Reset-Toast erscheint unter `WindowsPackageType=None`. Ablauf: `notification-state.json` mit
+veralteter `windowId` präpariert → nächster Poll rotiert das Fenster, und die Rotation ist im Code
+**erst nach** `SendResetToastIfDue(...)` erreichbar. Der User hat den Toast
+„Nutzungsfenster zurückgesetzt" (`WindowResetNotificationTitle`, de-DE) am Bildschirm bestätigt.
+`AppNotificationManager` ist unpackaged voll funktionsfähig: die AUMID der exakten Release-exe steht
+unter `HKCU\Software\Classes\AppUserModelId`, `IsSupported()` true, `Register()` gelaufen. Alle acht
+Notification-Resource-Keys existieren in beiden Sprachdateien.
 
-Nicht belegt: dass der Toast tatsächlich sichtbar wird. Es erscheint kein Banner — und ein
-**reiner PowerShell-Toast mit der Standard-PowerShell-AUMID ist genauso unsichtbar**. Master-Schalter
-„Benachrichtigungen" = Ein, „Bitte nicht stören" = Aus, `WpnService` + `WpnUserService` laufen,
-`ShellExperienceHost` läuft. Damit liegt es an der Sitzung/Umgebung, nicht an v1.6. Offen für einen
-Menschen: Toast auslösen und hinsehen bzw. die Mitteilungszentrale öffnen.
+**Lehre für künftige Läufe: Toasts sind nicht per Screenshot prüfbar.** Weder
+`Graphics.CopyFromScreen` (GDI/BitBlt) noch `screenshot_control` haben das Banner erfasst — 24 Frames
+über 10 s zeigten null geänderte Pixel, während der Toast real auf dem Schirm stand. Auch
+`wpndatabase.db` bekam keinen neuen Zeitstempel. Beides sind **falsche Negative**; ein
+Kontrollversuch mit einem reinen PowerShell-Toast (Standard-AUMID) war genauso unsichtbar und hätte
+fast zu der Fehldiagnose „diese Sitzung stellt gar keine Toasts zu" geführt. Für Toast-Prüfungen
+gibt es nur zwei gültige Belege: ein Mensch sieht hin, oder ein beobachtbarer Seiteneffekt im
+Zustand (hier die Fenster-Rotation in `notification-state.json`).
+
+**Beobachtung am Wochenfenster (kein Fehler, aber notieren):** beim Auslösen rotierte auch das
+Wochenfenster, von `2026-08-08T23:59` auf `2026-08-09T00:00`. Die API lieferte `23:59:59.705` und
+beim Folge-Poll `00:00:00.617` — 912 ms Jitter über eine Minutengrenze, also ein anderer
+Truncation-Bucket. Genau der in `BuildWindowId` dokumentierte „one extra toast"-Grenzfall. Relevant
+ist: das Wochenfenster endet **strukturell** auf `23:59:59`, klebt also systematisch an dieser
+Grenze — dort ist der Grenzfall der Regelfall, nicht der Zufall. Falls das im Betrieb nervt, wäre
+eine Toleranz von ±2 s beim ID-Vergleich der Hebel, nicht das Aufgeben der Truncation.
 
 **Datenherkunft je Prüfpunkt** (Auflage der Freigabe vom 2026-08-06)
 
