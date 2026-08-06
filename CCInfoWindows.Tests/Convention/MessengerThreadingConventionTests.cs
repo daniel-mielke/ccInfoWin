@@ -37,10 +37,10 @@ public class MessengerThreadingConventionTests
 
         var receivers = EnumerateReceiverMethods(assembly).ToList();
 
-        Assert.True(receivers.Count >= 4,
-            $"Expected at least 4 IRecipient<> Receive methods; found {receivers.Count}. " +
-            "Phase 24 inventory: MainViewModel.Receive(AuthStateChangedMessage), " +
-            "MainViewModel.Receive(SessionTimeoutChangedMessage), " +
+        Assert.True(receivers.Count >= 3,
+            $"Expected at least 3 IRecipient<> Receive methods; found {receivers.Count}. " +
+            "Inventory after finding 37 removed the three settings channels that could never have a " +
+            "live recipient: MainViewModel.Receive(AuthStateChangedMessage), " +
             "MainWindow.Receive(ThemeChangedMessage), MainWindow.Receive(ResetWindowSizeMessage).");
 
         var violations = new List<string>();

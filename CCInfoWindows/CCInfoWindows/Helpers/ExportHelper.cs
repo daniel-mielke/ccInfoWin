@@ -16,6 +16,11 @@ namespace CCInfoWindows.Helpers;
 /// </summary>
 public static class ExportHelper
 {
+    private const string PngExtension = ".png";
+
+    /// <summary>Picker filter label. Deliberately not localized — it names a file format.</summary>
+    private const string PngFileTypeLabel = "PNG Image";
+
     /// <summary>
     /// Layout and color constants for the export composition.
     /// </summary>
@@ -129,7 +134,13 @@ public static class ExportHelper
     /// <summary>
     /// Renders the chart to PNG and saves it to a user-chosen file via FileSavePicker.
     /// </summary>
-    public static async Task ExportChartAsPngAsync(
+    /// <returns>
+    /// False only when something failed and the caller should say so. A cancelled picker returns
+    /// true: nothing went wrong, so no banner is owed. Failures are logged here, not rethrown —
+    /// escaping ones reached App.OnUnhandledException, which marks them Handled, so the Export
+    /// button silently did nothing and users re-clicked it indefinitely (finding 24).
+    /// </returns>
+    public static async Task<bool> ExportChartAsPngAsync(
         Microsoft.UI.Windowing.AppWindow appWindow,
         IReadOnlyList<UsageHistoryPoint> points,
         DateTimeOffset? windowStart,
@@ -138,26 +149,39 @@ public static class ExportHelper
         double utilization,
         Func<string, string>? localize = null)
     {
-        using var renderTarget = RenderChartToPng(
-            points, windowStart, percentageText, countdownText, utilization, localize);
+        try
+        {
+            using var renderTarget = RenderChartToPng(
+                points, windowStart, percentageText, countdownText, utilization, localize);
 
-        var picker = new Microsoft.Windows.Storage.Pickers.FileSavePicker(appWindow.Id);
-        picker.SuggestedFileName = $"ccinfo-{DateTimeOffset.Now:yyyy-MM-dd-HHmm}";
-        picker.DefaultFileExtension = ".png";
-        picker.FileTypeChoices.Add("PNG Image", [".png"]);
+            var picker = new Microsoft.Windows.Storage.Pickers.FileSavePicker(appWindow.Id);
+            picker.SuggestedFileName = $"ccinfo-{DateTimeOffset.Now:yyyy-MM-dd-HHmm}";
+            picker.DefaultFileExtension = PngExtension;
+            picker.FileTypeChoices.Add(PngFileTypeLabel, [PngExtension]);
 
-        var result = await picker.PickSaveFileAsync();
-        if (result == null) return;
+            var result = await picker.PickSaveFileAsync();
+            if (result == null) return true;
 
-        var file = await StorageFile.GetFileFromPathAsync(result.Path);
-        using var stream = await file.OpenAsync(FileAccessMode.ReadWrite);
-        await renderTarget.SaveAsync(stream, CanvasBitmapFileFormat.Png);
+            var file = await StorageFile.GetFileFromPathAsync(result.Path);
+            using var stream = await file.OpenAsync(FileAccessMode.ReadWrite);
+
+            // Overwriting an existing, larger PNG otherwise leaves its tail past the new IEND chunk.
+            stream.Size = 0;
+            await renderTarget.SaveAsync(stream, CanvasBitmapFileFormat.Png);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(nameof(ExportHelper), ex, "saving the chart as PNG failed");
+            return false;
+        }
     }
 
     /// <summary>
     /// Renders the chart to PNG and places it on the system clipboard as a bitmap.
     /// </summary>
-    public static async Task CopyChartToClipboardAsync(
+    /// <returns>False when the clipboard was not written; the reason is in app.log.</returns>
+    public static async Task<bool> CopyChartToClipboardAsync(
         DispatcherQueue dispatcherQueue,
         IReadOnlyList<UsageHistoryPoint> points,
         DateTimeOffset? windowStart,
@@ -166,18 +190,65 @@ public static class ExportHelper
         double utilization,
         Func<string, string>? localize = null)
     {
-        using var renderTarget = RenderChartToPng(
-            points, windowStart, percentageText, countdownText, utilization, localize);
+        try
+        {
+            using var renderTarget = RenderChartToPng(
+                points, windowStart, percentageText, countdownText, utilization, localize);
 
-        var stream = new InMemoryRandomAccessStream();
-        await renderTarget.SaveAsync(stream, CanvasBitmapFileFormat.Png);
-        stream.Seek(0);
+            // Disposable here because Flush() below materializes the bitmap into the clipboard, so
+            // nothing keeps pulling from this stream after this method returns.
+            using var stream = new InMemoryRandomAccessStream();
+            await renderTarget.SaveAsync(stream, CanvasBitmapFileFormat.Png);
+            stream.Seek(0);
 
-        var streamRef = RandomAccessStreamReference.CreateFromStream(stream);
-        var dataPackage = new DataPackage();
-        dataPackage.SetBitmap(streamRef);
+            var dataPackage = new DataPackage();
+            dataPackage.SetBitmap(RandomAccessStreamReference.CreateFromStream(stream));
 
-        dispatcherQueue.TryEnqueue(() => Clipboard.SetContent(dataPackage));
+            return await PlaceOnClipboardAsync(dispatcherQueue, dataPackage);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(nameof(ExportHelper), ex, "rendering the chart for the clipboard failed");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Writes the package on the UI thread and awaits the result, because Clipboard is thread-affine
+    /// and the previous fire-and-forget TryEnqueue completed the caller's await before the clipboard
+    /// had been touched — making CLIPBRD_E_CANT_OPEN unobservable.
+    /// </summary>
+    private static async Task<bool> PlaceOnClipboardAsync(DispatcherQueue dispatcherQueue, DataPackage dataPackage)
+    {
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        if (!dispatcherQueue.TryEnqueue(() => completion.TrySetResult(TrySetClipboardContent(dataPackage))))
+        {
+            AppLog.Write(nameof(ExportHelper), "the UI thread queue refused the clipboard write");
+            return false;
+        }
+
+        return await completion.Task;
+    }
+
+    /// <summary>
+    /// SetBitmap uses delayed rendering: the bytes are pulled only when a target pastes, so without
+    /// Flush the entry is a promise this process has to stay alive to keep. Flush hands the data to
+    /// the OS, which is what makes a copied chart survive closing the app.
+    /// </summary>
+    private static bool TrySetClipboardContent(DataPackage dataPackage)
+    {
+        try
+        {
+            Clipboard.SetContent(dataPackage);
+            Clipboard.Flush();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(nameof(ExportHelper), ex, "writing the chart to the clipboard failed");
+            return false;
+        }
     }
 
     private static void DrawBackground(CanvasDrawingSession session)

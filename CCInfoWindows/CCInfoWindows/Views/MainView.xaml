@@ -71,13 +71,25 @@
                 </InfoBar.ActionButton>
             </InfoBar>
 
-            <!-- API error InfoBar -->
+            <!-- API error InfoBar. Message comes from the ViewModel, Title from the resw entry -->
+            <!-- (single-segment uid: WinUI3Localizer 2.3.0 only resolves Foo.Property keys). -->
             <InfoBar
+                l:Uids.Uid="ApiErrorInfoBar"
                 Severity="Error"
-                Title="API Error"
                 Message="{x:Bind ViewModel.ApiErrorMessage, Mode=OneWay}"
                 IsOpen="{x:Bind ViewModel.HasApiError, Mode=OneWay}"
                 Visibility="{x:Bind ViewModel.HasApiError, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                IsClosable="True"
+                Margin="0,0,0,12" />
+
+            <!-- Findings 24 + 25: a failed rename or chart export used to be indistinguishable from -->
+            <!-- a successful one. No l:Uids.Uid: the whole text is one localized sentence resolved -->
+            <!-- in the ViewModel. IsOpen is TwoWay so dismissing it re-arms the next failure. -->
+            <InfoBar
+                Severity="Warning"
+                Message="{x:Bind ViewModel.ActionErrorMessage, Mode=OneWay}"
+                IsOpen="{x:Bind ViewModel.HasActionError, Mode=TwoWay}"
+                Visibility="{x:Bind ViewModel.HasActionError, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                 IsClosable="True"
                 Margin="0,0,0,12" />
 
@@ -185,7 +197,7 @@
                     <!-- Main context progress bar -->
                     <ProgressBar Value="{x:Bind ViewModel.ContextPercentage, Mode=OneWay}"
                                  Maximum="100"
-                                 Foreground="{x:Bind ViewModel.ContextUtilization, Mode=OneWay, Converter={StaticResource PercentageToColorConverter}}"
+                                 Foreground="{x:Bind ViewModel.ContextUtilizationBrush, Mode=OneWay}"
                                  Background="{ThemeResource ProgressTrackBrush}"
                                  Style="{StaticResource AppProgressBarStyle}" />
 
@@ -401,7 +413,7 @@
                     <ProgressBar
                         Value="{x:Bind ViewModel.WeeklyPercentage, Mode=OneWay}"
                         Maximum="100"
-                        Foreground="{x:Bind ViewModel.WeeklyUtilization, Mode=OneWay, Converter={StaticResource PercentageToColorConverter}}"
+                        Foreground="{x:Bind ViewModel.WeeklyUtilizationBrush, Mode=OneWay}"
                         Background="{ThemeResource ProgressTrackBrush}"
                         Style="{StaticResource AppProgressBarStyle}" />
 
@@ -460,7 +472,7 @@
                     <ProgressBar
                         Value="{x:Bind ViewModel.SonnetPercentage, Mode=OneWay}"
                         Maximum="100"
-                        Foreground="{x:Bind ViewModel.SonnetUtilization, Mode=OneWay, Converter={StaticResource PercentageToColorConverter}}"
+                        Foreground="{x:Bind ViewModel.SonnetUtilizationBrush, Mode=OneWay}"
                         Background="{ThemeResource ProgressTrackBrush}"
                         Style="{StaticResource AppProgressBarStyle}" />
 

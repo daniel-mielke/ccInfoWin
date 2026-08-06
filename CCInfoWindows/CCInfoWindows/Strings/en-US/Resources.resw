@@ -405,11 +405,11 @@
     <value>Never</value>
   </data>
 
-  <!-- Phase 27 NEXTWIN-01..03: absolute next-window start label format strings (D-NW-03 / CD-01) -->
-  <data name="NextWindowLabelDe" xml:space="preserve">
-    <value>ddd d.M. HH:mm</value>
-  </data>
-  <data name="NextWindowLabelEn" xml:space="preserve">
+  <!-- Phase 27 NEXTWIN-01..03: absolute next-window start label (D-NW-03 / CD-01).
+       .NET custom date format string, per locale. One key per language replaces the former
+       NextWindowLabelDe/En pair, which the ViewModel picked with a culture.Name.StartsWith("de")
+       branch — a two-language assumption in code that gave every third language English's layout. -->
+  <data name="NextWindowLabelPattern" xml:space="preserve">
     <value>ddd HH:mm</value>
   </data>
 
@@ -438,6 +438,15 @@
 
   <data name="SettingsSessionNameSaveFailed" xml:space="preserve">
     <value>The session name could not be saved.</value>
+  </data>
+
+  <!-- Dashboard error banners. ApiErrorInfoBar.Title replaces a hardcoded English Title in
+       MainView.xaml; ActionErrorInfoBar has no Title on purpose (the message is one sentence). -->
+  <data name="ApiErrorInfoBar.Title" xml:space="preserve">
+    <value>API error</value>
+  </data>
+  <data name="ChartExportFailed" xml:space="preserve">
+    <value>The chart could not be exported.</value>
   </data>
 
   <data name="SettingsLanguageChangeFailed" xml:space="preserve">

@@ -1,10 +1,8 @@
 using CCInfoWindows.Helpers;
-using CCInfoWindows.Messages;
 using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
 using CCInfoWindows.Views;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.UI.Dispatching;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.UI.Xaml.Controls;
@@ -246,7 +244,8 @@ public partial class LoginViewModel : ObservableObject
         // all Cloudflare cookies and proper TLS fingerprint at this point.
         _bridge.Initialize(coreWebView, DispatcherQueue.GetForCurrentThread());
 
-        WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(true));
+        // No AuthStateChangedMessage(true) broadcast: the navigation below builds a fresh transient
+        // MainViewModel that polls from InitializeAsync, so nothing was ever listening (finding 37).
         _navigationService.NavigateTo<MainView>();
     }
 

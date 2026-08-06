@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using CCInfoWindows.Helpers;
+using CCInfoWindows.ViewModels;
 
 namespace CCInfoWindows.Tests.Localization;
 
@@ -52,6 +53,9 @@ public class ResourceCoverageTests
         "SettingsSessionNameSaveFailed",
         "SettingsLanguageChangeFailed",
         "DashboardStartupFailedMessage",
+        MainViewModel.ChartExportFailedUid,
+        // Finding 34: the dashboard's API-error banner had a hardcoded English Title in MainView.xaml.
+        "ApiErrorInfoBar.Title",
         // Phase 26 RENAME-02: Settings Sessions tab content (Plan 03)
         "SettingsTabSessions",
         "SettingsSessionsHeader.Text",
@@ -65,8 +69,7 @@ public class ResourceCoverageTests
         "LastFetchDaysAgo",
         "LastFetchNever",
         // Phase 27 NEXTWIN-01..03: absolute next-window start label (D-NW-03 / CD-01)
-        "NextWindowLabelDe",
-        "NextWindowLabelEn",
+        MainViewModel.NextWindowPatternUid,
         // Phase 27 PRICING-01..03: pricing-service silent-failure surfacing
         "PricingErrorInfoBar.Title",
         "PricingErrorInfoBar.Message",
@@ -102,8 +105,7 @@ public class ResourceCoverageTests
     private static readonly string[] DatePatternKeys =
     [
         CountdownFormatter.ResetDatePatternUid,
-        "NextWindowLabelDe",
-        "NextWindowLabelEn",
+        MainViewModel.NextWindowPatternUid,
     ];
 
     private static readonly Regex PlaceholderPattern = new(@"\{(\d+)\}", RegexOptions.Compiled);
@@ -347,6 +349,24 @@ public class ResourceCoverageTests
         Assert.DoesNotContain("27.02.", en);
         Assert.Contains("Feb", en);
         Assert.Contains("27.02.", de);
+    }
+
+    [Fact]
+    public void NextWindowLabelPattern_IsPerLocale_WithNoGermanFieldOrderForEnglish()
+    {
+        // Localisation follow-up: MainViewModel used to pick between NextWindowLabelDe and
+        // NextWindowLabelEn with `culture.Name.StartsWith("de")`, so every third language would have
+        // silently rendered English's layout. One key per locale removes the branch — and the en-US
+        // value must not render the German day-first order.
+        var reference = new DateTime(2026, 2, 27, 10, 0, 0, DateTimeKind.Unspecified);
+        var key = MainViewModel.NextWindowPatternUid;
+
+        var en = reference.ToString(LoadResw(EnUsRelativePath)[key], new CultureInfo("en-US"));
+        var de = reference.ToString(LoadResw(DeDeRelativePath)[key], new CultureInfo("de-DE"));
+
+        Assert.DoesNotContain("27.2.", en);
+        Assert.DoesNotContain("27.02.", en);
+        Assert.Contains("27.2.", de);
     }
 
     /// <summary>

@@ -142,6 +142,8 @@ public sealed partial class MainView : Page
         {
             ViewModel.PropertyChanged += OnViewModelPropertyChanged;
             SpinnerStoryboard.Completed += OnSpinnerCompleted;
+            ActualThemeChanged += OnActualThemeChanged;
+            ViewModel.ApplyTheme(ActualTheme == ElementTheme.Dark);
             WeakReferenceMessenger.Default.Register<ChartInvalidateMessage>(this, (r, m) =>
             {
                 ((MainView)r).UsageChart.Invalidate();
@@ -202,6 +204,7 @@ public sealed partial class MainView : Page
         UsageChart.RemoveFromVisualTree();
         ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
         SpinnerStoryboard.Completed -= OnSpinnerCompleted;
+        ActualThemeChanged -= OnActualThemeChanged;
         WeakReferenceMessenger.Default.Unregister<ChartInvalidateMessage>(this);
         StopShimmerAnimation();
         ViewModel.StopTimers();
@@ -341,6 +344,18 @@ public sealed partial class MainView : Page
         {
             ApiBridgeWebView.NavigationCompleted -= OnNavigationCompleted;
         }
+    }
+
+    /// <summary>
+    /// The three progress-bar foregrounds are theme-dependent brushes computed in the ViewModel: an
+    /// x:Bind converter could not re-run on a theme toggle, so the bars kept the palette of whichever
+    /// theme was active when the last poll landed. The chart reads ActualTheme in its draw handler,
+    /// so it only needs the invalidate.
+    /// </summary>
+    private void OnActualThemeChanged(FrameworkElement sender, object args)
+    {
+        ViewModel.ApplyTheme(ActualTheme == ElementTheme.Dark);
+        UsageChart.Invalidate();
     }
 
     private void UsageChart_Draw(CanvasControl sender, CanvasDrawEventArgs args)

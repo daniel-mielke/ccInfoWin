@@ -415,8 +415,6 @@ public partial class SettingsViewModel : ObservableObject
         var settings = _settingsService.LoadSettings();
         settings.RefreshIntervalSeconds = value.Seconds;
         _settingsService.SaveSettings(settings);
-
-        WeakReferenceMessenger.Default.Send(new RefreshIntervalChangedMessage(value.Seconds));
     }
 
     partial void OnSelectedThresholdIndexChanged(int value)
@@ -424,11 +422,6 @@ public partial class SettingsViewModel : ObservableObject
         var settings = _settingsService.LoadSettings();
         settings.SessionActivityThresholdMinutes = MapThresholdIndexToMinutes(value);
         _settingsService.SaveSettings(settings);
-
-        // D-08: notify MainViewModel so SortedSessions tooltips update immediately
-        //       (without waiting for the next 30s auto-poll).
-        WeakReferenceMessenger.Default.Send(
-            new SessionTimeoutChangedMessage(settings.SessionActivityThresholdMinutes));
     }
 
     partial void OnIsAutostartChanged(bool value)
@@ -518,10 +511,6 @@ public partial class SettingsViewModel : ObservableObject
         var settings = _settingsService.LoadSettings();
         settings.SessionVisibilityWindowDays = MapIndexToVisibilityDays(value);
         _settingsService.SaveSettings(settings);
-
-        // DROPDOWN-04 / D-03: notify MainViewModel so SortedSessions filter re-applies immediately.
-        WeakReferenceMessenger.Default.Send(
-            new SessionVisibilityChangedMessage(settings.SessionVisibilityWindowDays));
     }
 
     private static int MapIndexToVisibilityDays(int index) =>

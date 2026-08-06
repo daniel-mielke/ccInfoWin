@@ -45,12 +45,31 @@ public class SessionDisplayItem
 
 /// <summary>
 /// Dashboard ViewModel with API polling, usage history accumulation, chart invalidation, and footer commands.
+///
+/// Cross-VM settings changes are NOT received here. MainView carries no NavigationCacheMode, so this
+/// ViewModel does not exist while SettingsView is on screen — which is exactly when a settings change
+/// happens. Every setting is therefore re-read from disk in <see cref="InitializeAsync"/> and
+/// <see cref="RefreshSessionList"/>; see CLAUDE.md's cross-VM priority rule (direct DI >
+/// singleton-service event > WeakReferenceMessenger) before adding a channel here.
 /// </summary>
 public partial class MainViewModel : ObservableObject,
-    IRecipient<AuthStateChangedMessage>,
-    IRecipient<SessionTimeoutChangedMessage>,   // D-08
-    IRecipient<SessionVisibilityChangedMessage>   // DROPDOWN-04 / D-03
+    IRecipient<AuthStateChangedMessage>
 {
+    private const string PollLogSource = "MainViewModel.PollUsage";
+    private const string StartupLogSource = "MainViewModel.InitializeAsync";
+    private const string StatisticsLogSource = "MainViewModel.AggregateStatistics";
+    private const string SessionNameLogSource = "MainViewModel.SaveCustomName";
+    private const string NextWindowLogSource = "MainViewModel.NextWindowLabel";
+    private const string ExportLogSource = "MainViewModel.ExportChart";
+
+    // Single-segment resw uids, plus the text used when the dictionary cannot answer. The rename
+    // failure shares SettingsViewModel's key deliberately: same failure, same sentence, one
+    // translation to keep correct.
+    private const string SessionNameSaveFailedUid = "SettingsSessionNameSaveFailed";
+    private const string SessionNameSaveFailedFallback = "The session name could not be saved.";
+    internal const string ChartExportFailedUid = "ChartExportFailed";
+    private const string ChartExportFailedFallback = "The chart could not be exported.";
+
     private readonly ICredentialService _credentialService;
     private readonly INavigationService _navigationService;
     private readonly IClaudeApiService _apiService;
@@ -91,7 +110,8 @@ public partial class MainViewModel : ObservableObject,
     [NotifyPropertyChangedFor(nameof(IsPricingErrorVisible))]
     private bool _isSessionExpired;
 
-    // PRICING-01..03 (D-PR-01, D-PR-04): surfaces _pricingService.EnsurePricesLoadedAsync() failures
+    // PRICING-01..03 (D-PR-01, D-PR-04): mirrors _pricingService.Source == Unknown. Set only by
+    // ApplyPricingSource — never from a catch, since EnsurePricesLoadedAsync cannot throw.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPricingErrorVisible))]
     private bool _isPricingError;
@@ -176,9 +196,39 @@ public partial class MainViewModel : ObservableObject,
     [ObservableProperty]
     private bool _hasSonnetData;
 
+    // --- Threshold brushes for the three progress bars ---
+
+    // Finding 42: these used to be an IValueConverter reading Application.Current.Resources, which
+    // resolves ThemeDictionaries against Application.RequestedTheme -- the OS theme, which this app
+    // never sets -- while every {ThemeResource} beside it followed the element theme the app does
+    // set. A converter also cannot re-run on ActualThemeChanged, so the bars kept the palette of
+    // whichever theme was active when the last poll landed. Computing them here fixes both: the
+    // source is ChartColors (the same table the chart draws from) and ApplyTheme recomputes on toggle.
+
+    [ObservableProperty]
+    private SolidColorBrush _contextUtilizationBrush;
+
+    [ObservableProperty]
+    private SolidColorBrush _weeklyUtilizationBrush;
+
+    [ObservableProperty]
+    private SolidColorBrush _sonnetUtilizationBrush;
+
+    /// <summary>
+    /// Element theme MainView last reported. Dark is the app's default for every ColorMode other
+    /// than "light" (App.ApplyPersistedTheme), so a ViewModel nobody tells stays consistent with it.
+    /// </summary>
+    private bool _isDarkTheme = true;
+
+    /// <summary>Gray-400: the model badge colour before any model has been identified.</summary>
+    internal const string InitialBadgeColorHex = "#9CA3AF";
+
     // --- Spinner / refresh constants ---
 
     private const int MinimumSpinnerDisplayMs = 250;
+
+    /// <summary>Countdown labels have minute resolution, so a faster tick would only burn CPU.</summary>
+    private static readonly TimeSpan CountdownTickInterval = TimeSpan.FromMinutes(1);
 
     // --- UI state ---
 
@@ -194,6 +244,16 @@ public partial class MainViewModel : ObservableObject,
 
     [ObservableProperty]
     private string _apiErrorMessage = string.Empty;
+
+    // Findings 24 + 25: one banner for "the button you just pressed did not do what it said".
+    // Rename persistence and chart export both report failure through a bool and log the technical
+    // detail themselves, so all the user needs here is a generic localized sentence.
+
+    [ObservableProperty]
+    private bool _hasActionError;
+
+    [ObservableProperty]
+    private string _actionErrorMessage = string.Empty;
 
     [ObservableProperty]
     private bool _isUpdatingFromCache;
@@ -281,10 +341,30 @@ public partial class MainViewModel : ObservableObject,
     private bool _isRefreshingSessionList;
 
     /// <summary>
-    /// One-shot flag for D-01 auto-reauth routing. Reset at constructor default,
-    /// PollUsageAsync HTTP 200 success path, Logout command, and Receive(AuthStateChangedMessage(true)).
+    /// One-shot flag for D-01 auto-reauth routing. Reset at constructor default, on the
+    /// PollUsageAsync HTTP 200 success path, and by the Logout command. A successful login does not
+    /// need to reset it: the post-login dashboard is a brand-new transient ViewModel.
     /// </summary>
     private bool _autoReauthAttempted;
+
+    /// <summary>Which API field the weekly notification window is currently pinned to.</summary>
+    private enum WeeklyWindowSource
+    {
+        None,
+        SevenDayOpus,
+        SevenDay
+    }
+
+    /// <summary>
+    /// Number of consecutive polls the pinned source may be missing before the other one is adopted.
+    /// One tolerated miss covers a single truncated response; a source that is gone for two polls in
+    /// a row is gone for real.
+    /// </summary>
+    private const int MaxPinnedWeeklySourceMisses = 1;
+
+    private WeeklyWindowSource _pinnedWeeklySource = WeeklyWindowSource.None;
+    private DateTimeOffset? _pinnedWeeklyResetsAt;
+    private int _pinnedWeeklySourceMisses;
 
     /// <summary>
     /// Sends a ChartInvalidateMessage to trigger Win2D canvas redraw in MainView.
@@ -334,7 +414,13 @@ public partial class MainViewModel : ObservableObject,
 
         // G-3 / CLEANUP-02: initialize to gray-400 fallback before any poll runs, so bindings
         // never read null. Uses _brushFactory seam so tests can inject a headless fake.
-        _contextModelBadgeColor = _brushFactory("#9CA3AF");
+        _contextModelBadgeColor = _brushFactory(InitialBadgeColorHex);
+
+        // G-3: same rule for the three progress-bar foregrounds. Zero utilization is the green zone,
+        // which is what the bars show before the first poll anyway.
+        _contextUtilizationBrush = ZoneBrush(0);
+        _weeklyUtilizationBrush = ZoneBrush(0);
+        _sonnetUtilizationBrush = ZoneBrush(0);
 
         // Messenger registration happens in InitializeAsync (paired with UnregisterAll for re-init safety — PITFALLS C2-P3).
         _updateService.UpdateAvailable += OnUpdateAvailable;
@@ -345,13 +431,10 @@ public partial class MainViewModel : ObservableObject,
     /// </summary>
     public async Task InitializeAsync()
     {
-        // CD-04 / PITFALLS C2-P3: prevent double-subscription if InitializeAsync is called twice.
-        // Pairs with constructor-time Register calls at lines 301-302; we re-register below via lambda
-        // overloads. Cheap insurance as Phases 25-27 add new IRecipient<> handlers.
+        // CD-04 / PITFALLS C2-P3: prevent double-subscription if InitializeAsync is called twice
+        // (a re-login runs MainView.Loaded again on the same instance).
         WeakReferenceMessenger.Default.UnregisterAll(this);
         WeakReferenceMessenger.Default.Register<AuthStateChangedMessage>(this);
-        WeakReferenceMessenger.Default.Register<SessionTimeoutChangedMessage>(this);   // D-08
-        WeakReferenceMessenger.Default.Register<SessionVisibilityChangedMessage>(this);   // DROPDOWN-04 / D-03
 
         // Load settings
         var settings = _settingsService.LoadSettings();
@@ -364,14 +447,6 @@ public partial class MainViewModel : ObservableObject,
         {
             IsSessionVisibilityMigrationToastVisible = true;
         }
-
-        // Subscribe to refresh interval changes from Settings
-        // CD-05 #4 audit: UpdateRefreshInterval mutates _pollTimer + _refreshIntervalSeconds; DispatcherQueueTimer requires UI thread → wrap.
-        WeakReferenceMessenger.Default.Register<RefreshIntervalChangedMessage>(this, (r, m) =>
-        {
-            var vm = (MainViewModel)r;
-            vm._dispatcherQueue.TryEnqueue(() => vm.UpdateRefreshInterval(m.Value));
-        });
 
         // RENAME-04 / D-06 / L-02: subscribe via .NET event (NOT WeakReferenceMessenger — D-13 lesson).
         // Symmetric -= cleanup happens in StopTimers (CD-05).
@@ -410,8 +485,9 @@ public partial class MainViewModel : ObservableObject,
         }
         catch (Exception ex)
         {
-            // Background scan failure should not block the dashboard
-            Debug.WriteLine($"[MainViewModel] JSONL init failed: {ex.Message}");
+            // Background scan failure should not block the dashboard, but "the dropdown is empty
+            // and the chart has nothing in it" is undiagnosable without the exception on disk.
+            AppLog.Write(StartupLogSource, ex, "JSONL initialization failed");
         }
 
         // Load pricing in background — non-blocking, fallback activates on failure.
@@ -424,7 +500,7 @@ public partial class MainViewModel : ObservableObject,
                 await _pricingService.EnsurePricesLoadedAsync();
                 _dispatcherQueue.TryEnqueue(() =>
                 {
-                    IsPricingError = false;
+                    ApplyPricingSource();
                     // Statistics rendered before prices arrived were priced with whatever was
                     // seeded from the bundled table; recompute once the live data lands. Much
                     // smaller than upstream's generation/invalidation machinery because there is
@@ -434,37 +510,22 @@ public partial class MainViewModel : ObservableObject,
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[MainViewModel] Pricing load failed: {ex.Message}");
-                _dispatcherQueue.TryEnqueue(() => IsPricingError = true);
+                // EnsurePricesLoadedAsync is documented as non-throwing, so this only fires if the
+                // Task.Run machinery itself fails. IsPricingError is not set from here: the service's
+                // own Source is the authority (finding 34).
+                AppLog.Write(StartupLogSource, ex, "pricing load failed");
             }
         });
 
         RefreshSessionList();
 
 #if !MOCK_CHART
-        // Load cache for instant display
-        var cached = await _apiService.LoadCacheAsync();
-        if (cached != null)
-        {
-            IsUpdatingFromCache = true;
-            await UpdateUsagePropertiesAsync(cached);
-        }
+        // Timers FIRST (finding 4): anything that throws in the cache-hydration or first-poll block
+        // below used to leave a fully rendered dashboard with no poller at all, recoverable only by
+        // restarting the app.
+        StartTimers();
 
-        // WinRT DispatcherQueue required for CreateTimer() — not part of IDispatcherQueue abstraction.
-        // InitializeAsync runs on the UI thread (called from MainView.Loaded), so GetForCurrentThread() is safe.
-        var winuiDispatcherQueue = DispatcherQueue.GetForCurrentThread();
-
-        // Start poll timer
-        _pollTimer = winuiDispatcherQueue.CreateTimer();
-        _pollTimer.Interval = TimeSpan.FromSeconds(_refreshIntervalSeconds);
-        _pollTimer.Tick += async (s, e) => await PollUsageAsync();
-        _pollTimer.Start();
-
-        // Start countdown timer (ticks every 60 seconds)
-        _countdownTimer = winuiDispatcherQueue.CreateTimer();
-        _countdownTimer.Interval = TimeSpan.FromMinutes(1);
-        _countdownTimer.Tick += (s, e) => UpdateCountdowns();
-        _countdownTimer.Start();
+        await RenderCachedUsageAsync();
 
         // Immediate first poll
         await PollUsageAsync();
@@ -474,6 +535,111 @@ public partial class MainViewModel : ObservableObject,
         await _updateService.CheckForUpdateAsync();
         _updateService.StartPeriodicCheck();
     }
+
+    /// <summary>
+    /// Creates and starts the poll and countdown timers. Runs before any data is rendered so a
+    /// failure further into the bootstrap cannot leave the dashboard without a poller (finding 4).
+    /// </summary>
+    private void StartTimers()
+    {
+        // WinRT DispatcherQueue required for CreateTimer() — not part of the IDispatcherQueue
+        // abstraction. InitializeAsync runs on the UI thread (called from MainView.Loaded), so
+        // GetForCurrentThread() is safe.
+        var winuiDispatcherQueue = DispatcherQueue.GetForCurrentThread();
+
+        _pollTimer = winuiDispatcherQueue.CreateTimer();
+        _pollTimer.Tick += async (s, e) => await PollUsageAsync();
+        ApplyRefreshInterval();
+
+        _countdownTimer = winuiDispatcherQueue.CreateTimer();
+        _countdownTimer.Interval = CountdownTickInterval;
+        _countdownTimer.Tick += (s, e) => UpdateCountdowns();
+        _countdownTimer.Start();
+    }
+
+    /// <summary>
+    /// Applies the current refresh interval to the poll timer, or stops it when the user chose
+    /// "Manual". A zero interval is not a fast poll — DispatcherQueueTimer would either reject it
+    /// or tick continuously — so the sentinel has to be handled here rather than converted.
+    /// </summary>
+    private void ApplyRefreshInterval()
+    {
+        if (_pollTimer is null) return;
+
+        if (!ShouldPollAutomatically(_refreshIntervalSeconds))
+        {
+            _pollTimer.Stop();
+            return;
+        }
+
+        _pollTimer.Interval = TimeSpan.FromSeconds(_refreshIntervalSeconds);
+        _pollTimer.Start();
+    }
+
+    /// <summary>
+    /// True when the persisted interval asks for automatic polling. AppSettings.ManualRefreshSeconds
+    /// means "manual only"; anything below it can only come from a settings.json SettingsService
+    /// could not clamp, and is treated the same way.
+    /// </summary>
+    internal static bool ShouldPollAutomatically(int refreshIntervalSeconds) =>
+        refreshIntervalSeconds > AppSettings.ManualRefreshSeconds;
+
+    /// <summary>
+    /// Paints the last persisted API snapshot so the dashboard is populated before the first live
+    /// poll returns. Best-effort: an unreadable cache must not stop the poll that would replace it.
+    /// IsUpdatingFromCache stays set until that poll lands — it drives the "updating" hint.
+    /// </summary>
+    private async Task RenderCachedUsageAsync()
+    {
+        try
+        {
+            var cached = await _apiService.LoadCacheAsync();
+            if (cached == null) return;
+
+            IsUpdatingFromCache = true;
+            await UpdateUsagePropertiesAsync(cached);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(StartupLogSource, ex, "rendering the cached usage snapshot failed");
+        }
+    }
+
+    /// <summary>
+    /// PRICING-01..03 (D-PR-01): the pricing InfoBar is driven by the service's own Source, because
+    /// EnsurePricesLoadedAsync handles every failure internally and never throws — deriving the flag
+    /// from a caught exception left the banner permanently unreachable (finding 34).
+    /// </summary>
+    private void ApplyPricingSource()
+        => IsPricingError = _pricingService.Source == PricingSource.Unknown;
+
+    /// <summary>
+    /// Builds the threshold brush for a utilization value in the app's current element theme, via
+    /// the same G-3 factory seam the model badge uses.
+    /// </summary>
+    private SolidColorBrush ZoneBrush(double utilization)
+        => _brushFactory(ToHexColor(ChartColors.GetZoneColor(utilization, _isDarkTheme)));
+
+    private static string ToHexColor(Windows.UI.Color color)
+        => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+
+    /// <summary>
+    /// Called by MainView on load and on ActualThemeChanged. x:Bind OneWay cannot re-evaluate on a
+    /// theme toggle, so the brushes are recomputed here instead of by a converter (finding 42).
+    /// </summary>
+    internal void ApplyTheme(bool isDark)
+    {
+        _isDarkTheme = isDark;
+        ContextUtilizationBrush = ZoneBrush(ContextUtilization);
+        WeeklyUtilizationBrush = ZoneBrush(WeeklyUtilization);
+        SonnetUtilizationBrush = ZoneBrush(SonnetUtilization);
+    }
+
+    partial void OnContextUtilizationChanged(double value) => ContextUtilizationBrush = ZoneBrush(value);
+
+    partial void OnWeeklyUtilizationChanged(double value) => WeeklyUtilizationBrush = ZoneBrush(value);
+
+    partial void OnSonnetUtilizationChanged(double value) => SonnetUtilizationBrush = ZoneBrush(value);
 
     /// <summary>
     /// Validates the stored session token by calling claude.ai API.
@@ -517,15 +683,17 @@ public partial class MainViewModel : ObservableObject,
         {
             HasApiError = true;
             ApiErrorMessage = $"API request failed (HTTP {ex.StatusCode}).";
-            Debug.WriteLine($"[MainViewModel] PollUsage: {ex.Message}");
+            AppLog.Write(PollLogSource, ex, "usage fetch returned an HTTP error");
         }
         catch (Exception ex)
         {
             HasApiError = true;
-            // Surface ex.Message — the previous generic text made bridge/org-id failures
-            // indistinguishable from network errors outside a debugger.
-            ApiErrorMessage = $"API request failed: {ex.Message}";
-            Debug.WriteLine($"[MainViewModel] PollUsage: {ex}");
+            // Exception type only, never ex.Message: a failing cache write put the full
+            // %LOCALAPPDATA% path of the user's profile on screen and into every pasted
+            // screenshot. The type still distinguishes a bridge failure from a network one,
+            // and app.log has the message plus the stack.
+            ApiErrorMessage = $"API request failed ({ex.GetType().Name}).";
+            AppLog.Write(PollLogSource, ex, "usage fetch failed");
         }
     }
 
@@ -567,9 +735,12 @@ public partial class MainViewModel : ObservableObject,
             _usageNotificationService.CheckBurnRate(null);
         }
 
-        // WOCHENLIMIT = SevenDayOpus (fallback to SevenDay)
-        var weeklyWindow = data.SevenDayOpus ?? data.SevenDay;
-        ApplyWeeklyWindow(weeklyWindow,
+        // WOCHENLIMIT = SevenDayOpus (fallback to SevenDay).
+        // The DISPLAY deliberately keeps the plain fallback: the panel must show what the API just
+        // said on every poll, and freezing it at a stale percentage to protect a notification would
+        // trade a visible lie for an invisible one. Notifications get the pinned window below —
+        // they are one-shot and irreversible, so they must not fire on a source flip.
+        ApplyWeeklyWindow(data.SevenDayOpus ?? data.SevenDay,
             v => WeeklyUtilization = v, v => WeeklyPercentage = v, v => WeeklyPercentageText = v,
             v => WeeklyCountdown = v, v => WeeklyResetDate = v, v => _weeklyResetsAt = v);
 
@@ -582,7 +753,73 @@ public partial class MainViewModel : ObservableObject,
         // Threshold + window-reset toasts. One call after both windows are applied rather than
         // one per branch: a weekly rotation has to be evaluated even in a poll without FiveHour.
         // SevenDaySonnet gets no notification (upstream scope: 5h + primary weekly window).
-        _usageNotificationService.CheckWindows(data.FiveHour, weeklyWindow);
+        _usageNotificationService.CheckWindows(data.FiveHour, PinWeeklyNotificationWindow(data));
+    }
+
+    /// <summary>
+    /// Picks the weekly window the notification service is allowed to see, pinned to one API field
+    /// for the lifetime of a window (finding 20a).
+    ///
+    /// `SevenDayOpus ?? SevenDay` are two windows with independent resets_at, so a poll that
+    /// transiently omits seven_day_opus changes the window identity without anything having rotated
+    /// — which announced a bogus "weekly window reset" and re-armed the 80/95 toasts. The pinned
+    /// source is kept while it is reported; when it goes missing, the window is skipped for this
+    /// poll (returning null makes CheckWindows a no-op, leaving the armed countdown untouched) and
+    /// the other source is only adopted once the pinned window's own reset time has passed or the
+    /// pinned source has been absent for more than <see cref="MaxPinnedWeeklySourceMisses"/> polls.
+    /// </summary>
+    internal UsageWindow? PinWeeklyNotificationWindow(UsageResponse data)
+    {
+        // Nothing pinned yet, or the pinned window has run out: both are clean points to re-apply the
+        // preference, so one poll's omission does not pin the fallback for the rest of the process.
+        if (_pinnedWeeklySource == WeeklyWindowSource.None || IsPinnedWeeklyWindowOver())
+        {
+            return RepinWeeklySource(data);
+        }
+
+        var pinned = ReadPinnedWeeklyWindow(data);
+        if (pinned != null)
+        {
+            _pinnedWeeklySourceMisses = 0;
+            _pinnedWeeklyResetsAt = pinned.ResetsAt;
+            return pinned;
+        }
+
+        // Missing for one poll: report nothing rather than the other window. A null window makes
+        // CheckWindows a no-op, so the armed reset countdown and the 80/95 flags stay as they are.
+        if (++_pinnedWeeklySourceMisses <= MaxPinnedWeeklySourceMisses) return null;
+
+        return RepinWeeklySource(data);
+    }
+
+    /// <summary>
+    /// True once the pinned window's own reset time has passed, or when no reset time was ever
+    /// reported — a window without resets_at has no identity for the notification state to track.
+    /// </summary>
+    private bool IsPinnedWeeklyWindowOver()
+        => _pinnedWeeklyResetsAt is null || _pinnedWeeklyResetsAt.Value <= DateTimeOffset.UtcNow;
+
+    private UsageWindow? ReadPinnedWeeklyWindow(UsageResponse data) => _pinnedWeeklySource switch
+    {
+        WeeklyWindowSource.SevenDayOpus => data.SevenDayOpus,
+        WeeklyWindowSource.SevenDay => data.SevenDay,
+        _ => null
+    };
+
+    /// <summary>
+    /// Adopts whichever weekly field the response actually carries, preferring seven_day_opus —
+    /// the same precedence the display uses. Clears the pin when neither is present.
+    /// </summary>
+    private UsageWindow? RepinWeeklySource(UsageResponse data)
+    {
+        _pinnedWeeklySource = data.SevenDayOpus is not null ? WeeklyWindowSource.SevenDayOpus
+            : data.SevenDay is not null ? WeeklyWindowSource.SevenDay
+            : WeeklyWindowSource.None;
+
+        var window = ReadPinnedWeeklyWindow(data);
+        _pinnedWeeklyResetsAt = window?.ResetsAt;
+        _pinnedWeeklySourceMisses = 0;
+        return window;
     }
 
     private static string FormatBurnRateText(int minutesUntilLimit)
@@ -682,11 +919,16 @@ public partial class MainViewModel : ObservableObject,
     }
 
     /// <summary>
+    /// Single-segment resw key carrying the next-window label pattern of the active language.
+    /// WinUI3Localizer 2.3.0 keys its dictionary on the text before the FIRST '.', so a dotted uid
+    /// resolves to nothing.
+    /// </summary>
+    internal const string NextWindowPatternUid = "NextWindowLabelPattern";
+
+    /// <summary>
     /// NEXTWIN-01..03 (D-NW-02..04): recomputes the absolute next-window label from
     /// _fiveHourResetsAt. Hides the label (Visibility=Collapsed) when ResetsAt is null OR
     /// IsSessionExpired is true (auth banner takes priority — banner-stack alignment with PRICING).
-    /// Format pattern is loaded from MainView.NextWindow.Label{De,En} resw key based on
-    /// CultureInfo.CurrentUICulture.
     /// </summary>
     private void RecomputeNextWindowLabel()
     {
@@ -697,25 +939,56 @@ public partial class MainViewModel : ObservableObject,
             return;
         }
 
-        var culture = CultureInfo.CurrentUICulture;
-        var formatKey = culture.Name.StartsWith("de", StringComparison.OrdinalIgnoreCase)
-            ? "NextWindowLabelDe"
-            : "NextWindowLabelEn";
-        var format = Localizer.Get().GetLocalizedString(formatKey);
-
-        FiveHourNextWindowText = _fiveHourResetsAt.Value.LocalDateTime.ToString(format, culture);
+        FiveHourNextWindowText = FormatNextWindowLabel(
+            _fiveHourResetsAt.Value, ResolveNextWindowPattern(), CultureInfo.CurrentUICulture);
         IsFiveHourNextWindowVisible = true;
     }
 
     /// <summary>
-    /// Updates the polling interval when settings change at runtime.
+    /// Pattern-and-culture overload, internal so the formatting can be asserted without a
+    /// WinUI3Localizer host. The layout comes from the active language's resw entry rather than from
+    /// a `culture.Name.StartsWith("de")` branch, which silently gave every third language the
+    /// English field order. A missing or malformed pattern degrades to a culture-derived one.
     /// </summary>
-    public void UpdateRefreshInterval(int seconds)
+    internal static string FormatNextWindowLabel(DateTimeOffset resetsAt, string? pattern, CultureInfo culture)
     {
-        _refreshIntervalSeconds = seconds;
-        if (_pollTimer != null)
+        var localTime = resetsAt.LocalDateTime;
+
+        if (!string.IsNullOrWhiteSpace(pattern))
         {
-            _pollTimer.Interval = TimeSpan.FromSeconds(seconds);
+            try
+            {
+                return localTime.ToString(pattern, culture);
+            }
+            catch (FormatException ex)
+            {
+                AppLog.Write(
+                    NextWindowLogSource,
+                    ex,
+                    $"'{NextWindowPatternUid}' = \"{pattern}\" is not a valid custom date format string.");
+            }
+        }
+
+        return localTime.ToString(CountdownFormatter.CultureDefaultPattern(culture), culture);
+    }
+
+    /// <summary>
+    /// Reads the pattern of the active language, or null when the answer cannot be trusted: an
+    /// unbuilt localizer echoes the uid back and a built one returns empty for an unknown uid.
+    /// </summary>
+    private static string? ResolveNextWindowPattern()
+    {
+        try
+        {
+            var pattern = Localizer.Get().GetLocalizedString(NextWindowPatternUid);
+            return string.IsNullOrWhiteSpace(pattern) || pattern == NextWindowPatternUid
+                ? null
+                : pattern;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(NextWindowLogSource, ex, $"could not read '{NextWindowPatternUid}'.");
+            return null;
         }
     }
 
@@ -733,6 +1006,10 @@ public partial class MainViewModel : ObservableObject,
         }
         _jsonlService.Stop();
         _updateService.StopPeriodicCheck();
+        // IUpdateService is a singleton and a .NET event holds a STRONG reference, so without this
+        // every Settings round-trip left a whole transient ViewModel rooted for the process lifetime,
+        // pinning its Sessions / SortedSessions / SubagentContexts / UsageHistoryPoints (finding 7).
+        _updateService.UpdateAvailable -= OnUpdateAvailable;
         _sessionNameStore.NameChanged -= OnSessionNameChanged;
         WeakReferenceMessenger.Default.UnregisterAll(this);
     }
@@ -789,7 +1066,7 @@ public partial class MainViewModel : ObservableObject,
         {
             _sessionNameStore.SetCustomName(sessionId, sanitized);
         }
-        await _sessionNameStore.SaveAsync();
+        await PersistSessionNamesAsync();
     }
 
     /// <summary>Persists "no custom name" (Reset button in rename dialog).</summary>
@@ -797,7 +1074,56 @@ public partial class MainViewModel : ObservableObject,
     {
         if (string.IsNullOrEmpty(sessionId)) return;
         _sessionNameStore.ClearCustomName(sessionId);
-        await _sessionNameStore.SaveAsync();
+        await PersistSessionNamesAsync();
+    }
+
+    /// <summary>
+    /// Finding 25: the store's bool is its only error channel. On failure it has already rolled the
+    /// in-memory map back and re-raised NameChanged, so the displayed name self-corrects and the
+    /// technical detail is already in app.log — the one thing missing was telling the user, which is
+    /// why nothing is re-read or re-set here.
+    /// </summary>
+    private async Task PersistSessionNamesAsync()
+    {
+        ClearActionError();
+        if (await _sessionNameStore.SaveAsync()) return;
+
+        ReportActionError(SessionNameSaveFailedUid, SessionNameSaveFailedFallback, SessionNameLogSource);
+    }
+
+    /// <summary>
+    /// Raises the generic action-failure banner. The technical detail belongs in app.log, which the
+    /// failing operation has already written — this only resolves the sentence the user reads.
+    /// </summary>
+    private void ReportActionError(string uid, string fallback, string logSource)
+    {
+        ActionErrorMessage = LocalizedOrFallback(uid, fallback, logSource);
+        HasActionError = true;
+    }
+
+    private void ClearActionError()
+    {
+        HasActionError = false;
+        ActionErrorMessage = string.Empty;
+    }
+
+    /// <summary>
+    /// Resolves a banner sentence, falling back to English when the dictionary cannot answer: an
+    /// unbuilt localizer echoes the uid back and a built one returns empty for an unknown uid, and a
+    /// banner showing a resource key tells the user nothing.
+    /// </summary>
+    private static string LocalizedOrFallback(string uid, string fallback, string logSource)
+    {
+        try
+        {
+            var text = Localizer.Get().GetLocalizedString(uid);
+            return string.IsNullOrWhiteSpace(text) || text == uid ? fallback : text;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(logSource, ex, $"could not read '{uid}'.");
+            return fallback;
+        }
     }
 
     /// <summary>Lookup helper for the View — exposes whether a custom name currently exists.</summary>
@@ -816,7 +1142,6 @@ public partial class MainViewModel : ObservableObject,
         HasActiveSessions = latestSessions.Count > 0;
 
         var settings = _settingsService.LoadSettings();
-        var threshold = TimeSpan.FromMinutes(settings.SessionActivityThresholdMinutes);
 
         // Rebuild internal sessions collection
         Sessions.Clear();
@@ -828,22 +1153,56 @@ public partial class MainViewModel : ObservableObject,
         // SESS-04: capture current selection BEFORE rebuilding the collection
         var previousSessionId = SelectedSession?.Session.Id;
 
-        // Guard: suppress OnSelectedSessionChanged while rebuilding
+        // Guard: suppress OnSelectedSessionChanged while the collection and the selection are both
+        // in flux — the ComboBox writes null back through its TwoWay binding on every ItemsSource
+        // swap, and that null must not be mistaken for the user clearing the selection.
         _isRefreshingSessionList = true;
+        SortedSessions = BuildSessionDisplayItems(latestSessions, settings);
+        var retainedItem = previousSessionId == null
+            ? null
+            : SortedSessions.FirstOrDefault(d => d.Session.Id == previousSessionId);
+        SelectedSession = retainedItem;
+        _isRefreshingSessionList = false;
 
-        // D-06: removed .Where(s => s.IsActive(threshold)) filter — inactive sessions now visible
-        //       in ComboBox to support POLISH-04 (two-line tooltip). Per-item IsActive replaces
-        //       the previous hardcoded `IsActive = true` (was correct only because of the filter).
+        if (retainedItem != null)
+        {
+            UpdateSessionData(retainedItem.Session);
+            return;
+        }
+
+        if (previousSessionId != null)
+        {
+            // Finding 6: the selected session vanished (visibility window narrowed in Settings, or
+            // its project directory was deleted). This branch used to just drop the guard and return,
+            // so KONTEXTFENSTER kept rendering the gone session's percentage, model badge and
+            // autocompact warning — and STATISTIKEN its token counts — beside an empty ComboBox.
+            ClearSessionData();
+        }
+
+        SelectSessionFromSettingsOrActivity(settings);
+    }
+
+    /// <summary>
+    /// Projects the raw session list onto the ComboBox's display items: newest first, custom names
+    /// applied, and cut off at the configured visibility window.
+    /// </summary>
+    private ObservableCollection<SessionDisplayItem> BuildSessionDisplayItems(
+        IReadOnlyList<SessionInfo> sessions, AppSettings settings)
+    {
+        // D-06: no .Where(s => s.IsActive(threshold)) filter — inactive sessions are visible in the
+        //       ComboBox to support POLISH-04 (two-line tooltip), with per-item IsActive replacing
+        //       the previous hardcoded `IsActive = true` (correct only because of that filter).
         var thresholdMinutes = settings.SessionActivityThresholdMinutes;
+        var threshold = TimeSpan.FromMinutes(thresholdMinutes);
 
         // DROPDOWN-01 / DROPDOWN-04 / D-03: display-layer visibility cutoff.
         // JsonlService keeps aggregating ALL sessions (cost / quota totals must NOT lose data) —
         // we only filter the user-visible ComboBox source here.
-        var visibilityCutoff = settings.SessionVisibilityWindowDays > 0
+        var visibilityCutoff = settings.SessionVisibilityWindowDays > AppSettings.UnlimitedSessionVisibilityWindowDays
             ? DateTimeOffset.UtcNow.AddDays(-settings.SessionVisibilityWindowDays)
             : DateTimeOffset.MinValue;
 
-        var displayItems = latestSessions
+        var displayItems = sessions
             .Where(s => s.LastActivity >= visibilityCutoff)
             .OrderByDescending(s => s.LastActivity)
             .Select(s =>
@@ -856,31 +1215,17 @@ public partial class MainViewModel : ObservableObject,
                     IsActive = isActive,
                     TooltipText = ComputeTooltipText(s, isActive, thresholdMinutes)
                 };
-            })
-            .ToList();
+            });
 
-        SortedSessions = new ObservableCollection<SessionDisplayItem>(displayItems);
+        return new ObservableCollection<SessionDisplayItem>(displayItems);
+    }
 
-        // Restore previous selection without triggering ClearSessionData
-        if (previousSessionId != null)
-        {
-            var updatedItem = SortedSessions.FirstOrDefault(d => d.Session.Id == previousSessionId);
-            if (updatedItem != null)
-            {
-                SelectedSession = updatedItem;
-                _isRefreshingSessionList = false;
-                UpdateSessionData(updatedItem.Session);
-            }
-            else
-            {
-                _isRefreshingSessionList = false;
-            }
-            return;
-        }
-
-        _isRefreshingSessionList = false;
-
-        // No current selection — try to restore from persisted setting
+    /// <summary>
+    /// Picks a session when none is selected: the persisted one while it is still visible, otherwise
+    /// the most recently active one. Leaves the selection empty when neither exists.
+    /// </summary>
+    private void SelectSessionFromSettingsOrActivity(AppSettings settings)
+    {
         if (!string.IsNullOrEmpty(settings.LastSelectedSessionId))
         {
             var restoredItem = SortedSessions.FirstOrDefault(d => d.Session.Id == settings.LastSelectedSessionId);
@@ -891,7 +1236,6 @@ public partial class MainViewModel : ObservableObject,
             }
         }
 
-        // Fall back to first active session
         var firstActiveItem = SortedSessions.FirstOrDefault(d => d.IsActive);
         if (firstActiveItem != null)
         {
@@ -920,7 +1264,7 @@ public partial class MainViewModel : ObservableObject,
         ContextPercentage = 0;
         ContextPercentageText = "--";
         ContextModelBadge = string.Empty;
-        ContextModelBadgeColor = ParseHexBrush(ModelContextLimits.GetBadgeColorHex(null));
+        ContextModelBadgeColor = _brushFactory(ModelContextLimits.GetBadgeColorHex(null));
         ShowAutocompactWarning = false;
         HasActiveSession = false;
         SubagentContexts.Clear();
@@ -964,10 +1308,10 @@ public partial class MainViewModel : ObservableObject,
         }
         try
         {
-            // PRICING-02 / CD-04: manual refresh + auto-poll BOTH clear IsPricingError on success.
+            // PRICING-02 / CD-04: manual refresh + auto-poll BOTH re-evaluate the pricing banner.
             // This site runs inside the existing dispatcher chain (no extra TryEnqueue needed — G-1).
             await _pricingService.EnsurePricesLoadedAsync();
-            IsPricingError = false;
+            ApplyPricingSource();
             ct.ThrowIfCancellationRequested();
             var stats = await Task.Run(() => _jsonlService.GetStatistics(period), ct);
             _dispatcherQueue.TryEnqueue(() => ApplyStatistics(stats));
@@ -978,8 +1322,9 @@ public partial class MainViewModel : ObservableObject,
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[MainViewModel] AggregateStatistics failed: {ex.Message}");
-            IsPricingError = true;
+            // Not a pricing failure: EnsurePricesLoadedAsync never throws, so anything landing here
+            // came from the JSONL aggregation. IsPricingError stays owned by ApplyPricingSource.
+            AppLog.Write(StatisticsLogSource, ex, $"aggregating statistics for {period} failed");
             _dispatcherQueue.TryEnqueue(() => ApplyStatistics(StatisticsSummary.Empty));
         }
         finally
@@ -1024,7 +1369,7 @@ public partial class MainViewModel : ObservableObject,
         ContextPercentage = Math.Min(context.Utilization * 100, 100);
         ContextPercentageText = $"{Math.Min(context.Utilization * 100, 100):0}%";
         ContextModelBadge = ModelContextLimits.GetDisplayName(context.ModelName);
-        ContextModelBadgeColor = ParseHexBrush(ModelContextLimits.GetBadgeColorHex(context.ModelName));
+        ContextModelBadgeColor = _brushFactory(ModelContextLimits.GetBadgeColorHex(context.ModelName));
         ShowAutocompactWarning = context.ShouldWarnAutocompact;
         HasActiveSession = true;
 
@@ -1039,7 +1384,7 @@ public partial class MainViewModel : ObservableObject,
                 Percentage = Math.Min(subUtil * 100, 100),
                 PercentageText = $"{Math.Min(subUtil * 100, 100):0}%",
                 ModelBadge = ModelContextLimits.GetDisplayName(subagent.ModelName),
-                BadgeColor = ParseHexBrush(ModelContextLimits.GetBadgeColorHex(subagent.ModelName))
+                BadgeColor = _brushFactory(ModelContextLimits.GetBadgeColorHex(subagent.ModelName))
             });
         }
 
@@ -1153,8 +1498,21 @@ public partial class MainViewModel : ObservableObject,
     private async Task ExportChartAsPng()
     {
         var appWindow = App.MainWindow?.AppWindow;
-        if (appWindow == null) return;
-        await ExportHelper.ExportChartAsPngAsync(appWindow, UsageHistoryPoints, FiveHourWindowStart, FiveHourPercentageText, FiveHourCountdown, FiveHourUtilization);
+        if (appWindow == null)
+        {
+            AppLog.Write(ExportLogSource, "no AppWindow to parent the save picker to");
+            ReportActionError(ChartExportFailedUid, ChartExportFailedFallback, ExportLogSource);
+            return;
+        }
+
+        ClearActionError();
+        var exported = await ExportHelper.ExportChartAsPngAsync(
+            appWindow, UsageHistoryPoints, FiveHourWindowStart, FiveHourPercentageText, FiveHourCountdown, FiveHourUtilization);
+
+        if (!exported)
+        {
+            ReportActionError(ChartExportFailedUid, ChartExportFailedFallback, ExportLogSource);
+        }
     }
 
     [RelayCommand]
@@ -1163,7 +1521,15 @@ public partial class MainViewModel : ObservableObject,
         // ExportHelper.CopyChartToClipboardAsync requires the WinRT DispatcherQueue type for
         // Clipboard.SetContent marshaling. Obtain it here on the UI thread (command executes on UI thread).
         var winuiDispatcherQueue = DispatcherQueue.GetForCurrentThread();
-        await ExportHelper.CopyChartToClipboardAsync(winuiDispatcherQueue, UsageHistoryPoints, FiveHourWindowStart, FiveHourPercentageText, FiveHourCountdown, FiveHourUtilization);
+
+        ClearActionError();
+        var copied = await ExportHelper.CopyChartToClipboardAsync(
+            winuiDispatcherQueue, UsageHistoryPoints, FiveHourWindowStart, FiveHourPercentageText, FiveHourCountdown, FiveHourUtilization);
+
+        if (!copied)
+        {
+            ReportActionError(ChartExportFailedUid, ChartExportFailedFallback, ExportLogSource);
+        }
     }
 
     [RelayCommand]
@@ -1204,24 +1570,17 @@ public partial class MainViewModel : ObservableObject,
 
     private void HandleAuthStateChangedCore(AuthStateChangedMessage message)
     {
-        // D-03: post-login refresh — clear error flags, reset auto-reauth budget, refresh immediately.
-        if (message.Value)
-        {
-            IsSessionExpired = false;
-            HasApiError = false;
-            _autoReauthAttempted = false;
-            // CD-02 / PITFALLS C1-P1: explicit discard documents intentional fire-and-forget.
-            // [RelayCommand] machinery already catches exceptions inside Refresh() and surfaces
-            // them via HasApiError / ApiErrorMessage in PollUsageCoreAsync (lines 428-458).
-            // Adding a try/catch at THIS call site would be dead code.
-            _ = RefreshCommand.ExecuteAsync(null);
-            return;
-        }
+        // Finding 37: only the "signed out" broadcast can reach a live MainViewModel. LoginViewModel
+        // navigates to MainView right after signalling success, so the post-login dashboard is a
+        // brand-new transient ViewModel — default flags, and InitializeAsync polls immediately. The
+        // guard stays so a future `true` sender cannot be mistaken for a 401 and bounce the user to
+        // the login page.
+        if (message.Value) return;
 
         // D-01: first 401 in a session → auto-navigate to LoginView, do NOT open InfoBar.
-        // NOTE: ClaudeApiService has two send sites for AuthStateChangedMessage(false)
-        // (FetchUsageAsync:88 and TryMigrateOrgIdAsync:184). Stacked-401 edge case is accepted —
-        // Receive(true) post-login clears IsSessionExpired so a stale flag resolves at next login.
+        // NOTE: ClaudeApiService has two send sites for AuthStateChangedMessage(false). The
+        // stacked-401 edge case is accepted — a stale IsSessionExpired dies with this ViewModel when
+        // the login navigation unloads MainView.
         if (!_autoReauthAttempted)
         {
             _autoReauthAttempted = true;
@@ -1232,22 +1591,6 @@ public partial class MainViewModel : ObservableObject,
         // Second 401 (and beyond): existing InfoBar fallback path (AUTH-02).
         IsSessionExpired = true;
         StatusMessage = "Session expired. Please re-login to continue.";
-    }
-
-    public void Receive(SessionTimeoutChangedMessage message)
-    {
-        // D-08: rebuild SortedSessions on threshold change so TooltipText reflects new minutes.
-        // Dispatched to UI thread — RefreshSessionList requires it.
-        // G-1 compliant: constructor-injected _dispatcherQueue is non-null. CD-05 #2 — implicit-default exemption (no [ThreadSafeReceive] needed).
-        _dispatcherQueue.TryEnqueue(RefreshSessionList);
-    }
-
-    public void Receive(SessionVisibilityChangedMessage message)
-    {
-        // DROPDOWN-04 / D-03: re-apply visibility cutoff filter on SortedSessions.
-        // Dispatched to UI thread — RefreshSessionList requires it.
-        // G-1 compliant: constructor-injected _dispatcherQueue is non-null. L-02 honored.
-        _dispatcherQueue.TryEnqueue(RefreshSessionList);
     }
 
     // NEXTWIN-02 (D-NW-02): hide the next-window label when auth banner appears.
