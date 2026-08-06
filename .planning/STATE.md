@@ -101,11 +101,46 @@ zugesagten Ergebnisse. Implementiert ist die Veto-Semantik.
 
 ### Offene visuelle UAT (nachholen, sobald die Sitzung entsperrt ist)
 
-| Phase | Zu prüfen |
-|---|---|
-| 2 | Settings → Allgemein: Sonnet-Zeile weg, Divider-Abstände intakt (6 Zeilen statt 7) |
-| 3 | Glow an allen vier Rändern nicht abgeschnitten (0 % und 100 %), Kurve ohne Überschwingen über 100 %, beide Themes, Export-PNG gegen Live-Chart, Chart-Höhe 160 im 480px-Fenster |
-| 4 | Manueller Rauchtest: erscheint unter `WindowsPackageType=None` überhaupt ein Toast? (headless nicht prüfbar, Präzedenz „Manual-Only" im Repo etabliert) |
+**Vorbereitung**
+
+1. `Get-Process LogonUI` muss **leer** sein, sonst liefert jede Aufnahme ein schwarzes Bild.
+2. App beenden → `dotnet build -c Release -o …` → starten.
+3. Fenster setzen: `window_management set_bounds x=60 y=20 width=625 height=1180`
+   (sonst rechts abgeschnitten).
+4. Vergleichsbild **vor** v1.6: `spec/v1.6-uat/before-v1.6-full-window.png`
+   (Treppenkurve, Chart-Höhe 120, Glow ohne weißen Kern, horizontaler Fill-Gradient).
+
+**Prüfpunkte**
+
+| # | Phase | Zu prüfen | Bestanden heißt |
+|---|---|---|---|
+| U1 | 3 | Kurvenform | glatt, keine Treppenstufen mehr |
+| U2 | 3 | Überschwingen | Kurve bleibt zwischen den Messpunkten, schneidet nirgends an der 100-%-Gitterlinie ab |
+| U3 | 3 | Fill | verläuft von der Kurve zur Baseline aus, kein flacher Block |
+| U4 | 3 | Glow | drei Schichten sichtbar (Halo, Farbscheibe, weißer Kern) |
+| U5 | 3 | Glow-Clipping | an allen vier Rändern frei; kritisch bei 0 % und 100 % sowie ganz links/rechts |
+| U6 | 3 | Achsenlabels | „100/50/0 %" auf ihren Linien zentriert, „5h" nicht über die Kante |
+| U7 | 3 | Höhe | Chart sichtbar höher (160 statt 120), Abschnitte darunter im Fenster noch vollständig |
+| U8 | 3 | Beide Themes | Settings → Allgemein → Dark-Mode-Schalter; U1–U6 im hellen Theme wiederholen |
+| U9 | 3 | Export vs. Live | Export-PNG deckungsgleich mit dem Live-Chart |
+| U10 | 2 | Settings → Allgemein | Sonnet-Zeile weg, 6 Zeilen statt 7, Divider-Abstände gleichmäßig |
+| U11 | 4 | Toast-Rauchtest | erscheint unter `WindowsPackageType=None` überhaupt ein Toast? |
+
+**Fallstricke, die den Lauf sonst blockieren**
+
+- **U9 nicht über den Export-Button prüfen.** `ExportChartAsPngCommand` öffnet einen
+  `FileSavePicker` (`ExportHelper.cs:103`) — ein modaler Dialog, der einen autonomen Lauf
+  anhält. Stattdessen einen Wegwerf-Test mit `[Trait("Category","RequiresGPU")]` schreiben, der
+  `ExportHelper.RenderChartToPng(...)` aufruft und das Ergebnis per
+  `renderTarget.SaveAsync(pfad, CanvasBitmapFileFormat.Png)` auf die Platte legt; die Datei
+  danach lesen. Alternative ohne Picker: `CopyChartToClipboardCommand`.
+- **U11 braucht echte Schwellwerte.** Das 5h-Fenster steht bei ~40 %, also feuert nichts von
+  allein. Entweder `%LOCALAPPDATA%\CCInfoWindows\notification-state.json` präparieren
+  (`windowId` auf einen alten Wert setzen → beim nächsten Poll gilt das Fenster als rotiert und
+  der Reset-Toast wird fällig) oder den Rauchtest als manuell offen lassen.
+- Für U2/U5 hilft ein Chart mit hoher Auslastung. Reicht der Live-Stand nicht, lässt sich
+  `%LOCALAPPDATA%\CCInfoWindows\usage-history.json` vorübergehend mit Punkten bei 0 % und 100 %
+  bestücken — **vorher sichern**, die Datei ist echter Verlauf.
 
 Was **nicht** offen ist: alle Zahlen-/Text-Prüfungen wurden per UIA-Baum belegt —
 Kontextfenster 31 % bei 309.951 Tokens (Opus 5, 1M-Fenster; bei 200 K wäre auf 100 % geklemmt
