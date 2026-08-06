@@ -38,10 +38,13 @@ public class NotificationStateStoreTests : IDisposable
                 NotifiedReset = true,
                 PeakUtilization = 87.5
             },
-            Weekly = new WindowNotificationState { WindowId = "id-weekly", PeakUtilization = 12 }
+            Weekly = new WindowNotificationState { WindowId = "id-weekly", PeakUtilization = 12 },
+            BurnRateNotifiedWindowId = "id-5h"
         });
 
         var loaded = new NotificationStateStore(_dir).Load();
+
+        Assert.Equal("id-5h", loaded.BurnRateNotifiedWindowId);
 
         Assert.Equal("id-5h", loaded.FiveHour.WindowId);
         Assert.Equal(resetsAt, loaded.FiveHour.ResetsAt);
@@ -70,6 +73,22 @@ public class NotificationStateStoreTests : IDisposable
         new NotificationStateStore(_dir).Save(new NotificationState());
 
         Assert.True(File.Exists(Path.Combine(_dir, "notification-state.json")));
+    }
+
+    [Fact]
+    public void Load_FileWrittenBeforeTheBurnRateFieldExisted_LeavesTheToastArmed()
+    {
+        // Back-compat for finding 20(c): a v1.5 notification-state.json has no burnRateNotifiedWindowId.
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(
+            Path.Combine(_dir, "notification-state.json"),
+            """{"fiveHour":{"windowId":"id-5h","notified80":true},"weekly":{}}""");
+
+        var state = new NotificationStateStore(_dir).Load();
+
+        Assert.Equal("id-5h", state.FiveHour.WindowId);
+        Assert.True(state.FiveHour.Notified80);
+        Assert.Null(state.BurnRateNotifiedWindowId);
     }
 
     [Fact]

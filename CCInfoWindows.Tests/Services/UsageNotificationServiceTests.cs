@@ -37,17 +37,30 @@ public class UsageNotificationServiceTests
         }
     }
 
+    /// <summary>
+    /// Advanceable clock. Whether an identity change counts as a rotation now depends on the
+    /// current time, so a frozen clock can no longer express "the window really ended".
+    /// </summary>
+    private sealed class TestClock
+    {
+        public DateTimeOffset UtcNow { get; set; } = Now;
+        public DateTimeOffset Read() => UtcNow;
+    }
+
     private static UsageWindow Window(double utilization, DateTimeOffset resetsAt) =>
         new() { Utilization = utilization, ResetsAt = resetsAt };
+
+    private static BurnRatePrediction Prediction(int minutesUntilLimit = 42) =>
+        new() { MinutesUntilLimit = minutesUntilLimit, HitsLimitAt = Now.AddMinutes(minutesUntilLimit) };
 
     private static readonly DateTimeOffset Now = new(2026, 8, 5, 20, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset FiveHourReset = Now.AddHours(3);
     private static readonly DateTimeOffset WeeklyReset = Now.AddDays(3);
 
     private static (UsageNotificationService Sut, List<ToastRequest> Toasts, InMemoryStore Store, CountingTimerFactory Timers)
-        CreateSut(NotificationState? seed = null, Func<DateTimeOffset>? clock = null)
+        CreateSut(NotificationState? seed = null, Func<DateTimeOffset>? clock = null, InMemoryStore? store = null)
     {
-        var store = seed is null ? new InMemoryStore() : new InMemoryStore(seed);
+        store ??= seed is null ? new InMemoryStore() : new InMemoryStore(seed);
         var toasts = new List<ToastRequest>();
         var timers = new CountingTimerFactory();
         var sut = new UsageNotificationService(store, timers.Create, clock ?? (() => Now), toasts.Add);
@@ -181,12 +194,63 @@ public class UsageNotificationServiceTests
     [Fact]
     public void CheckWindows_WindowRotation_ReArmsTheThresholds()
     {
-        var (sut, toasts, _, _) = CreateSut();
+        // Finding 20(a): the clock has to pass the old reset time, otherwise a changed identity is
+        // a source flip rather than a rotation and deliberately re-arms nothing.
+        var clock = new TestClock();
+        var (sut, toasts, _, _) = CreateSut(clock: clock.Read);
 
         sut.CheckWindows(Window(85, FiveHourReset), null);
+        clock.UtcNow = FiveHourReset.AddMinutes(1);
         sut.CheckWindows(Window(85, FiveHourReset.AddHours(5)), null);   // new identity
 
         Assert.Equal(2, toasts.Count(t => t.TitleKey == "WindowThresholdNotificationTitle"));
+    }
+
+    [Fact]
+    public void CheckWindows_IdentityChangeWhileTheWindowIsStillOpen_DoesNotReArmTheThresholds()
+    {
+        // The weekly slot is `SevenDayOpus ?? SevenDay`: two windows with independent resets_at, so
+        // a poll that transiently omits the primary source changes the identity with nothing reset.
+        var (sut, toasts, store, _) = CreateSut();
+
+        sut.CheckWindows(null, Window(85, WeeklyReset));                  // primary source
+        toasts.Clear();
+
+        sut.CheckWindows(null, Window(60, WeeklyReset.AddDays(2)));       // fallback source
+        sut.CheckWindows(null, Window(85, WeeklyReset));                  // primary source again
+
+        Assert.Empty(toasts);
+        Assert.True(store.Load().Weekly.Notified80);
+        Assert.Equal(85.0, store.Load().Weekly.PeakUtilization);
+    }
+
+    [Fact]
+    public void CheckWindows_IdentityChangeWhileTheWindowIsStillOpen_DoesNotAnnounceAReset()
+    {
+        var (sut, toasts, _, _) = CreateSut();
+
+        sut.CheckWindows(null, Window(40, WeeklyReset));
+        toasts.Clear();
+
+        sut.CheckWindows(null, Window(40, WeeklyReset.AddDays(2)));
+
+        Assert.Empty(toasts);
+    }
+
+    [Fact]
+    public void CheckWindows_WeeklyRotationAfterTheWindowEnded_AnnouncesTheResetAndReArms()
+    {
+        var clock = new TestClock();
+        var (sut, toasts, store, _) = CreateSut(clock: clock.Read);
+
+        sut.CheckWindows(null, Window(85, WeeklyReset));
+        toasts.Clear();
+
+        clock.UtcNow = WeeklyReset.AddMinutes(1);
+        sut.CheckWindows(null, Window(10, WeeklyReset.AddDays(7)));
+
+        Assert.Equal("WeeklyResetNotificationBody", Assert.Single(toasts).BodyKey);
+        Assert.False(store.Load().Weekly.Notified80);
     }
 
     // --- Countdown arming (the core v1.15.1 fix) ---
@@ -321,10 +385,12 @@ public class UsageNotificationServiceTests
     {
         // v1.15.1: the API sometimes reports the rotated window as 0%/unused in the very poll
         // where resets_at jumps. PeakUtilization is what makes that still report.
-        var (sut, toasts, _, _) = CreateSut();
+        var clock = new TestClock();
+        var (sut, toasts, _, _) = CreateSut(clock: clock.Read);
         sut.CheckWindows(Window(70, FiveHourReset), null);
         toasts.Clear();
 
+        clock.UtcNow = FiveHourReset.AddMinutes(1);
         sut.CheckWindows(Window(0, FiveHourReset.AddHours(5)), null);
 
         Assert.Equal("FiveHourResetNotificationBody", Assert.Single(toasts).BodyKey);
@@ -406,6 +472,137 @@ public class UsageNotificationServiceTests
         sut.CheckWindows(Window(85, FiveHourReset), null);
 
         Assert.Single(toasts);
+    }
+
+    // --- Dispose vs logout (finding 20b) ---
+
+    [Fact]
+    public void Dispose_StopsTheTimersButKeepsThePersistedState()
+    {
+        // Aliasing Dispose to CancelAll would re-arm every threshold toast whenever a
+        // ServiceProvider (or a `using` in a test) is disposed.
+        var (sut, _, store, timers) = CreateSut();
+        sut.CheckWindows(Window(85, FiveHourReset), null);
+        var savesBeforeDispose = store.SaveCount;
+
+        sut.Dispose();
+
+        Assert.All(timers.Created, timer => Assert.False(timer.IsEnabled));
+        Assert.Equal(savesBeforeDispose, store.SaveCount);
+        Assert.Equal(UsageNotificationService.BuildWindowId(FiveHourReset), store.Load().FiveHour.WindowId);
+        Assert.True(store.Load().FiveHour.Notified80);
+    }
+
+    [Fact]
+    public void Dispose_ThenANewPoll_DoesNotRefireTheThresholdToast()
+    {
+        var store = new InMemoryStore();
+        var (first, _, _, _) = CreateSut(store: store);
+        first.CheckWindows(Window(85, FiveHourReset), null);
+        first.Dispose();
+
+        var (second, toasts, _, _) = CreateSut(store: store);
+        second.CheckWindows(Window(85, FiveHourReset), null);
+
+        Assert.Empty(toasts);
+    }
+
+    // --- Burn rate (finding 20c) ---
+
+    [Fact]
+    public void CheckBurnRate_BeforeAnyWindowIsTracked_WaitsForTheIdentity()
+    {
+        var (sut, toasts, _, _) = CreateSut();
+
+        sut.CheckBurnRate(Prediction());
+
+        Assert.Empty(toasts);
+    }
+
+    [Fact]
+    public void CheckBurnRate_OncePerWindow_FiresOnlyOnce()
+    {
+        var (sut, toasts, _, _) = CreateSut();
+        sut.CheckWindows(Window(50, FiveHourReset), null);
+
+        sut.CheckBurnRate(Prediction());
+        sut.CheckBurnRate(Prediction());
+
+        Assert.Equal("BurnRateNotificationTitle", Assert.Single(toasts).TitleKey);
+    }
+
+    [Fact]
+    public void CheckBurnRate_AfterARestartWithinTheSameWindow_DoesNotRefire()
+    {
+        // The flag is persisted for exactly this reason: history is rehydrated from disk, so the
+        // first poll after a restart already has the >= 3 points BurnRateCalculator.Predict needs.
+        var store = new InMemoryStore();
+        var (first, _, _, _) = CreateSut(store: store);
+        first.CheckWindows(Window(50, FiveHourReset), null);
+        first.CheckBurnRate(Prediction());
+
+        var (second, toasts, _, _) = CreateSut(store: store);
+        second.CheckWindows(Window(55, FiveHourReset), null);
+        second.CheckBurnRate(Prediction());
+
+        Assert.Empty(toasts);
+    }
+
+    [Fact]
+    public void CheckBurnRate_AfterAWindowRotation_ReArms()
+    {
+        var clock = new TestClock();
+        var (sut, toasts, _, _) = CreateSut(clock: clock.Read);
+        sut.CheckWindows(Window(50, FiveHourReset), null);
+        sut.CheckBurnRate(Prediction());
+
+        clock.UtcNow = FiveHourReset.AddMinutes(1);
+        sut.CheckWindows(Window(50, FiveHourReset.AddHours(5)), null);   // rotation updates the identity
+        toasts.Clear();                                                 // drop the reset toast it owes
+        sut.CheckBurnRate(Prediction());
+
+        Assert.Equal("BurnRateNotificationTitle", Assert.Single(toasts).TitleKey);
+    }
+
+    [Fact]
+    public void CheckBurnRate_WithdrawnPrediction_ReArms()
+    {
+        var (sut, toasts, store, _) = CreateSut();
+        sut.CheckWindows(Window(50, FiveHourReset), null);
+        sut.CheckBurnRate(Prediction());
+        toasts.Clear();
+
+        sut.CheckBurnRate(null);
+        Assert.Null(store.Load().BurnRateNotifiedWindowId);
+
+        sut.CheckBurnRate(Prediction());
+
+        Assert.Single(toasts);
+    }
+
+    [Fact]
+    public void CheckBurnRate_WithoutAPredictionOrAFlag_DoesNotWriteTheStore()
+    {
+        var (sut, _, store, _) = CreateSut();
+
+        sut.CheckBurnRate(null);
+
+        Assert.Equal(0, store.SaveCount);
+    }
+
+    [Fact]
+    public void CancelAll_ClearsTheBurnRateFlag()
+    {
+        var (sut, toasts, _, _) = CreateSut();
+        sut.CheckWindows(Window(50, FiveHourReset), null);
+        sut.CheckBurnRate(Prediction());
+        sut.CancelAll();
+        toasts.Clear();
+
+        sut.CheckWindows(Window(50, FiveHourReset), null);
+        sut.CheckBurnRate(Prediction());
+
+        Assert.Equal("BurnRateNotificationTitle", Assert.Single(toasts).TitleKey);
     }
 
     // --- Null handling ---

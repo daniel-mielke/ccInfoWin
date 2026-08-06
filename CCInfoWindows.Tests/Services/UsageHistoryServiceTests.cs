@@ -6,6 +6,18 @@ namespace CCInfoWindows.Tests.Services;
 
 public sealed class UsageHistoryServiceTests : IDisposable
 {
+    private const string HistoryFileName = "usage-history.json";
+    private const string TempFileName = HistoryFileName + ".tmp";
+
+    /// <summary>
+    /// Big enough that File.WriteAllTextAsync cannot plausibly complete before it is awaited, which
+    /// is what puts a continuation in flight for the deadlock regression test. A payload that did
+    /// complete synchronously would make that test pass vacuously — never fail wrongly.
+    /// </summary>
+    private const int PointsLargeEnoughToYield = 20_000;
+
+    private static readonly TimeSpan PendingWriteTimeout = TimeSpan.FromSeconds(10);
+
     private readonly string _tempDirectory;
     private readonly UsageHistoryService _sut;
 
@@ -13,6 +25,22 @@ public sealed class UsageHistoryServiceTests : IDisposable
     {
         _tempDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         _sut = new UsageHistoryService(_tempDirectory);
+    }
+
+    /// <summary>
+    /// Models the WinUI dispatcher: a captured continuation is Posted to a queue that only the
+    /// owning thread drains. This one is never drained — that is the point, because the thread that
+    /// would drain it is the one blocked inside the synchronous writer.
+    /// </summary>
+    private sealed class RecordingPumpContext : SynchronizationContext
+    {
+        private int _postCount;
+
+        public int PostCount => Volatile.Read(ref _postCount);
+
+        public override void Post(SendOrPostCallback d, object? state) => Interlocked.Increment(ref _postCount);
+
+        public override void Send(SendOrPostCallback d, object? state) => d(state);
     }
 
     [Fact]
@@ -202,6 +230,10 @@ public sealed class UsageHistoryServiceTests : IDisposable
         Assert.Null(_sut.PeekLastSnapshot());
     }
 
+    // Finding 8: this one proves the semaphore serializes the two writers, but it cannot catch the
+    // self-deadlock -- Task.Run has no SynchronizationContext, so there is no dispatcher for the
+    // release continuation to be captured onto. See
+    // SaveHistoryAsync_WhileTheUiThreadBlocksInSaveHistory_CompletesWithoutTheDispatcher.
     [Fact]
     public async Task ConcurrentSyncAndAsyncWrites_DoNotInterleave()
     {
@@ -275,6 +307,88 @@ public sealed class UsageHistoryServiceTests : IDisposable
         Assert.False(MainViewModel.IsWindowReset(null, apiResetsAt));
         Assert.False(MainViewModel.IsWindowReset(apiResetsAt, null));
         Assert.False(MainViewModel.IsWindowReset(null, null));
+    }
+
+    // --- Finding 8: sync-over-async self-deadlock (SaveHistory runs on the UI thread) ---
+
+    [Fact]
+    public void SaveHistoryAsync_WhileTheUiThreadBlocksInSaveHistory_CompletesWithoutTheDispatcher()
+    {
+        var pump = new RecordingPumpContext();
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(pump);
+        try
+        {
+            var pending = _sut.SaveHistoryAsync(BuildHistory(PointsLargeEnoughToYield));
+            var closingSnapshot = new UsageHistory { ResetsAt = DateTimeOffset.Parse("2026-05-06T23:00:00Z") };
+
+            // Models MainWindow.OnClosing: the thread that owns the dispatcher blocks in the
+            // synchronous writer. Without ConfigureAwait(false) the _writeLock.Release()
+            // continuation is queued to a pump nobody can drain and this never returns.
+            _sut.SaveHistory(closingSnapshot);
+
+            Assert.True(pending.Wait(PendingWriteTimeout), "the async write never completed");
+            Assert.Equal(0, pump.PostCount);
+            Assert.Same(closingSnapshot, _sut.PeekLastSnapshot());
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
+    // --- Finding 35: atomic publish (tmp + File.Move) ---
+
+    [Fact]
+    public void SaveHistory_PublishesViaATempFileAndLeavesNoLitter()
+    {
+        _sut.SaveHistory(BuildHistory(pointCount: 3));
+
+        Assert.True(File.Exists(Path.Combine(_tempDirectory, HistoryFileName)));
+        Assert.False(File.Exists(Path.Combine(_tempDirectory, TempFileName)));
+    }
+
+    [Fact]
+    public async Task SaveHistoryAsync_PublishesViaATempFileAndLeavesNoLitter()
+    {
+        await _sut.SaveHistoryAsync(BuildHistory(pointCount: 3));
+
+        Assert.True(File.Exists(Path.Combine(_tempDirectory, HistoryFileName)));
+        Assert.False(File.Exists(Path.Combine(_tempDirectory, TempFileName)));
+    }
+
+    [Fact]
+    public void SaveHistory_WhenThePublishFails_KeepsThePreviousCompleteFile()
+    {
+        var persisted = new UsageHistory { ResetsAt = DateTimeOffset.Parse("2026-05-06T10:00:00Z") };
+        _sut.SaveHistory(persisted);
+
+        // A locked destination fails the File.Move, which is exactly the window where the old
+        // truncate-in-place write would have left a half-written file behind.
+        using (File.Open(Path.Combine(_tempDirectory, HistoryFileName), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            _sut.SaveHistory(new UsageHistory { ResetsAt = DateTimeOffset.Parse("2026-05-06T20:00:00Z") });
+        }
+
+        Assert.Equal(persisted.ResetsAt, _sut.LoadHistory().ResetsAt);
+        Assert.Same(persisted, _sut.PeekLastSnapshot());
+        Assert.False(File.Exists(Path.Combine(_tempDirectory, TempFileName)));
+    }
+
+    private static UsageHistory BuildHistory(int pointCount)
+    {
+        var baseTime = DateTimeOffset.Parse("2026-05-06T13:00:00Z");
+        return new UsageHistory
+        {
+            ResetsAt = baseTime.AddHours(5),
+            Points = Enumerable.Range(0, pointCount)
+                .Select(i => new UsageHistoryPoint
+                {
+                    Timestamp = baseTime.AddSeconds(i),
+                    Utilization = (i % 100) / 100.0
+                })
+                .ToList()
+        };
     }
 
     public void Dispose()

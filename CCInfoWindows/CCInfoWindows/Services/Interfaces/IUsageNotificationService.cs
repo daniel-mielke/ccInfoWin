@@ -17,15 +17,23 @@ public sealed record ToastRequest(string Tag, string TitleKey, string BodyKey, o
 /// </summary>
 public interface IUsageNotificationService
 {
-    /// <summary>Burn-rate prediction toast; fires once per warning cycle.</summary>
+    /// <summary>
+    /// Burn-rate prediction toast. Fires at most once per 5-hour window: the delivered state is
+    /// persisted against that window's identity, so a rotation re-arms it but an app restart does
+    /// not. A null prediction re-arms it immediately.
+    /// </summary>
     void CheckBurnRate(BurnRatePrediction? prediction);
 
     /// <summary>
     /// Evaluates thresholds and window rotation for both windows and arms the reset countdowns.
-    /// Safe to call on every poll — a poll that changes nothing is a no-op.
+    /// Safe to call on every poll — a poll that changes nothing is a no-op. Call AFTER CheckBurnRate
+    /// so the burn-rate flag is keyed against the identity of the window the prediction was made in.
     /// </summary>
     void CheckWindows(UsageWindow? fiveHour, UsageWindow? weekly);
 
-    /// <summary>Cancels both countdowns and clears persisted state. Called on logout.</summary>
+    /// <summary>
+    /// Cancels both countdowns and clears persisted state. Called on logout — this is deliberately
+    /// NOT what Dispose does, which only stops the timers.
+    /// </summary>
     void CancelAll();
 }

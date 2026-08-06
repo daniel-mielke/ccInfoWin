@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using System.Text.Json;
+using CCInfoWindows.Helpers;
 using CCInfoWindows.Models;
 using CCInfoWindows.Services.Interfaces;
 
@@ -58,7 +58,8 @@ public class NotificationStateStore : INotificationStateStore
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[NotificationStateStore] Save failed: {ex.Message}");
+                AppLog.Write($"{nameof(NotificationStateStore)}.{nameof(Save)}", ex,
+                    "notification state not persisted -- toasts may re-fire after a restart");
             }
         }
     }
@@ -73,7 +74,8 @@ public class NotificationStateStore : INotificationStateStore
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[NotificationStateStore] Load failed: {ex.Message}");
+            AppLog.Write($"{nameof(NotificationStateStore)}.{nameof(LoadFromDisk)}", ex,
+                "notification state unreadable -- every threshold toast is re-armed");
             return new NotificationState();
         }
     }

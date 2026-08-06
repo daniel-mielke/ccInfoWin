@@ -28,7 +28,13 @@ public class WindowNotificationState
     [JsonPropertyName("windowId")]
     public string? WindowId { get; set; }
 
-    /// <summary>Un-truncated reset time. The countdown uses this; truncation is identity only.</summary>
+    /// <summary>
+    /// Un-truncated reset time of the tracked window; truncation is identity only.
+    ///
+    /// Also the rotation deadline: an identity change is only treated as a real reset once this
+    /// moment has passed (UsageNotificationService.IsRealRotation), which is what keeps a weekly
+    /// source flip from being announced as a reset.
+    /// </summary>
     [JsonPropertyName("resetsAt")]
     public DateTimeOffset? ResetsAt { get; set; }
 
@@ -63,6 +69,18 @@ public class NotificationState
 
     [JsonPropertyName("weekly")]
     public WindowNotificationState Weekly { get; set; } = new();
+
+    /// <summary>
+    /// Identity of the 5-hour window whose burn-rate toast has already been delivered, or null when
+    /// the toast is armed.
+    ///
+    /// Keyed by the window rather than stored as a bare bool so a window rotation re-arms it while a
+    /// process RESTART does not: history is rehydrated from disk, so the first poll after a restart
+    /// already has the >= 3 points BurnRateCalculator.Predict needs and would re-fire the same toast.
+    /// Absent from files written before v1.6, which deserializes to null — one re-arm on upgrade.
+    /// </summary>
+    [JsonPropertyName("burnRateNotifiedWindowId")]
+    public string? BurnRateNotifiedWindowId { get; set; }
 
     public WindowNotificationState For(UsageWindowKind kind) =>
         kind == UsageWindowKind.FiveHour ? FiveHour : Weekly;

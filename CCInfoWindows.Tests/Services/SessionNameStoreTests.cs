@@ -7,6 +7,17 @@ namespace CCInfoWindows.Tests.Services;
 
 public class SessionNameStoreTests : IDisposable
 {
+    private const string StoreFileName = "session-names.json";
+    private const string TempFileName = StoreFileName + ".tmp";
+
+    /// <summary>
+    /// Big enough that File.WriteAllTextAsync cannot plausibly finish before it is awaited, so the
+    /// deadlock regression test really does have a continuation in flight.
+    /// </summary>
+    private const int NamesLargeEnoughToYield = 20_000;
+
+    private static readonly TimeSpan PendingWriteTimeout = TimeSpan.FromSeconds(10);
+
     private readonly string _tempDir;
 
     public SessionNameStoreTests()
@@ -17,7 +28,20 @@ public class SessionNameStoreTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_tempDir, recursive: true); } catch { }
+        try { Directory.Delete(_tempDir, recursive: true); }
+        catch (IOException) { /* another handle still open on a temp file; the OS reclaims it */ }
+    }
+
+    /// <summary>Records dispatcher Posts without ever running them — see the history-service twin.</summary>
+    private sealed class RecordingPumpContext : SynchronizationContext
+    {
+        private int _postCount;
+
+        public int PostCount => Volatile.Read(ref _postCount);
+
+        public override void Post(SendOrPostCallback d, object? state) => Interlocked.Increment(ref _postCount);
+
+        public override void Send(SendOrPostCallback d, object? state) => d(state);
     }
 
     [Fact]
@@ -199,5 +223,120 @@ public class SessionNameStoreTests : IDisposable
         Assert.NotNull(snapshot);
         Assert.True(snapshot!.ContainsKey("id1"));
         Assert.Equal("Alpha", snapshot["id1"]);
+    }
+
+    [Fact]
+    public async Task LastSavedSnapshot_OnAStoreBuiltOverAnExistingFile_IsTheFileContent()
+    {
+        // The rollback target has to be what is actually on disk, not "empty until we write once".
+        var writer = new SessionNameStore(_tempDir);
+        writer.SetCustomName("id1", "Alpha");
+        await writer.SaveAsync();
+
+        var snapshot = new SessionNameStore(_tempDir).PeekLastSnapshot();
+
+        Assert.NotNull(snapshot);
+        Assert.Equal("Alpha", snapshot!["id1"]);
+    }
+
+    // --- Finding 25: a failed write must not leave the UI showing an unpersisted name ---
+
+    [Fact]
+    public async Task SaveAsync_WhenThePublishFails_RevertsToThePersistedNameAndRaisesNameChanged()
+    {
+        var store = new SessionNameStore(_tempDir);
+        store.SetCustomName("id1", "Alpha");
+        Assert.True(await store.SaveAsync());
+
+        var raised = new List<string>();
+        store.NameChanged += (_, args) => raised.Add(args.SessionId);
+        store.SetCustomName("id1", "Renamed");
+
+        bool saved;
+        using (File.Open(Path.Combine(_tempDir, StoreFileName), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            saved = await store.SaveAsync();
+        }
+
+        Assert.False(saved);
+        Assert.Equal("Alpha", store.GetCustomName("id1"));
+        Assert.Equal(new[] { "id1", "id1" }, raised);   // once for the edit, once for the rollback
+        Assert.False(File.Exists(Path.Combine(_tempDir, TempFileName)));
+    }
+
+    [Fact]
+    public async Task SaveAsync_WhenThePublishFails_AndNothingWasEverPersisted_DropsTheName()
+    {
+        var blockerPath = Path.Combine(_tempDir, "blocker");
+        File.WriteAllText(blockerPath, "I am a file, not a directory");
+        var store = new SessionNameStore(blockerPath);
+        store.SetCustomName("id1", "Alpha");
+
+        Assert.False(await store.SaveAsync());
+        Assert.Null(store.GetCustomName("id1"));
+    }
+
+    [Fact]
+    public async Task SaveAsync_WhenThePublishFails_RestoresANameWhoseRemovalNeverReachedDisk()
+    {
+        var store = new SessionNameStore(_tempDir);
+        store.SetCustomName("id1", "Alpha");
+        Assert.True(await store.SaveAsync());
+
+        store.ClearCustomName("id1");
+
+        bool saved;
+        using (File.Open(Path.Combine(_tempDir, StoreFileName), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            saved = await store.SaveAsync();
+        }
+
+        Assert.False(saved);
+        Assert.Equal("Alpha", store.GetCustomName("id1"));
+    }
+
+    // --- Finding 30 / Finding 8 ---
+
+    [Fact]
+    public void GetKnownSessionIds_ReturnsEveryKeyIncludingOrphans()
+    {
+        var store = new SessionNameStore(_tempDir);
+        store.SetCustomName("live", "Alpha");
+        store.SetCustomName("deleted-session", "Beta");
+        store.SetCustomName("cleared", "Gamma");
+        store.ClearCustomName("cleared");
+
+        Assert.Equal(
+            new[] { "deleted-session", "live" },
+            store.GetKnownSessionIds().OrderBy(id => id, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void SaveAsync_WhileTheCallingThreadBlocksInSave_CompletesWithoutTheDispatcher()
+    {
+        var store = new SessionNameStore(_tempDir);
+        for (var i = 0; i < NamesLargeEnoughToYield; i++)
+        {
+            store.SetCustomName($"id{i}", $"Name{i}");
+        }
+
+        var pump = new RecordingPumpContext();
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(pump);
+        try
+        {
+            var pending = store.SaveAsync();
+
+            // Without ConfigureAwait(false) the release continuation is queued to this pump, which
+            // the blocked thread below can never drain.
+            Assert.True(store.Save());
+
+            Assert.True(pending.Wait(PendingWriteTimeout), "the async write never completed");
+            Assert.Equal(0, pump.PostCount);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
     }
 }

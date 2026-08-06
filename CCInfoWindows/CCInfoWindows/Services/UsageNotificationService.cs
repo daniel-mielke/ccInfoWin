@@ -22,7 +22,12 @@ namespace CCInfoWindows.Services;
 ///     deliberately no `if (utilization &lt; 80) Notified80 = false`, so API rounding around
 ///     79.6/80.4 and receding weekly usage cannot make it fire twice.
 ///   - Flags come off disk, so a restart does not refire them. That is precisely why the old
-///     in-memory bool was not enough.
+///     in-memory bool was not enough. The burn-rate flag is persisted the same way, keyed by the
+///     5-hour identity.
+///   - An identity change only counts as a ROTATION once the tracked window's own reset time has
+///     passed (see IsRealRotation). The weekly slot is fed by seven_day_opus with a seven_day
+///     fallback, two windows with independent resets_at, so an identity change is not by itself
+///     proof that anything reset.
 ///
 /// Platform deviation from macOS, decided deliberately: the reset countdown is an in-process
 /// IDispatcherTimer, so the reset toast only fires while the app runs. If the app is closed
@@ -33,6 +38,10 @@ namespace CCInfoWindows.Services;
 /// Threading: no IRecipient&lt;T&gt;, so the G-1 IL scan does not apply and no [ThreadSafeReceive]
 /// is needed. The timer tick touches service fields and AppNotificationManager only — no
 /// [ObservableProperty], no XAML.
+///
+/// Lifetime: Dispose stops the countdowns and NOTHING else. Wiping the persisted state is the
+/// logout semantics of CancelAll, and aliasing the two would let a disposed ServiceProvider (or a
+/// `using` in a test) silently re-arm every threshold toast for a window the user was warned about.
 /// </summary>
 public sealed class UsageNotificationService : IUsageNotificationService, IDisposable
 {
@@ -45,6 +54,13 @@ public sealed class UsageNotificationService : IUsageNotificationService, IDispo
     /// noticed hours ago.
     /// </summary>
     public static readonly TimeSpan MaxLateResetToastAge = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// Clock-skew allowance when deciding whether an identity change is a real rotation: resets_at
+    /// comes from the server while the comparison uses the local clock. Same tolerance
+    /// MainViewModel.IsWindowReset applies to the history-clearing decision.
+    /// </summary>
+    public static readonly TimeSpan RotationClockSkewTolerance = TimeSpan.FromMinutes(2);
 
     private const string BurnRateTag = "usage-burnrate";
     private const string ThresholdTagPrefix = "usage-threshold-";
@@ -63,8 +79,6 @@ public sealed class UsageNotificationService : IUsageNotificationService, IDispo
     /// recreated each time and the interval would therefore never elapse.
     /// </summary>
     private readonly Dictionary<UsageWindowKind, string> _armedWindowIds = [];
-
-    private bool _notifiedBurnRate;
 
     public UsageNotificationService(
         INotificationStateStore store,
@@ -101,15 +115,28 @@ public sealed class UsageNotificationService : IUsageNotificationService, IDispo
 
     public void CheckBurnRate(BurnRatePrediction? prediction)
     {
+        var state = _store.Load();
+
         if (prediction == null)
         {
-            _notifiedBurnRate = false;
+            // The prediction was withdrawn (usage flattened out): re-arm for the next genuine warning.
+            if (state.BurnRateNotifiedWindowId is null) return;
+            state.BurnRateNotifiedWindowId = null;
+            _store.Save(state);
             return;
         }
 
-        if (_notifiedBurnRate) return;
+        // MainViewModel calls this BEFORE CheckWindows, so on the poll that observes a rotation the
+        // stored identity is still the previous one and the re-arm lands one poll (30 s) later. That
+        // is right after a reset, where utilization is near zero and no prediction exists anyway.
+        // A null identity means no window has been tracked yet (fresh install / after logout);
+        // suppressing until CheckWindows has run once is what keeps the toast from firing twice.
+        var windowId = state.FiveHour.WindowId;
+        if (windowId is null || state.BurnRateNotifiedWindowId == windowId) return;
 
-        _notifiedBurnRate = true;
+        state.BurnRateNotifiedWindowId = windowId;
+        _store.Save(state);
+
         _showToast(new ToastRequest(
             BurnRateTag,
             "BurnRateNotificationTitle",
@@ -129,16 +156,19 @@ public sealed class UsageNotificationService : IUsageNotificationService, IDispo
 
     public void CancelAll()
     {
+        CancelTimers();
+        _store.Save(new NotificationState());
+    }
+
+    public void Dispose() => CancelTimers();
+
+    private void CancelTimers()
+    {
         foreach (var kind in Enum.GetValues<UsageWindowKind>())
         {
             CancelTimer(kind);
         }
-
-        _notifiedBurnRate = false;
-        _store.Save(new NotificationState());
     }
-
-    public void Dispose() => CancelAll();
 
     private bool ProcessWindow(UsageWindowKind kind, UsageWindow? window, WindowNotificationState ws)
     {
@@ -150,16 +180,17 @@ public sealed class UsageNotificationService : IUsageNotificationService, IDispo
 
         if (ws.WindowId != windowId)
         {
-            // The rotation is observed here, so the OLD identity's peak decides whether a reset
-            // toast is still owed. Must run before the flags are cleared.
-            SendResetToastIfDue(kind, ws);
+            if (IsRealRotation(ws))
+            {
+                // The rotation is observed here, so the OLD identity's peak decides whether a reset
+                // toast is still owed. Must run before the flags are cleared.
+                SendResetToastIfDue(kind, ws);
+                ClearNotificationFlags(ws);
+            }
 
+            // Adopted either way: the countdown has to track whatever reset time is being reported.
             ws.WindowId = windowId;
             ws.ResetsAt = resetsAt;
-            ws.Notified80 = false;
-            ws.Notified95 = false;
-            ws.NotifiedReset = false;
-            ws.PeakUtilization = 0.0;
             changed = true;
         }
 
@@ -187,6 +218,42 @@ public sealed class UsageNotificationService : IUsageNotificationService, IDispo
 
         ArmResetCountdown(kind, windowId, resetsAt);
         return changed;
+    }
+
+    /// <summary>
+    /// A new window identity is only a rotation once the tracked window's own reset time has passed.
+    ///
+    /// MainViewModel feeds the weekly slot with `data.SevenDayOpus ?? data.SevenDay` — two API
+    /// windows with independent resets_at. A poll that transiently omits seven_day_opus therefore
+    /// changes the identity without anything having rotated, and announcing that as a reset (while
+    /// clearing the 80/95 flags so they re-fire when the source flips back) is exactly the alert
+    /// fatigue this class exists to prevent. Re-identification keeps the flags and the peak, so the
+    /// user is warned once per real window regardless of which source reported it.
+    ///
+    /// An identity change while the tracked window is still open therefore never re-arms anything.
+    /// The cost is one suppressed reset toast if a source flip straddles the real boundary (the
+    /// fallback's later resets_at becomes the deadline, so the primary's rotation reads as another
+    /// flip); the following rotation reports normally. Pinning the weekly source in MainViewModel
+    /// would remove even that.
+    /// </summary>
+    private bool IsRealRotation(WindowNotificationState previous)
+    {
+        if (previous.WindowId is null) return true;   // nothing tracked yet
+
+        if (previous.ResetsAt is { } previousReset)
+        {
+            return _clock() >= previousReset - RotationClockSkewTolerance;
+        }
+
+        return true;   // tracked identity without a reset time: cannot judge, so keep the old behaviour
+    }
+
+    private static void ClearNotificationFlags(WindowNotificationState ws)
+    {
+        ws.Notified80 = false;
+        ws.Notified95 = false;
+        ws.NotifiedReset = false;
+        ws.PeakUtilization = 0.0;
     }
 
     private void SendResetToastIfDue(UsageWindowKind kind, WindowNotificationState previous)
