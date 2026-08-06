@@ -6,6 +6,7 @@ using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Streams;
 using Windows.UI;
+using WinUI3Localizer;
 
 namespace CCInfoWindows.Helpers;
 
@@ -47,9 +48,17 @@ public static class ExportHelper
         public const float SectionLabelFontSize = 11f;
         public const float WatermarkFontSize = 11f;
 
-        public const string SectionLabel = "5-STUNDEN-FENSTER";
+        // Resource uids of the two localized captions, plus the text used when the resource
+        // dictionary cannot answer. A uid is the resw name up to the first '.' -- that prefix is
+        // what WinUI3Localizer keys its dictionary on, so "SectionHeaderFiveHour" resolves the
+        // value of "SectionHeaderFiveHour.Text".
+        public const string SectionLabelUid = "SectionHeaderFiveHour";
+        public const string SectionLabelFallback = "5-HOUR WINDOW";
+        public const string ResetInLabelUid = "ResetInLabel";
+        public const string ResetInFallback = "RESET IN";
+
+        // Product mark, deliberately not localized.
         public const string WatermarkText = "CCINFO";
-        public const string ResetInText = "RESET IN";
 
         public const float ChartAreaCornerRadius = 8f;
         public const float ExportCornerRadius = 20f;
@@ -60,13 +69,16 @@ public static class ExportHelper
     /// <summary>
     /// Renders the chart to an offscreen CanvasRenderTarget at 192 DPI (2x).
     /// Caller is responsible for disposing the returned target.
+    /// <paramref name="localize"/> overrides the resource lookup for the two captions; it exists so
+    /// the render can be exercised without a WinUI3Localizer host, which xUnit cannot start.
     /// </summary>
     public static CanvasRenderTarget RenderChartToPng(
         IReadOnlyList<UsageHistoryPoint> points,
         DateTimeOffset? windowStart,
         string percentageText,
         string countdownText,
-        double utilization)
+        double utilization,
+        Func<string, string>? localize = null)
     {
         var device = CanvasDevice.GetSharedDevice();
         var renderTarget = new CanvasRenderTarget(
@@ -79,12 +91,39 @@ public static class ExportHelper
 
         DrawBackground(session);
 
-        var chartAreaTop = DrawHeader(session, percentageText, countdownText, utilization);
+        var chartAreaTop = DrawHeader(
+            session, percentageText, countdownText, utilization, localize ?? ResolveFromLocalizer);
         DrawChartArea(session, device, points, windowStart, chartAreaTop);
 
         DrawWatermark(session);
 
         return renderTarget;
+    }
+
+    /// <summary>
+    /// Resolves a caption for the language the UI is currently showing, falling back to
+    /// <paramref name="fallback"/> when the dictionary has no usable answer. Internal for testing.
+    /// </summary>
+    internal static string Caption(Func<string, string> localize, string uid, string fallback)
+    {
+        var text = localize(uid);
+
+        // A built localizer returns "" for an unknown uid and NullLocalizer echoes the uid back;
+        // either would paint a resource key onto the exported PNG.
+        return string.IsNullOrWhiteSpace(text) || text == uid ? fallback : text;
+    }
+
+    private static string ResolveFromLocalizer(string uid)
+    {
+        try
+        {
+            return Localizer.Get().GetLocalizedString(uid);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(nameof(ExportHelper), ex, $"could not read caption '{uid}'.");
+            return string.Empty;
+        }
     }
 
     /// <summary>
@@ -96,9 +135,11 @@ public static class ExportHelper
         DateTimeOffset? windowStart,
         string percentageText,
         string countdownText,
-        double utilization)
+        double utilization,
+        Func<string, string>? localize = null)
     {
-        using var renderTarget = RenderChartToPng(points, windowStart, percentageText, countdownText, utilization);
+        using var renderTarget = RenderChartToPng(
+            points, windowStart, percentageText, countdownText, utilization, localize);
 
         var picker = new Microsoft.Windows.Storage.Pickers.FileSavePicker(appWindow.Id);
         picker.SuggestedFileName = $"ccinfo-{DateTimeOffset.Now:yyyy-MM-dd-HHmm}";
@@ -122,9 +163,11 @@ public static class ExportHelper
         DateTimeOffset? windowStart,
         string percentageText,
         string countdownText,
-        double utilization)
+        double utilization,
+        Func<string, string>? localize = null)
     {
-        using var renderTarget = RenderChartToPng(points, windowStart, percentageText, countdownText, utilization);
+        using var renderTarget = RenderChartToPng(
+            points, windowStart, percentageText, countdownText, utilization, localize);
 
         var stream = new InMemoryRandomAccessStream();
         await renderTarget.SaveAsync(stream, CanvasBitmapFileFormat.Png);
@@ -148,9 +191,9 @@ public static class ExportHelper
     /// Draws the header block (percentage, reset-in, section label) and returns the Y position
     /// where the chart area should start.
     /// Layout (top to bottom):
-    ///   Row 1: [Percentage%  left]  [RESET IN  right]
+    ///   Row 1: [Percentage%  left]  [reset-in caption  right]
     ///   Row 2:                      [countdown right]
-    ///   Row 3: [5-STUNDEN-FENSTER left]
+    ///   Row 3: [5-hour-window caption left]
     ///   gap
     ///   Chart
     /// </summary>
@@ -158,7 +201,8 @@ public static class ExportHelper
         CanvasDrawingSession session,
         string percentageText,
         string countdownText,
-        double utilization)
+        double utilization,
+        Func<string, string> localize)
     {
         var percentageColor = ChartColors.GetZoneColor(utilization, isDark: true);
         var leftX = ExportConstants.HeaderHorizontalPadding;
@@ -176,7 +220,7 @@ public static class ExportHelper
         };
         session.DrawText(percentageText, leftX, currentY, percentageColor, percentFormat);
 
-        // Row 1 right: "RESET IN" label
+        // Row 1 right: reset-in caption
         using var resetLabelFormat = new CanvasTextFormat
         {
             FontFamily = "Segoe UI Variable",
@@ -186,7 +230,9 @@ public static class ExportHelper
             VerticalAlignment = CanvasVerticalAlignment.Top,
             WordWrapping = CanvasWordWrapping.NoWrap
         };
-        session.DrawText(ExportConstants.ResetInText, rightX, currentY, ExportConstants.LabelColor, resetLabelFormat);
+        var resetInCaption = Caption(
+            localize, ExportConstants.ResetInLabelUid, ExportConstants.ResetInFallback);
+        session.DrawText(resetInCaption, rightX, currentY, ExportConstants.LabelColor, resetLabelFormat);
 
         // Row 2 right: countdown value in white
         var countdownTop = currentY + ExportConstants.ResetInLabelFontSize + ExportConstants.CountdownTopOffset;
@@ -212,7 +258,9 @@ public static class ExportHelper
             VerticalAlignment = CanvasVerticalAlignment.Top,
             WordWrapping = CanvasWordWrapping.NoWrap
         };
-        session.DrawText(ExportConstants.SectionLabel, leftX, sectionLabelTop, ExportConstants.SectionLabelColor, sectionLabelFormat);
+        var sectionCaption = Caption(
+            localize, ExportConstants.SectionLabelUid, ExportConstants.SectionLabelFallback);
+        session.DrawText(sectionCaption, leftX, sectionLabelTop, ExportConstants.SectionLabelColor, sectionLabelFormat);
 
         var chartAreaTop = sectionLabelTop + ExportConstants.SectionLabelFontSize + ExportConstants.ChartTopMargin;
         return chartAreaTop;

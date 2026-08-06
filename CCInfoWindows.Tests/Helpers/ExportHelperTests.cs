@@ -7,6 +7,9 @@ namespace CCInfoWindows.Tests.Helpers;
 
 public class ExportHelperTests
 {
+    // xUnit cannot start a WinUI3Localizer host, so the render tests resolve their captions here.
+    private static readonly Func<string, string> StubLocalizer = uid => $"[{uid}]";
+
     [Fact]
     public void ExportConstants_HasCorrectWidth()
     {
@@ -27,9 +30,9 @@ public class ExportHelperTests
         // within a few percent by accident.
         const float LiveBorderHeight = 160f;
         const float LiveBorderPadding = 8f;
-        var liveCanvasHeight = LiveBorderHeight - (2f * LiveBorderPadding);
+        const float LiveCanvasHeight = LiveBorderHeight - (2f * LiveBorderPadding);
 
-        Assert.Equal(liveCanvasHeight, ExportHelper.ExportConstants.ChartAreaHeight);
+        Assert.Equal(LiveCanvasHeight, ExportHelper.ExportConstants.ChartAreaHeight);
     }
 
     [Fact]
@@ -64,7 +67,7 @@ public class ExportHelperTests
         };
         var windowStart = DateTimeOffset.UtcNow.AddHours(-5);
 
-        var target = ExportHelper.RenderChartToPng(points, windowStart, "80%", "02:30", 0.8);
+        var target = ExportHelper.RenderChartToPng(points, windowStart, "80%", "02:30", 0.8, StubLocalizer);
 
         Assert.NotNull(target);
         Assert.Equal(ExportHelper.ExportConstants.ExportWidth, target.Size.Width, precision: 1);
@@ -96,7 +99,7 @@ public class ExportHelperTests
             Utilization = (i % 101) / 100.0                        // sweeps 0%..100% repeatedly
         }));
 
-        var target = ExportHelper.RenderChartToPng(points, windowStart, "30%", "01:23", 0.30);
+        var target = ExportHelper.RenderChartToPng(points, windowStart, "30%", "01:23", 0.30, StubLocalizer);
 
         Assert.NotNull(target);
         target.Dispose();
@@ -132,9 +135,57 @@ public class ExportHelperTests
     {
         var points = new List<CCInfoWindows.Models.UsageHistoryPoint>();
 
-        var target = ExportHelper.RenderChartToPng(points, null, "0%", "05:00", 0.0);
+        var target = ExportHelper.RenderChartToPng(points, null, "0%", "05:00", 0.0, StubLocalizer);
 
         Assert.NotNull(target);
         target.Dispose();
+    }
+
+    [Fact]
+    public void Caption_UsesTheLocalizedText()
+    {
+        var german = ExportHelper.Caption(
+            _ => "5-STUNDEN-FENSTER",
+            ExportHelper.ExportConstants.SectionLabelUid,
+            ExportHelper.ExportConstants.SectionLabelFallback);
+
+        Assert.Equal("5-STUNDEN-FENSTER", german);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Caption_FallsBackWhenTheDictionaryHasNoValue(string localizerResult)
+    {
+        var caption = ExportHelper.Caption(
+            _ => localizerResult,
+            ExportHelper.ExportConstants.SectionLabelUid,
+            ExportHelper.ExportConstants.SectionLabelFallback);
+
+        Assert.Equal(ExportHelper.ExportConstants.SectionLabelFallback, caption);
+    }
+
+    [Fact]
+    public void Caption_FallsBackWhenTheLocalizerEchoesTheUid()
+    {
+        // WinUI3Localizer's NullLocalizer (the instance before Build()) returns the uid it was asked
+        // for, which would paint "SectionHeaderFiveHour" onto the exported PNG.
+        var caption = ExportHelper.Caption(
+            uid => uid,
+            ExportHelper.ExportConstants.SectionLabelUid,
+            ExportHelper.ExportConstants.SectionLabelFallback);
+
+        Assert.Equal(ExportHelper.ExportConstants.SectionLabelFallback, caption);
+    }
+
+    [Fact]
+    public void ExportCaptions_CarryNoGermanLiteral()
+    {
+        // Finding 21: the section caption was the const "5-STUNDEN-FENSTER", so every PNG an English
+        // user exported was captioned in German. The fallback is now the English text and the German
+        // one lives in the de-DE dictionary under SectionLabelUid.
+        Assert.Equal("5-HOUR WINDOW", ExportHelper.ExportConstants.SectionLabelFallback);
+        Assert.Equal("SectionHeaderFiveHour", ExportHelper.ExportConstants.SectionLabelUid);
+        Assert.Equal("ResetInLabel", ExportHelper.ExportConstants.ResetInLabelUid);
     }
 }

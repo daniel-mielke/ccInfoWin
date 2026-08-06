@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using CCInfoWindows.Helpers;
 
 namespace CCInfoWindows.Tests.Localization;
 
@@ -15,6 +17,7 @@ namespace CCInfoWindows.Tests.Localization;
 ///   - Placeholder arity per key is identical across locales ("vor {0} Minuten" vs "{0} minutes ago")
 ///   - No duplicate &lt;data name&gt; entries
 ///   - Every l:Uids.Uid and GetLocalizedString() argument is single-segment
+///   - Every &lt;data name&gt; is itself resolvable by the localizer's key-splitting rule
 ///
 /// Strategy: XDocument-based (per RESEARCH Pitfall 1 — xUnit cannot initialize the
 /// WinUI3Localizer host, so we read the resw files directly).
@@ -34,9 +37,6 @@ public class ResourceCoverageTests
     /// </summary>
     private static readonly string[] RequiredKeys =
     [
-        "NotSignedIn.Text",
-        "NoData.Text",
-        "Loading.Text",
         "InactiveSessionTooltip",
         "LoginReloadButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip",
         "LoginReloadButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name",
@@ -46,12 +46,18 @@ public class ResourceCoverageTests
         "RenameSessionDialogCancelButton",
         "RenameSessionDialogResetButton",
         "MainViewRenameButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip",
+        // Review remediation 2026-08-06: failure messages read by key from code, so a missing
+        // entry degrades silently to the English fallback baked into the call site.
+        "SessionsClearNameTooltip",
+        "SettingsSessionNameSaveFailed",
+        "SettingsLanguageChangeFailed",
+        "DashboardStartupFailedMessage",
         // Phase 26 RENAME-02: Settings Sessions tab content (Plan 03)
         "SettingsTabSessions",
         "SettingsSessionsHeader.Text",
         "SettingsSessionsNoSessions.Text",
         "SettingsSessionsOrphanLabel.Text",
-        "Settings.Sessions.ClearButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip",
+        "SessionsClearNameTooltip",
         // Phase 27 L10N-01: localized last-fetch relative time on About tab
         "LastFetchJustNow",
         "LastFetchMinutesAgo",
@@ -77,6 +83,27 @@ public class ResourceCoverageTests
         "WindowResetNotificationTitle",
         "FiveHourResetNotificationBody",
         "WeeklyResetNotificationBody",
+        // Finding 21: strings that used to be German literals in C#. SettingsViewModel reads the
+        // first three, CountdownFormatter the pattern.
+        "PricingSourceFallback",
+        "PricingSourceUnknown",
+        "RefreshIntervalManual",
+        CountdownFormatter.ResetDatePatternUid,
+        // Finding 21: ExportHelper paints these two into the PNG, resolved by Uid (the text before
+        // the first '.'), so both the entry and its .Text suffix have to stay.
+        "SectionHeaderFiveHour.Text",
+        "ResetInLabel.Text",
+    ];
+
+    /// <summary>
+    /// Resw entries holding a .NET custom date/time format string rather than display text. A typo
+    /// here renders a date nobody can read, or throws FormatException into a UI update.
+    /// </summary>
+    private static readonly string[] DatePatternKeys =
+    [
+        CountdownFormatter.ResetDatePatternUid,
+        "NextWindowLabelDe",
+        "NextWindowLabelEn",
     ];
 
     private static readonly Regex PlaceholderPattern = new(@"\{(\d+)\}", RegexOptions.Compiled);
@@ -256,6 +283,86 @@ public class ResourceCoverageTests
         }
 
         Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void ReswKeyNames_AreResolvableByTheLocalizersSplittingRule()
+    {
+        // LocalizerBuilder.CreateLanguageDictionaryItem splits a <data name> at the FIRST '.':
+        // the part before it becomes the Uid the dictionary is keyed on, everything after it becomes
+        // "<rest>Property". A second '.' outside the [using:] attached-property syntax therefore asks
+        // for a dependency property that does not exist and the entry renders as nothing.
+        //
+        // This closes the hole the GetLocalizedString scanner structurally cannot see: keys reached
+        // through a variable (ToastRequest.TitleKey/BodyKey, MainViewModel's formatKey) never appear
+        // as a literal in source, so only the resw side can be checked. Regression guard for
+        // "Settings.Sessions.ClearButton.[using:...]", which parsed as Uid "Settings".
+        foreach (var (locale, path) in Locales())
+        {
+            var unresolvable = LoadResw(path).Keys
+                .Where(name => !IsLocalizerResolvable(name))
+                .OrderBy(k => k)
+                .ToList();
+
+            Assert.True(
+                unresolvable.Count == 0,
+                $"{locale} has keys the localizer cannot resolve: [{string.Join(", ", unresolvable)}].");
+        }
+    }
+
+    [Fact]
+    public void DatePatternKeys_AreValidCustomFormatStringsInBothLocales()
+    {
+        var reference = new DateTime(2026, 2, 27, 10, 0, 0, DateTimeKind.Unspecified);
+
+        foreach (var (locale, path) in Locales())
+        {
+            var keyToValue = LoadResw(path);
+            var culture = new CultureInfo(locale);
+
+            foreach (var key in DatePatternKeys)
+            {
+                var pattern = keyToValue[key];
+                var rendered = reference.ToString(pattern, culture);
+
+                // Unrecognised characters are copied through verbatim rather than rejected, so an
+                // output still equal to the pattern means nothing was interpreted as a date at all.
+                Assert.NotEqual(pattern, rendered);
+                Assert.Contains("10:00", rendered);
+            }
+        }
+    }
+
+    [Fact]
+    public void WeeklyResetDatePattern_OrdersItsFieldsPerLocale()
+    {
+        // Finding 21: CountdownFormatter hardcoded new CultureInfo("de-DE") plus "ddd dd.MM., HH:mm",
+        // so an English user read the weekly reset "Mi. 06.08., 10:00" as June 8th.
+        var reference = new DateTime(2026, 2, 27, 10, 0, 0, DateTimeKind.Unspecified);
+        var key = CountdownFormatter.ResetDatePatternUid;
+
+        var en = reference.ToString(LoadResw(EnUsRelativePath)[key], new CultureInfo("en-US"));
+        var de = reference.ToString(LoadResw(DeDeRelativePath)[key], new CultureInfo("de-DE"));
+
+        Assert.DoesNotContain("27.02.", en);
+        Assert.Contains("Feb", en);
+        Assert.Contains("27.02.", de);
+    }
+
+    /// <summary>
+    /// Mirrors LocalizerBuilder.CreateLanguageDictionaryItem: a name without '.' is looked up whole
+    /// by GetLocalizedString; otherwise the remainder after the first '.' must be a single dependency
+    /// property name, or the "[using:Namespace]Class.Property" attached-property form.
+    /// </summary>
+    private static bool IsLocalizerResolvable(string keyName)
+    {
+        var firstDot = keyName.IndexOf('.');
+        if (firstDot < 0) return true;
+
+        var dependencyPropertyPath = keyName[(firstDot + 1)..];
+
+        return dependencyPropertyPath.StartsWith("[using:", StringComparison.Ordinal)
+            || !dependencyPropertyPath.Contains('.');
     }
 
     private static IEnumerable<(string Locale, string Path)> Locales()

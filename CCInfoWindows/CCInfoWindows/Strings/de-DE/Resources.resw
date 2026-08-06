@@ -59,15 +59,6 @@
   <data name="NoActiveSession.Text" xml:space="preserve">
     <value>Keine aktive Session</value>
   </data>
-  <data name="NotSignedIn.Text" xml:space="preserve">
-    <value>Nicht angemeldet</value>
-  </data>
-  <data name="NoData.Text" xml:space="preserve">
-    <value>Keine Daten</value>
-  </data>
-  <data name="Loading.Text" xml:space="preserve">
-    <value>Wird geladen</value>
-  </data>
 
   <!-- MainView statistics tab labels -->
   <data name="TabSession.Content" xml:space="preserve">
@@ -166,14 +157,13 @@
   <data name="SettingsDarkMode.Text" xml:space="preserve">
     <value>Dark Mode</value>
   </data>
-  <data name="SettingsPricingSource.Text" xml:space="preserve">
-    <value>Preisdaten:</value>
-  </data>
-  <data name="SettingsLastFetch.Text" xml:space="preserve">
-    <value>Zuletzt aktualisiert:</value>
-  </data>
   <data name="SettingsLogoutButton.Text" xml:space="preserve">
     <value>Abmelden</value>
+  </data>
+
+  <!-- SettingsView refresh interval: the "no polling" item, read from the view model -->
+  <data name="RefreshIntervalManual" xml:space="preserve">
+    <value>Manuell</value>
   </data>
 
   <!-- SettingsView session timeout items -->
@@ -205,9 +195,6 @@
   </data>
   <data name="UpdateDownloadButton.Content" xml:space="preserve">
     <value>Download</value>
-  </data>
-  <data name="SectionHeaderApp.Text" xml:space="preserve">
-    <value>ANWENDUNG</value>
   </data>
   <data name="SettingsAutostartLabel.Text" xml:space="preserve">
     <value>Autostart:</value>
@@ -246,6 +233,9 @@
   </data>
   <data name="SessionTimeoutComboBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Sitzungs-Timeout wählen</value>
+  </data>
+  <data name="VisibilityWindowComboBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Sichtbarkeitsfenster wählen</value>
   </data>
 
   <!-- Update InfoBar -->
@@ -307,6 +297,14 @@
   </data>
   <data name="SettingsLastFetchLabel.Text" xml:space="preserve">
     <value>Zuletzt aktualisiert:</value>
+  </data>
+
+  <!-- About tab: pricing-source names, read from the view model -->
+  <data name="PricingSourceFallback" xml:space="preserve">
+    <value>Fallback (gebündelt)</value>
+  </data>
+  <data name="PricingSourceUnknown" xml:space="preserve">
+    <value>Unbekannt</value>
   </data>
 
   <!-- SettingsView session visibility window (Phase 25 DROPDOWN-04 / D-03) -->
@@ -415,6 +413,12 @@
     <value>ddd HH:mm</value>
   </data>
 
+  <!-- Weekly/Sonnet reset date. .NET custom date format string, per locale: an English reader
+       parses the German "06.08." as June 8th, so the field order has to change with the language. -->
+  <data name="WeeklyResetDatePattern" xml:space="preserve">
+    <value>ddd dd.MM., HH:mm</value>
+  </data>
+
   <!-- Phase 26 RENAME-02: Settings Sessions tab content -->
   <data name="SettingsTabSessions" xml:space="preserve">
     <value>Sitzungen</value>
@@ -428,8 +432,20 @@
   <data name="SettingsSessionsOrphanLabel.Text" xml:space="preserve">
     <value>Sitzung nicht gefunden</value>
   </data>
-  <data name="Settings.Sessions.ClearButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+  <data name="SessionsClearNameTooltip" xml:space="preserve">
     <value>Eigenen Namen entfernen</value>
+  </data>
+
+  <data name="SettingsSessionNameSaveFailed" xml:space="preserve">
+    <value>Der Sitzungsname konnte nicht gespeichert werden.</value>
+  </data>
+
+  <data name="SettingsLanguageChangeFailed" xml:space="preserve">
+    <value>Die Anzeigesprache konnte nicht geändert werden.</value>
+  </data>
+
+  <data name="DashboardStartupFailedMessage" xml:space="preserve">
+    <value>Das Dashboard konnte nicht gestartet werden. Starte die App neu.</value>
   </data>
 
   <!-- Phase 27 PRICING-01..03: pricing-service silent-failure surfacing (D-PR-02) -->
