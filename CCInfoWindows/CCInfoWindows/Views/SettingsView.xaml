@@ -457,9 +457,14 @@
                                                    Foreground="{ThemeResource TertiaryTextBrush}"
                                                    Visibility="{x:Bind IsOrphan, Converter={StaticResource BoolToVisibilityConverter}}" />
 
-                                        <!-- Custom name TextBox — commits on LostFocus or Enter -->
+                                        <!-- Custom name TextBox — commits on LostFocus or Enter.
+                                             UpdateSourceTrigger is load-bearing: x:Bind writes
+                                             TextBox.Text back on LostFocus by default, which runs
+                                             AFTER the LostFocus/Enter handlers, so the command read
+                                             the previous (usually empty) value and cleared the name
+                                             the user had just typed. -->
                                         <TextBox Grid.Column="1" Grid.RowSpan="2"
-                                                 Text="{x:Bind CustomName, Mode=TwoWay}"
+                                                 Text="{x:Bind CustomName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                  MaxLength="100"
                                                  LostFocus="OnSessionRenameTextBoxLostFocus"
                                                  KeyDown="OnSessionRenameTextBoxKeyDown"

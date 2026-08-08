@@ -339,6 +339,12 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Commits what the row currently holds; an empty box is the intended way to drop a custom name.
+    /// Depends on the TextBox binding writing back per keystroke (UpdateSourceTrigger=PropertyChanged
+    /// in SettingsView.xaml): with the WinUI default of LostFocus the write-back lands after the
+    /// commit handlers, so every rename read an empty CustomName and cleared the name instead.
+    /// </summary>
     [RelayCommand]
     private async Task SaveSessionCustomName(SessionRenameItem item)
     {

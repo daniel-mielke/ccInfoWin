@@ -167,26 +167,46 @@ public sealed partial class SettingsView : Page
 
     private void OnLanguageApplied(object? sender, EventArgs e) => ApplyCodeDrivenLabels();
 
+    /// <summary>
+    /// The row Enter has just committed, together with the value it committed. Moving focus off the
+    /// TextBox makes WinUI raise LostFocus for that row, and LostFocus is delivered asynchronously,
+    /// so the echo would otherwise run the command a second time. Matching on the value as well
+    /// keeps the guard from ever swallowing a genuine commit: text the user changed after pressing
+    /// Enter no longer matches and is saved normally.
+    /// </summary>
+    private SessionRenameItem? _rowCommittedByEnter;
+    private string _valueCommittedByEnter = string.Empty;
+
     // Phase 26 / RENAME-02: TextBox commit on LostFocus — persists via ISessionNameStore
     private async void OnSessionRenameTextBoxLostFocus(object sender, RoutedEventArgs e)
     {
-        if (sender is TextBox tb && tb.Tag is SessionRenameItem item)
+        if (sender is not TextBox { Tag: SessionRenameItem item }) return;
+
+        if (ReferenceEquals(item, _rowCommittedByEnter)
+            && string.Equals(item.CustomName, _valueCommittedByEnter, StringComparison.Ordinal))
         {
-            await ViewModel.SaveSessionCustomNameCommand.ExecuteAsync(item);
+            _rowCommittedByEnter = null;
+            return;
         }
+
+        await ViewModel.SaveSessionCustomNameCommand.ExecuteAsync(item);
     }
 
     // Phase 26 / RENAME-02: TextBox commit on Enter key — persists via ISessionNameStore
     private async void OnSessionRenameTextBoxKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (e.Key != VirtualKey.Enter) return;
-        if (sender is TextBox tb && tb.Tag is SessionRenameItem item)
-        {
-            e.Handled = true;
-            await ViewModel.SaveSessionCustomNameCommand.ExecuteAsync(item);
-            // Move focus off the TextBox so the user sees the commit visually
-            tb.IsEnabled = false;
-            tb.IsEnabled = true;
-        }
+        if (sender is not TextBox tb || tb.Tag is not SessionRenameItem item) return;
+
+        e.Handled = true;
+        await ViewModel.SaveSessionCustomNameCommand.ExecuteAsync(item);
+
+        // The command writes the sanitized value back, so this is what the echoed LostFocus will see.
+        _rowCommittedByEnter = item;
+        _valueCommittedByEnter = item.CustomName;
+
+        // Move focus off the TextBox so the user sees the commit visually
+        tb.IsEnabled = false;
+        tb.IsEnabled = true;
     }
 }
