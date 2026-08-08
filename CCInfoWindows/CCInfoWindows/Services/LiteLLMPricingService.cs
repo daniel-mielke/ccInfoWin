@@ -42,11 +42,22 @@ public sealed class LiteLLMPricingService : IPricingService
     private const string LogSourceLocalCache = "LiteLLMPricingService.LocalCache";
     private const string LogSourceEmbedded = "LiteLLMPricingService.EmbeddedResource";
     private const string LogSourceCacheWrite = "LiteLLMPricingService.CacheWrite";
+    private const string LogSourceMalformedEntries = "LiteLLMPricingService.MalformedEntries";
+
+    /// <summary>
+    /// How many recurrences of an already-reported failure pass before a single counted line is
+    /// written. EnsurePricesLoadedAsync retries on every refresh tick, so a permanent failure would
+    /// otherwise append one full stack trace per tick.
+    /// </summary>
+    private const int RepeatLogInterval = 100;
 
     private readonly HttpClient _httpClient;
     private readonly string _cacheDirectory;
     private readonly Func<Stream?> _openBundledPrices;
     private readonly SemaphoreSlim _loadLock = new(1, 1);
+
+    private readonly Lock _failureLogGate = new();
+    private readonly Dictionary<string, int> _failureOccurrences = new(StringComparer.Ordinal);
 
     private PricingSnapshot _snapshot = PricingSnapshot.Empty;
 
@@ -132,7 +143,7 @@ public sealed class LiteLLMPricingService : IPricingService
 
             if (prices.Count == 0)
             {
-                AppLog.Write(LogSourceLiveFetch,
+                LogFailure(LogSourceLiveFetch,
                     "Response parsed but contained no Anthropic entries; keeping the previous table.");
                 return false;
             }
@@ -143,7 +154,7 @@ public sealed class LiteLLMPricingService : IPricingService
         }
         catch (Exception ex)
         {
-            AppLog.Write(LogSourceLiveFetch, ex);
+            LogFailure(LogSourceLiveFetch, ex);
             return false;
         }
     }
@@ -227,7 +238,7 @@ public sealed class LiteLLMPricingService : IPricingService
 
         if (cacheFile.Length > MaxPricingResponseBytes)
         {
-            AppLog.Write(LogSourceLocalCache,
+            LogFailure(LogSourceLocalCache,
                 $"Cache file is {cacheFile.Length} bytes, above the {MaxPricingResponseBytes} byte limit; ignoring it.");
             return null;
         }
@@ -239,7 +250,7 @@ public sealed class LiteLLMPricingService : IPricingService
         }
         catch (Exception ex)
         {
-            AppLog.Write(LogSourceLocalCache, ex);
+            LogFailure(LogSourceLocalCache, ex);
             return null;
         }
     }
@@ -254,7 +265,7 @@ public sealed class LiteLLMPricingService : IPricingService
             using var stream = _openBundledPrices();
             if (stream is null)
             {
-                AppLog.Write(LogSourceEmbedded, $"Resource '{EmbeddedResourceName}' is not in the assembly.");
+                LogFailure(LogSourceEmbedded, $"Resource '{EmbeddedResourceName}' is not in the assembly.");
                 return null;
             }
 
@@ -266,7 +277,7 @@ public sealed class LiteLLMPricingService : IPricingService
         }
         catch (Exception ex)
         {
-            AppLog.Write(LogSourceEmbedded, ex);
+            LogFailure(LogSourceEmbedded, ex);
             return null;
         }
     }
@@ -276,28 +287,95 @@ public sealed class LiteLLMPricingService : IPricingService
     /// priced per gateway and would shadow the canonical ids in the stripped-suffix scan.
     /// Deserialising from UTF-8 bytes rather than a string is what lets the size cap be expressed
     /// in the unit it is named for.
+    ///
+    /// Each entry is deserialised on its own so one malformed entry costs one model instead of the
+    /// whole catalogue: LiteLLM publishes a "sample_spec" documentation placeholder whose example
+    /// values are strings where the schema declares numbers, and it sits at line 11 of a ~2 MB
+    /// document. A single whole-dictionary Deserialize aborted there, so every real price was lost
+    /// and the service never left the bundled fallback.
     /// </summary>
-    private static Dictionary<string, ModelPricing> ParseAnthropicEntries(byte[] utf8Json)
+    private Dictionary<string, ModelPricing> ParseAnthropicEntries(byte[] utf8Json)
     {
-        var allEntries = JsonSerializer.Deserialize<Dictionary<string, ModelPricing>>(utf8Json);
+        using var document = JsonDocument.Parse(utf8Json);
 
         var prices = new Dictionary<string, ModelPricing>(StringComparer.OrdinalIgnoreCase);
-        if (allEntries is null)
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
             return prices;
 
-        foreach (var (key, pricing) in allEntries)
+        var skippedEntries = 0;
+
+        foreach (var entry in document.RootElement.EnumerateObject())
         {
+            ModelPricing? pricing;
+            try
+            {
+                pricing = entry.Value.Deserialize<ModelPricing>();
+            }
+            catch (JsonException)
+            {
+                skippedEntries++;
+                continue;
+            }
+
             if (pricing is null)
                 continue;
 
             if (pricing.LitellmProvider is null
                 || string.Equals(pricing.LitellmProvider, AnthropicProvider, StringComparison.OrdinalIgnoreCase))
             {
-                prices[key] = pricing;
+                prices[entry.Name] = pricing;
             }
         }
 
+        if (skippedEntries > 0)
+        {
+            LogFailure(LogSourceMalformedEntries,
+                $"Skipped {skippedEntries} pricing entries that did not match the expected schema.");
+        }
+
         return prices;
+    }
+
+    /// <summary>
+    /// Reports a handled failure at most once per distinct signature per process run, then a single
+    /// counted line every <see cref="RepeatLogInterval"/> recurrences. app.log is capped at 1 MiB
+    /// with one roll, so a permanent failure repeating on every refresh tick — 107 full stack traces
+    /// in one day for the live fetch — evicts every other diagnostic before it can be read.
+    /// </summary>
+    private void LogFailure(string source, Exception ex)
+    {
+        if (ShouldReportInFull(source, $"{ex.GetType().FullName}: {ex.Message}"))
+            AppLog.Write(source, ex);
+    }
+
+    private void LogFailure(string source, string message)
+    {
+        if (ShouldReportInFull(source, message))
+            AppLog.Write(source, message);
+    }
+
+    /// <summary>
+    /// True only for the first sighting of <paramref name="signature"/>. Recurrences are collapsed
+    /// into one counted line per <see cref="RepeatLogInterval"/> sightings, so the caller's full
+    /// entry is written once and the fact that it keeps happening is still recorded.
+    /// </summary>
+    private bool ShouldReportInFull(string source, string signature)
+    {
+        int occurrence;
+        lock (_failureLogGate)
+        {
+            _failureOccurrences.TryGetValue(signature, out var previous);
+            occurrence = previous + 1;
+            _failureOccurrences[signature] = occurrence;
+        }
+
+        if (occurrence == 1)
+            return true;
+
+        if (occurrence % RepeatLogInterval == 0)
+            AppLog.Write(source, $"Repeated {occurrence} times: {signature}");
+
+        return false;
     }
 
     /// <summary>
@@ -324,7 +402,7 @@ public sealed class LiteLLMPricingService : IPricingService
         }
         catch (Exception ex)
         {
-            AppLog.Write(LogSourceCacheWrite, ex);
+            LogFailure(LogSourceCacheWrite, ex);
         }
     }
 
