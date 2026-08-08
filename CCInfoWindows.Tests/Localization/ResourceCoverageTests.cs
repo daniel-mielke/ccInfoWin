@@ -47,7 +47,15 @@ public class ResourceCoverageTests
         "RenameSessionDialogSaveButton",
         "RenameSessionDialogCancelButton",
         "RenameSessionDialogResetButton",
-        "MainViewRenameButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip",
+        // Defect B4 (2026-08-07): MainView's icon-only buttons moved off the
+        // "Control.[using:Namespace]Class.Property" form. It satisfies IsLocalizerResolvable but
+        // WinUI3Localizer never APPLIES it, so those buttons had no tooltip and no accessible name.
+        // They are labelled in code from these keys instead — see FooterLocalizationTests.
+        "MainViewRenameLabel",
+        "MainViewExportLabel",
+        "MainViewRefreshLabel",
+        "MainViewSettingsLabel",
+        "MainViewQuitLabel",
         // Review remediation 2026-08-06: failure messages read by key from code, so a missing
         // entry degrades silently to the English fallback baked into the call site.
         "SessionsClearNameTooltip",

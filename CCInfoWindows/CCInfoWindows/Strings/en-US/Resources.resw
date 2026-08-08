@@ -98,24 +98,6 @@
   </data>
 
   <!-- MainView footer buttons -->
-  <data name="FooterRefreshButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Refresh</value>
-  </data>
-  <data name="FooterRefreshButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Refresh</value>
-  </data>
-  <data name="FooterSettingsButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Settings</value>
-  </data>
-  <data name="FooterSettingsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Settings</value>
-  </data>
-  <data name="FooterQuitButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Quit</value>
-  </data>
-  <data name="FooterQuitButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Quit</value>
-  </data>
 
   <!-- LoginView reload button (Phase 20) -->
   <data name="LoginReloadButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
@@ -181,12 +163,6 @@
   </data>
 
   <!-- Phase 6 new elements -->
-  <data name="ExportButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Export chart</value>
-  </data>
-  <data name="ExportButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Export chart</value>
-  </data>
   <data name="ExportMenuSave.Text" xml:space="preserve">
     <value>Save as PNG...</value>
   </data>
@@ -384,9 +360,6 @@
   <data name="RenameSessionDialogResetButton" xml:space="preserve">
     <value>Reset</value>
   </data>
-  <data name="MainViewRenameButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Rename session</value>
-  </data>
 
   <!-- Phase 27 L10N-01: localized last-fetch relative time on About tab -->
   <data name="LastFetchJustNow" xml:space="preserve">
@@ -483,4 +456,23 @@
     <value>Could not load organizations. The connection to claude.ai is broken — restart the app or sign in again.</value>
   </data>
 
+  <!-- Icon-only MainView buttons. Plain single-segment keys, applied in code by
+       MainView.ApplyIconButtonLabels: WinUI3Localizer never applies the
+       "Control.[using:Namespace]Class.Property" attached-property form, so a uid alone
+       left these buttons with no tooltip and no accessible name at all. -->
+  <data name="MainViewRefreshLabel" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+  <data name="MainViewSettingsLabel" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="MainViewQuitLabel" xml:space="preserve">
+    <value>Quit</value>
+  </data>
+  <data name="MainViewExportLabel" xml:space="preserve">
+    <value>Export chart</value>
+  </data>
+  <data name="MainViewRenameLabel" xml:space="preserve">
+    <value>Rename session</value>
+  </data>
 </root>

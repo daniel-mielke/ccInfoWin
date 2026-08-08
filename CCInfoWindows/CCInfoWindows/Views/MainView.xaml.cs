@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.Web.WebView2.Core;
@@ -25,6 +26,7 @@ public sealed partial class MainView : Page
     private const string BootstrapLogSource = "MainView.OnLoaded";
     private const string TeardownLogSource = "MainView.OnUnloaded";
     private const string BridgeLogSource = "MainView.InitializeBridgeAsync";
+    private const string IconButtonLabelLogSource = "MainView.ApplyIconButtonLabels";
 
     /// <summary>Single-segment key — WinUI3Localizer 2.3.0 splits resw keys at the first dot.</summary>
     private const string BootstrapFailureMessageKey = "DashboardStartupFailedMessage";
@@ -131,8 +133,41 @@ public sealed partial class MainView : Page
         return animation;
     }
 
+    /// <summary>
+    /// Names the icon-only buttons, which carry a glyph and no text of their own.
+    ///
+    /// Applied here rather than through <c>l:Uids.Uid</c>: WinUI3Localizer never applies the
+    /// "Control.[using:Namespace]Class.Property" attached-property form of a resw key, so those
+    /// entries resolved in the resource test yet left every one of these buttons with no tooltip and
+    /// an empty accessible name. SettingsView reached the same conclusion for its tab strip.
+    ///
+    /// Runs before the bootstrap: a dashboard that failed to load still needs a reachable
+    /// Settings button.
+    /// </summary>
+    private void ApplyIconButtonLabels()
+    {
+        SetIconButtonLabel(RenameSessionButton, "MainViewRenameLabel", "Rename session");
+        SetIconButtonLabel(ExportChartButton, "MainViewExportLabel", "Export chart");
+        SetIconButtonLabel(FooterRefreshButton, "MainViewRefreshLabel", "Refresh");
+        SetIconButtonLabel(FooterSettingsButton, "MainViewSettingsLabel", "Settings");
+        SetIconButtonLabel(FooterQuitButton, "MainViewQuitLabel", "Quit");
+    }
+
+    /// <summary>
+    /// The glyph is the button's whole content, so one string serves as both the tooltip and the
+    /// name a screen reader announces.
+    /// </summary>
+    private static void SetIconButtonLabel(DependencyObject button, string uid, string fallback)
+    {
+        var label = LocalizedText.Resolve(uid, fallback, IconButtonLabelLogSource);
+        ToolTipService.SetToolTip(button, label);
+        AutomationProperties.SetName(button, label);
+    }
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        ApplyIconButtonLabels();
+
         // Disposed only after the finally below has cleared the field, so OnUnloaded can never
         // cancel through a disposed source.
         using var bootstrap = new CancellationTokenSource();

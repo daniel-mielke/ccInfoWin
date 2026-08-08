@@ -155,7 +155,6 @@
                     <!-- RENAME-01 / D-03: Pencil button opens ContentDialog -->
                     <Button x:Name="RenameSessionButton"
                             Grid.Column="1"
-                            l:Uids.Uid="MainViewRenameButton"
                             Click="OnRenamePencilClicked"
                             IsEnabled="{x:Bind ViewModel.HasSelectedSession, Mode=OneWay}"
                             Background="Transparent"
@@ -302,9 +301,8 @@
                             Foreground="{ThemeResource SectionHeaderBrush}"
                             CharacterSpacing="50"
                             VerticalAlignment="Center" />
-                        <Button Grid.Column="1"
-                                l:Uids.Uid="ExportButton"
-                                ToolTipService.ToolTip="Export chart"
+                        <Button x:Name="ExportChartButton"
+                                Grid.Column="1"
                                 Background="Transparent" BorderThickness="0"
                                 Padding="8" CornerRadius="6"
                                 Width="32" Height="32">
@@ -684,8 +682,7 @@
 
                     <!-- Refresh button with spinning icon -->
                     <Grid>
-                        <Button l:Uids.Uid="FooterRefreshButton"
-                                ToolTipService.ToolTip="Refresh"
+                        <Button x:Name="FooterRefreshButton"
                                 Command="{x:Bind ViewModel.RefreshCommand}"
                                 IsEnabled="{x:Bind ViewModel.CanRefresh, Mode=OneWay}"
                                 Background="Transparent" BorderThickness="0"
@@ -709,8 +706,7 @@
                     </Grid>
 
                     <!-- Settings button -->
-                    <Button l:Uids.Uid="FooterSettingsButton"
-                            ToolTipService.ToolTip="Settings"
+                    <Button x:Name="FooterSettingsButton"
                             Command="{x:Bind ViewModel.OpenSettingsCommand}"
                             Background="Transparent" BorderThickness="0"
                             Padding="8" CornerRadius="6">
@@ -719,8 +715,7 @@
                     </Button>
 
                     <!-- Quit button -->
-                    <Button l:Uids.Uid="FooterQuitButton"
-                            ToolTipService.ToolTip="Quit"
+                    <Button x:Name="FooterQuitButton"
                             Command="{x:Bind ViewModel.ExitAppCommand}"
                             Background="Transparent" BorderThickness="0"
                             Padding="8" CornerRadius="6">
