@@ -149,16 +149,16 @@
   </data>
 
   <!-- SettingsView session timeout items -->
-  <data name="Timeout15.Content" xml:space="preserve">
+  <data name="SessionTimeout15Label" xml:space="preserve">
     <value>15 minutes</value>
   </data>
-  <data name="Timeout30.Content" xml:space="preserve">
+  <data name="SessionTimeout30Label" xml:space="preserve">
     <value>30 minutes</value>
   </data>
-  <data name="Timeout60.Content" xml:space="preserve">
+  <data name="SessionTimeout60Label" xml:space="preserve">
     <value>60 minutes</value>
   </data>
-  <data name="Timeout120.Content" xml:space="preserve">
+  <data name="SessionTimeout120Label" xml:space="preserve">
     <value>120 minutes</value>
   </data>
 
@@ -287,16 +287,16 @@
   <data name="SettingsSessionVisibilityWindow.Text" xml:space="preserve">
     <value>Visibility window</value>
   </data>
-  <data name="SessionVisibilityWindow7d.Content" xml:space="preserve">
+  <data name="VisibilityWindow7dLabel" xml:space="preserve">
     <value>7 days</value>
   </data>
-  <data name="SessionVisibilityWindow30d.Content" xml:space="preserve">
+  <data name="VisibilityWindow30dLabel" xml:space="preserve">
     <value>30 days</value>
   </data>
-  <data name="SessionVisibilityWindow90d.Content" xml:space="preserve">
+  <data name="VisibilityWindow90dLabel" xml:space="preserve">
     <value>90 days</value>
   </data>
-  <data name="SessionVisibilityWindowUnlimited.Content" xml:space="preserve">
+  <data name="VisibilityWindowUnlimitedLabel" xml:space="preserve">
     <value>Unlimited</value>
   </data>
 

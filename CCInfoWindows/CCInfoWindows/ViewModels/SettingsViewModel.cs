@@ -46,9 +46,24 @@ public partial class SettingsViewModel : ObservableObject
     internal Func<string, Task> LanguageSwitcher { get; set; } = code => Localizer.Get().SetLanguage(code);
 
     /// <summary>
-    /// Represents a selectable refresh interval option for the ComboBox.
+    /// Represents a selectable refresh interval option for the ComboBox. Observable rather than a
+    /// record because the manual entry's label is localized: a runtime language switch has to
+    /// re-resolve it, and replacing the item would clear ComboBox.SelectedItem and write null back
+    /// into SelectedRefreshOption through the TwoWay binding.
     /// </summary>
-    public record RefreshOption(string Label, int Seconds);
+    public partial class RefreshOption : ObservableObject
+    {
+        public RefreshOption(string label, int seconds)
+        {
+            Label = label;
+            Seconds = seconds;
+        }
+
+        [ObservableProperty]
+        private string _label = string.Empty;
+
+        public int Seconds { get; }
+    }
 
     // Tab order in SettingsView's Segmented control. Every dependent site — the visibility getters
     // below, the About-tab timer in the code-behind, the tests — must reference these, never the
@@ -59,15 +74,56 @@ public partial class SettingsViewModel : ObservableObject
     public const int SessionsTabIndex = 3;   // Phase 26 / RENAME-02
     public const int AboutTabIndex = 4;
 
-    public List<RefreshOption> RefreshOptions { get; } =
+    /// <summary>
+    /// The only entry with a translated label, held by reference so a language switch can refresh it
+    /// in place without disturbing the collection or the current selection.
+    /// </summary>
+    private readonly RefreshOption _manualRefreshOption =
+        new(ManualRefreshLabel(), AppSettings.ManualRefreshSeconds);
+
+    public List<RefreshOption> RefreshOptions { get; }
+
+    private static string ManualRefreshLabel() => Localize("RefreshIntervalManual", "Manual");
+
+    /// <summary>
+    /// The resw key and English fallback of every dropdown entry that is addressed by position.
+    /// Order is load-bearing: SelectedThresholdIndex and SelectedVisibilityWindowIndex index into it.
+    /// </summary>
+    private static readonly (string Uid, string Fallback)[] SessionTimeoutCaptions =
     [
-        new("30s", 30),
-        new("1min", 60),
-        new("2min", 120),
-        new("5min", 300),
-        new("10min", 600),
-        new(Localize("RefreshIntervalManual", "Manual"), AppSettings.ManualRefreshSeconds)
+        ("SessionTimeout15Label", "15 minutes"),
+        ("SessionTimeout30Label", "30 minutes"),
+        ("SessionTimeout60Label", "60 minutes"),
+        ("SessionTimeout120Label", "120 minutes"),
     ];
+
+    private static readonly (string Uid, string Fallback)[] VisibilityWindowCaptions =
+    [
+        ("VisibilityWindow7dLabel", "7 days"),
+        ("VisibilityWindow30dLabel", "30 days"),
+        ("VisibilityWindow90dLabel", "90 days"),
+        ("VisibilityWindowUnlimitedLabel", "Unlimited"),
+    ];
+
+    public List<LabeledOption> SessionTimeoutOptions { get; } = BuildOptions(SessionTimeoutCaptions);
+
+    public List<LabeledOption> VisibilityWindowOptions { get; } = BuildOptions(VisibilityWindowCaptions);
+
+    private static List<LabeledOption> BuildOptions((string Uid, string Fallback)[] captions) =>
+        [.. captions.Select(caption => new LabeledOption(Localize(caption.Uid, caption.Fallback)))];
+
+    /// <summary>
+    /// Re-reads every positional dropdown caption. Assigning Label rather than replacing the entry is
+    /// what keeps the selection — and therefore the persisted setting — untouched.
+    /// </summary>
+    private static void RefreshOptionLabels(
+        List<LabeledOption> options, (string Uid, string Fallback)[] captions)
+    {
+        for (var index = 0; index < options.Count && index < captions.Length; index++)
+        {
+            options[index].Label = Localize(captions[index].Uid, captions[index].Fallback);
+        }
+    }
 
     [ObservableProperty]
     private int _selectedTabIndex = GeneralTabIndex;
@@ -398,6 +454,19 @@ public partial class SettingsViewModel : ObservableObject
         _apiService = apiService;
         _usageNotificationService = usageNotificationService;
         _bridge = bridge;
+
+        // Built here rather than in an initializer: a field initializer cannot reference another
+        // instance field, and the manual entry has to be the very instance the language switch
+        // updates in place.
+        RefreshOptions =
+        [
+            new("30s", 30),
+            new("1min", 60),
+            new("2min", 120),
+            new("5min", 300),
+            new("10min", 600),
+            _manualRefreshOption
+        ];
     }
 
     /// <summary>
@@ -459,6 +528,14 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Raised on the UI thread after a language switch succeeded. The View re-applies the labels the
+    /// localizer cannot reach on its own — tab tooltips it set in code, and the ComboBoxItems whose
+    /// popup is not part of the visual tree the localizer walks. A .NET event on the ViewModel the
+    /// View already owns, per the CLAUDE.md G-1 priority (direct wiring over WeakReferenceMessenger).
+    /// </summary>
+    public event EventHandler? LanguageApplied;
+
+    /// <summary>
     /// Applies the language, then persists it. The old order committed settings.json before the
     /// switch could report failure, so a throwing SetLanguage left the file claiming a language the
     /// screen was not showing.
@@ -484,6 +561,14 @@ public partial class SettingsViewModel : ObservableObject
             // VM-computed strings are not DependencyObjects, so the localizer cannot re-apply them.
             OnPropertyChanged(nameof(PricingSourceText));
             OnPropertyChanged(nameof(LastFetchRelativeTime));
+
+            // Same reason, one level deeper: this label is VM-owned text behind DisplayMemberPath.
+            // Mutating the instance keeps ComboBox.SelectedItem pointing at it.
+            _manualRefreshOption.Label = ManualRefreshLabel();
+            RefreshOptionLabels(SessionTimeoutOptions, SessionTimeoutCaptions);
+            RefreshOptionLabels(VisibilityWindowOptions, VisibilityWindowCaptions);
+
+            LanguageApplied?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex)
         {

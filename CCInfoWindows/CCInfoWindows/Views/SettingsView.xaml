@@ -186,14 +186,12 @@
                                            FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
                                            VerticalAlignment="Center" />
                                 <ComboBox Grid.Column="1"
+                                          x:Name="SessionTimeoutComboBox"
                                           l:Uids.Uid="SessionTimeoutComboBox"
+                                          ItemsSource="{x:Bind ViewModel.SessionTimeoutOptions}"
+                                          DisplayMemberPath="Label"
                                           SelectedIndex="{x:Bind ViewModel.SelectedThresholdIndex, Mode=TwoWay}"
-                                          VerticalAlignment="Center">
-                                    <ComboBoxItem l:Uids.Uid="Timeout15" />
-                                    <ComboBoxItem l:Uids.Uid="Timeout30" />
-                                    <ComboBoxItem l:Uids.Uid="Timeout60" />
-                                    <ComboBoxItem l:Uids.Uid="Timeout120" />
-                                </ComboBox>
+                                          VerticalAlignment="Center" />
                             </Grid>
 
                             <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
@@ -210,14 +208,11 @@
                                 <ComboBox Grid.Column="1"
                                           x:Name="VisibilityWindowComboBox"
                                           l:Uids.Uid="VisibilityWindowComboBox"
+                                          ItemsSource="{x:Bind ViewModel.VisibilityWindowOptions}"
+                                          DisplayMemberPath="Label"
                                           SelectedIndex="{x:Bind ViewModel.SelectedVisibilityWindowIndex, Mode=TwoWay}"
                                           VerticalAlignment="Center"
-                                          MinWidth="120">
-                                    <ComboBoxItem l:Uids.Uid="SessionVisibilityWindow7d" />
-                                    <ComboBoxItem l:Uids.Uid="SessionVisibilityWindow30d" />
-                                    <ComboBoxItem l:Uids.Uid="SessionVisibilityWindow90d" />
-                                    <ComboBoxItem l:Uids.Uid="SessionVisibilityWindowUnlimited" />
-                                </ComboBox>
+                                          MinWidth="120" />
                             </Grid>
 
                             <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />

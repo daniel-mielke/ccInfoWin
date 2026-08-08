@@ -29,7 +29,8 @@ public sealed partial class SettingsView : Page
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         ViewModel.Initialize();
-        ApplyTabTooltips();
+        ApplyCodeDrivenLabels();
+        ViewModel.LanguageApplied += OnLanguageApplied;
         // D-10: if Settings opens with About already selected (rare — persistence),
         // start the timer immediately so "X minutes ago" is live from t=0.
         if (TabsSegmented.SelectedIndex == SettingsViewModel.AboutTabIndex)
@@ -56,7 +57,10 @@ public sealed partial class SettingsView : Page
         ViewModel?.StopAboutTimestampTimer();
         // ORGID-01: symmetric unsubscribe (CD-05 pattern)
         if (ViewModel != null)
+        {
             ViewModel.RequestOpenOrgPickerDialog -= OnRequestOpenOrgPickerDialog;
+            ViewModel.LanguageApplied -= OnLanguageApplied;
+        }
     }
 
     /// <summary>
@@ -142,6 +146,15 @@ public sealed partial class SettingsView : Page
         }
     }
 
+    /// <summary>
+    /// Everything on this page whose text the localizer cannot re-apply on its own. Runs on Loaded
+    /// and again on every successful language switch.
+    /// </summary>
+    private void ApplyCodeDrivenLabels()
+    {
+        ApplyTabTooltips();
+    }
+
     private void ApplyTabTooltips()
     {
         var localizer = Localizer.Get();
@@ -151,6 +164,8 @@ public sealed partial class SettingsView : Page
         ToolTipService.SetToolTip(TabSessions, localizer.GetLocalizedString("SettingsTabSessions"));  // Phase 26
         ToolTipService.SetToolTip(TabAbout, localizer.GetLocalizedString("SettingsTabAbout"));
     }
+
+    private void OnLanguageApplied(object? sender, EventArgs e) => ApplyCodeDrivenLabels();
 
     // Phase 26 / RENAME-02: TextBox commit on LostFocus — persists via ISessionNameStore
     private async void OnSessionRenameTextBoxLostFocus(object sender, RoutedEventArgs e)
