@@ -56,8 +56,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checked
-Name: "autostart"; Description: "Start at Windows login"; GroupDescription: "Options:"; Flags: checked
+; No Flags: tasks are pre-selected by default. "checked" is not a valid [Tasks] flag and
+; aborted the compile -- this script had never actually been run through iscc.
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+Name: "autostart"; Description: "Start at Windows login"; GroupDescription: "Options:"
 
 [Files]
 Source: "{#ReleaseDir}\*"; DestDir: "{app}"; Excludes: "\win-x64,*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
