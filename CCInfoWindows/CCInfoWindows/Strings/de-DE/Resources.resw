@@ -112,6 +112,11 @@
     <value>Inaktiv seit &gt; {0}min</value>
   </data>
 
+  <!-- MainView workflow subagent row (v1.7). {0} = run id, verbatim, never translated. {1} = agent count. -->
+  <data name="WorkflowSubagentLabel" xml:space="preserve">
+    <value>{0} · {1} aktiv</value>
+  </data>
+
   <!-- MainView Session Expired InfoBar -->
   <data name="SessionExpiredInfoBar.Title" xml:space="preserve">
     <value>Sitzung abgelaufen</value>

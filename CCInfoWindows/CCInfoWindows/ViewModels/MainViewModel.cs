@@ -19,7 +19,8 @@ using WinUI3Localizer;
 namespace CCInfoWindows.ViewModels;
 
 /// <summary>
-/// Display model for a single subagent context bar in the KONTEXTFENSTER section.
+/// Display model for one row in the KONTEXTFENSTER section: either a single subagent spawned by
+/// the Agent tool, or the whole set of agents belonging to one workflow run collapsed into one row.
 /// </summary>
 public class SubagentDisplayData
 {
@@ -29,6 +30,18 @@ public class SubagentDisplayData
     public required string PercentageText { get; init; }
     public required string ModelBadge { get; init; }
     public required SolidColorBrush BadgeColor { get; init; }
+
+    /// <summary>Leading glyph: arrow for a single subagent, gear for a workflow run.</summary>
+    public required string Icon { get; init; }
+
+    /// <summary>Run id plus agent count for workflow rows; empty for single subagents.</summary>
+    public string Label { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Swaps the model badge for the label in the template. Workflow rows carry no badge because
+    /// the agents of one run can be on different models (D-3).
+    /// </summary>
+    public bool IsWorkflow { get; init; }
 }
 
 /// <summary>
@@ -55,6 +68,10 @@ public class SessionDisplayItem
 public partial class MainViewModel : ObservableObject,
     IRecipient<AuthStateChangedMessage>
 {
+    private const string PlainSubagentIcon = "↳";      // downwards arrow with tip rightwards
+    private const string WorkflowSubagentIcon = "⚙";   // gear
+    private const string WorkflowSubagentLabelKey = "WorkflowSubagentLabel";
+
     private const string PollLogSource = "MainViewModel.PollUsage";
     private const string StartupLogSource = "MainViewModel.InitializeAsync";
     private const string StatisticsLogSource = "MainViewModel.AggregateStatistics";
@@ -1380,22 +1397,92 @@ public partial class MainViewModel : ObservableObject,
         HasActiveSession = true;
 
         SubagentContexts.Clear();
-        foreach (var subagent in context.Subagents)
-        {
-            var subUtil = subagent.Utilization;
-            SubagentContexts.Add(new SubagentDisplayData
-            {
-                AgentId = subagent.AgentId,
-                Utilization = subUtil,
-                Percentage = Math.Min(subUtil * 100, 100),
-                PercentageText = $"{Math.Min(subUtil * 100, 100):0}%",
-                ModelBadge = ModelContextLimits.GetDisplayName(subagent.ModelName),
-                BadgeColor = _brushFactory(ModelContextLimits.GetBadgeColorHex(subagent.ModelName))
-            });
-        }
+        foreach (var row in BuildSubagentRows(context.Subagents, _brushFactory, FormatWorkflowLabel))
+            SubagentContexts.Add(row);
 
         RecomputeStatisticsForCurrentTab();
     }
+
+    /// <summary>
+    /// Maps subagents to display rows. Agents of one workflow run collapse into a single row from
+    /// the first agent on (D-1) — a single run reached 44 agents on this machine, which would be
+    /// roughly 1230 px of bars in a ~600 px window.
+    ///
+    /// The percentage of such a row is the MAXIMUM of the group, never the average (D-2): 20 agents
+    /// at 5 % and one at 95 % average to a reassuring 9 % while that one agent is running into its
+    /// autocompact. Only the furthest-along agent carries a decision.
+    ///
+    /// Static so it can be exercised without a ViewModel instance; the two delegates keep the WinRT
+    /// brush type and the localizer out of the test path.
+    /// </summary>
+    internal static List<SubagentDisplayData> BuildSubagentRows(
+        IReadOnlyList<SubagentContextData> subagents,
+        Func<string, SolidColorBrush> brushFactory,
+        Func<string, int, string> workflowLabelFormatter)
+    {
+        // Plain subagents keep their incoming AgentId order, workflow rows follow sorted by run id.
+        // Deterministic ordering keeps rows from swapping places between two polls.
+        var rows = subagents
+            .Where(s => s.WorkflowId is null)
+            .Select(s => CreateSubagentRow(
+                s.AgentId,
+                s.Utilization,
+                PlainSubagentIcon,
+                ModelContextLimits.GetDisplayName(s.ModelName),
+                brushFactory(ModelContextLimits.GetBadgeColorHex(s.ModelName))))
+            .ToList();
+
+        var workflowRows = subagents
+            .Where(s => s.WorkflowId is not null)
+            .GroupBy(s => s.WorkflowId!)
+            .OrderBy(g => g.Key, StringComparer.Ordinal)
+            .Select(g => CreateSubagentRow(
+                g.Key,
+                g.Max(s => s.Utilization),
+                WorkflowSubagentIcon,
+                ModelContextLimits.GetDisplayName(null),
+                brushFactory(ModelContextLimits.GetBadgeColorHex(null)),
+                label: workflowLabelFormatter(g.Key, g.Count())));
+
+        rows.AddRange(workflowRows);
+        return rows;
+    }
+
+    private static SubagentDisplayData CreateSubagentRow(
+        string agentId,
+        double utilization,
+        string icon,
+        string modelBadge,
+        SolidColorBrush badgeColor,
+        string? label = null)
+    {
+        var percentage = Math.Min(utilization * 100, 100);
+        return new SubagentDisplayData
+        {
+            AgentId = agentId,
+            Utilization = utilization,
+            Percentage = percentage,
+            PercentageText = $"{percentage:0}%",
+            ModelBadge = modelBadge,
+            BadgeColor = badgeColor,
+            Icon = icon,
+            Label = label ?? string.Empty,
+            IsWorkflow = label is not null
+        };
+    }
+
+    /// <summary>
+    /// Composes the workflow row label in the ViewModel rather than via l:Uids.Uid in the
+    /// DataTemplate: WinUI3Localizer does not apply attached-property uids to template instances
+    /// created at runtime, which would leave the text blank. The run id is inserted verbatim so it
+    /// stays comparable to /workflows output and to the directory name on disk (D-6).
+    /// </summary>
+    private static string FormatWorkflowLabel(string workflowId, int agentCount) =>
+        string.Format(
+            CultureInfo.CurrentCulture,
+            Localizer.Get().GetLocalizedString(WorkflowSubagentLabelKey),
+            workflowId,
+            agentCount);
 
     /// <summary>
     /// Recomputes the statistics panel for whichever tab is active, without the loading spinner.

@@ -235,8 +235,9 @@
                     <ItemsRepeater ItemsSource="{x:Bind ViewModel.SubagentContexts, Mode=OneWay}">
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="viewmodels:SubagentDisplayData">
-                                <!-- Layout: [↳] [Badge] [ProgressBar] [xx%] -->
-                                <Grid Margin="0,4,0,0" ColumnSpacing="4">
+                                <!-- Layout: [icon] [Badge | workflow label] [ProgressBar] [xx%].
+                                     Both row types share these four columns, so no DataTemplateSelector. -->
+                                <Grid Margin="0,2,0,0" ColumnSpacing="4">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="16" />
                                         <ColumnDefinition Width="Auto" />
@@ -244,23 +245,33 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
-                                    <!-- Arrow icon -->
+                                    <!-- Arrow for a single subagent, gear for a workflow run -->
                                     <TextBlock Grid.Column="0"
-                                               Text="&#x21B3;"
+                                               Text="{x:Bind Icon}"
                                                FontSize="15"
                                                Foreground="{ThemeResource TertiaryTextBrush}"
                                                VerticalAlignment="Center" />
 
-                                    <!-- Model badge -->
+                                    <!-- Model badge (single subagents only) -->
                                     <Border Grid.Column="1"
                                             Background="{x:Bind BadgeColor}"
                                             CornerRadius="10" MinWidth="40"
                                             HorizontalAlignment="Left"
-                                            VerticalAlignment="Center">
+                                            VerticalAlignment="Center"
+                                            Visibility="{x:Bind IsWorkflow, Converter={StaticResource InvertedBoolToVisibilityConverter}}">
                                         <TextBlock Text="{x:Bind ModelBadge}"
                                                    FontSize="12" FontWeight="SemiBold" Padding="8,2"
                                                    Foreground="White" />
                                     </Border>
+
+                                    <!-- Run id + agent count (workflow rows only). Composed in the
+                                         ViewModel: l:Uids.Uid does not reach runtime template instances. -->
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind Label}"
+                                               FontSize="12"
+                                               Foreground="{ThemeResource SecondaryTextBrush}"
+                                               VerticalAlignment="Center"
+                                               Visibility="{x:Bind IsWorkflow, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                                     <!-- Progress bar -->
                                     <ProgressBar Grid.Column="2"
