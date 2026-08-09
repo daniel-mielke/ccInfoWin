@@ -84,10 +84,13 @@ CCInfoWindows/CCInfoWindows/
 ## Build Commands
 
 ```bash
+# Run in debug mode -- shorthand from the repo root, any shell
+.\dev
+
 # Debug build (default)
 dotnet build CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj
 
-# Run in debug mode
+# Run in debug mode (what dev.cmd wraps)
 dotnet run --project CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj
 
 # Release build (for desktop shortcut / taskbar pin)
