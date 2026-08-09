@@ -1,20 +1,72 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.6
-milestone_name: macOS ccInfo v1.15.2 Feature Parity
-status: shipped
+milestone: v1.7
+milestone_name: Workflow Subagent Visibility
+status: implemented
 workflow: ultracode / plan-mode (NOT GSD -- see CLAUDE.md "Workflows")
-roadmap: .planning/milestones/v1.6-ROADMAP.md
-stopped_at: v1.6 shipped -- tagged v1.6.0 on master 2026-08-09. All 46 review findings fixed, post-remediation UAT re-taken 2026-08-07/08 (0 regressions), 797/797 tests green. Next milestone planned but not started -- see .planning/milestones/v1.7-ROADMAP.md (workflow subagent visibility).
-last_updated: "2026-08-09T08:40:00.000Z"
-last_activity: 2026-08-09 -- v1.6.0 tagged; v1.7 roadmap written (workflow subagents are invisible because the subagent scan is not recursive)
+roadmap: .planning/milestones/v1.7-ROADMAP.md
+stopped_at: v1.7 code complete and verified against real 43-agent workflow data 2026-08-09. 809/809 tests green, Release build clean. NOT tagged, NOT shipped -- no version bump yet. Open -- see "v1.7 -- Ergebnis" below for the one deferred verification point (live watcher load).
+last_updated: "2026-08-09T12:30:00.000Z"
+last_activity: 2026-08-09 -- v1.7 implemented (recursive subagent scan + aggregated workflow row); v1.6.1 remains the shipped release
 progress:
-  total_phases: 6
-  completed_phases: 6
+  total_phases: 3
+  completed_phases: 3
   percent: 100
 ---
 
 # Project State
+
+## v1.7 — Ergebnis (2026-08-09)
+
+**Roadmap:** `.planning/milestones/v1.7-ROADMAP.md` — alle drei Phasen umgesetzt, keine Abweichung
+vom Entwurf. Tests **797 → 809**. Release-Build 0 Fehler; von den 84 Warnungen betrifft **keine**
+eine der geänderten Dateien (vorbestehende MVVMTK-Warnungen auf `[ObservableProperty]`-Feldern).
+
+| Phase | Inhalt | Status |
+|-------|--------|--------|
+| 1 | `SearchOption.AllDirectories` + `ExtractWorkflowId` + `SubagentContextData.WorkflowId` | **fertig**, 5 neue Tests |
+| 2 | `MainViewModel.BuildSubagentRows` (Gruppierung, Maximum, Sortierung) + resw + DataTemplate | **fertig**, 7 neue Tests |
+| 3 | Verifikation am laufenden Release-Build | **fertig bis auf einen Punkt**, siehe unten |
+
+### Laufzeitbeleg
+
+Kein echter Workflow-Lauf ausgelöst (der hätte ≥10 Agents und entsprechend Tokens gekostet).
+Stattdessen die **echten** Agent-Dateien der bestehenden Runs unter die aktive Session kopiert und
+ihre mtime 20 Minuten in die Zukunft gesetzt, damit sie nicht mitten in der Prüfung aus dem
+30-Sekunden-Fenster fallen. Danach restlos gelöscht; die 7 Original-Runs sind unversehrt.
+
+Angezeigt wurde (Screenshot `.planning/reviews/v17-uat-01-workflow-rows.png`, gitignored):
+
+```
+↳ [Opus 5]  ████░░░░░░░░  12%
+↳ [Opus 5]  ████░░░░░░░░  13%
+⚙ wf_0c8d1d8c-ede · 6 aktiv   ██████░░░░  28%
+⚙ wf_11f45d5b-27d · 43 aktiv  ██████░░░░  28%
+```
+
+| Prüfpunkt | Ergebnis |
+|---|---|
+| D-1 Kollaps ab dem ersten Agent | **PASS** — 43 Agents auf einer Zeile |
+| D-2 Maximum statt Durchschnitt | **PASS, gemessen** — der 43er-Run zeigt 28 % bei einem Gruppen-**Durchschnitt von 11,9 %** (min 48K, max 269K Tokens). Ein Durchschnittswert hätte 12 % angezeigt |
+| D-3 kein Modell-Badge | **PASS** — Badge nur in den beiden `↳`-Zeilen |
+| D-5 mehrere Runs = mehrere Zeilen | **PASS** — zwei Runs, zwei Zeilen, ordinal sortiert |
+| D-6 Run-ID wörtlich | **PASS** — `wf_11f45d5b-27d` deckt sich mit dem Ordnernamen |
+| Lokalisierung im DataTemplate | **PASS** — „· 43 aktiv" auf Deutsch; die ViewModel-Komposition umgeht die `l:Uids.Uid`-Falle wie geplant |
+| Gegenprobe normale Subagents | **PASS** — unveränderte Einzelbalken mit Badge |
+| **Breitenprüfung (Phase 3 Punkt 5)** | **PASS — Kürzen der Run-ID ist NICHT nötig.** Das längste Label („wf_11f45d5b-27d · 43 aktiv") lässt dem Balken in der Standardbreite rund zwei Drittel der Zeile. Damit ist die in D-6 offengelassene Nachjustierung entschieden: bleibt wörtlich |
+| CPU-Last | **0,05 %** über 20 s bei 51 gescannten Agent-Dateien (24 Kerne), 266 MB Working Set |
+
+### Der eine offene Punkt
+
+Die CPU-Messung lief gegen einen **ruhenden** Dateibestand. Phase 3 Punkt 3 zielt auf etwas anderes:
+44 *gleichzeitig schreibende* Agents lassen den FileSystemWatcher entsprechend oft feuern, und jedes
+`DataUpdated` löst ein `GetContextWindow` samt rekursivem Scan aus. Der Scan selbst ist damit als
+billig belegt, die **Watcher-Frequenz unter Last** nicht. Falls das je auffällt, ist der Debounce
+der Ort für den Fix, nicht der Scan.
+
+Ebenfalls nicht gemacht: Versionsbump und Tag. v1.6.1 bleibt die ausgelieferte Version.
+
+
 
 ## Project Reference
 
