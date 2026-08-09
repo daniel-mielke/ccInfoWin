@@ -51,6 +51,27 @@ GSD: promote via `/gsd-review-backlog`. Plan mode / ultracode: read this first.
   roll mechanism for the crash file, which means extracting the cap/roll helper so both files share it.
   Do not invent a third rotation scheme.
 
+### Found during v1.7 planning (2026-08-09)
+
+- **Subagent tokens never reach the STATISTIKEN section** — `JsonlService.cs:645` scans
+  `Directory.GetFiles(projectDir, JsonlFilePattern)` top-level only and then filters with
+  `.Where(f => !IsSubagentFile(f))`. Subagent files live at
+  `{projectDir}/{sessionUuid}/subagents/…`, so the top-level scan misses them anyway and the
+  filter is belt-and-braces for the fallback layout. Net effect: **no subagent's tokens or cost
+  are counted in the local statistics** — neither Agent-tool subagents nor workflow ones. That
+  contradicts FA-062 of the macOS spec ("Tokens und Kosten von Subagent-Sessions müssen in allen
+  Zeiträumen mitgezählt werden"). It does **not** affect the 5h / weekly quota, which comes from
+  the claude.ai usage API where subagent usage is already included server-side — so the visible
+  symptom is confined to the STATISTIKEN token counts and the cost analytics being too low.
+  Predates workflows entirely; deliberately kept out of the v1.7 milestone
+  (`.planning/milestones/v1.7-ROADMAP.md`, "Ausdrücklich NICHT im Scope") because that milestone
+  is about the context-window display, and folding a statistics-correctness change into it would
+  make a regression in either area hard to attribute.
+  **Open question before implementing:** deduplication. A subagent's tokens may already be
+  reflected in the parent session's entries; counting both would inflate the totals in the
+  opposite direction. Verify against real data first — the 1.64× inflation factor measured on
+  2026-08-07 (observation 6937) is the relevant precedent.
+
 ## Notes
 
 Root-cause research for shipped items: `.planning/research/rootcause-*.md`.
