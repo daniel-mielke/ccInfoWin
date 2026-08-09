@@ -20,6 +20,8 @@ public class JsonlServiceSubagentTests : IDisposable
     // validity filter; GetContextWindow is queried by project directory name directly.
     private const string ProjectDirName = "X--phase29-subagent-fixture";
     private const string CacheDirectoryName = "cache";
+    private const string SubagentsDirName = "subagents";
+    private const string WorkflowsDirName = "workflows";
 
     private readonly string _tempDir;
     private readonly string _cacheDir;
@@ -175,6 +177,121 @@ public class JsonlServiceSubagentTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
+    // v1.7 WORKFLOW-01: workflow agents live one level deeper and were invisible
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// The core v1.7 bug. A workflow agent sits at subagents/workflows/{runId}/agent-*.jsonl,
+    /// which the previous top-level-only scan never reached. Pre-fix the whole section stayed
+    /// empty for a pure workflow session — silently, because the empty result then took the
+    /// project-level fallback path instead of logging anything.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_WorkflowAgent_IsFoundAndCarriesRunId()
+    {
+        ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "echo",
+            workflowId: "wf_11f45d5b-27d");
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var subagent = svc.GetContextWindow(ProjectDirName).Subagents.Single(s => s.AgentId == "echo");
+
+        Assert.Equal("wf_11f45d5b-27d", subagent.WorkflowId);
+    }
+
+    /// <summary>
+    /// The flat Agent-tool layout must stay classified as "not a workflow" — WorkflowId null is
+    /// what keeps those agents on their own individual bars instead of being collapsed away.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_PlainSubagent_HasNoWorkflowId()
+    {
+        ArrangeSubagentFixture(assistantTimestamp: DateTimeOffset.UtcNow, agentId: "foxtrot");
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var subagent = svc.GetContextWindow(ProjectDirName).Subagents.Single(s => s.AgentId == "foxtrot");
+
+        Assert.Null(subagent.WorkflowId);
+    }
+
+    /// <summary>
+    /// Both layouts coexist in one session (a workflow started from a session that also used the
+    /// Agent tool). One recursive scan has to return both, each with its own classification.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_MixedSession_ReturnsBothLayouts()
+    {
+        var plainFile = ArrangeSubagentFixture(assistantTimestamp: DateTimeOffset.UtcNow, agentId: "golf");
+        ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "hotel",
+            workflowId: "wf_deadbeef-01",
+            sessionUuid: SessionUuidOf(plainFile));
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var subagents = svc.GetContextWindow(ProjectDirName).Subagents;
+
+        Assert.Null(subagents.Single(s => s.AgentId == "golf").WorkflowId);
+        Assert.Equal("wf_deadbeef-01", subagents.Single(s => s.AgentId == "hotel").WorkflowId);
+    }
+
+    /// <summary>
+    /// Two concurrent runs must keep their own run ids — the grouping downstream turns each into
+    /// its own row (D-5), so a shared or swapped id would merge two unrelated runs.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_TwoConcurrentRuns_StayDistinct()
+    {
+        var firstFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "india",
+            workflowId: "wf_aaaa-1");
+        ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "juliett",
+            workflowId: "wf_bbbb-2",
+            sessionUuid: SessionUuidOf(firstFile));
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var subagents = svc.GetContextWindow(ProjectDirName).Subagents;
+
+        Assert.Equal("wf_aaaa-1", subagents.Single(s => s.AgentId == "india").WorkflowId);
+        Assert.Equal("wf_bbbb-2", subagents.Single(s => s.AgentId == "juliett").WorkflowId);
+    }
+
+    /// <summary>
+    /// A workflow agent write must not register a phantom session either — the walk-up in
+    /// ProcessSingleFile now has two extra levels to climb before it reaches the project.
+    /// </summary>
+    [Fact]
+    public async Task ProcessFilesForTest_WorkflowAgentFile_RegistersNoPhantomSession()
+    {
+        var agentFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "kilo",
+            workflowId: "wf_cccc-3");
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        await svc.ProcessFilesForTestAsync([agentFile]);
+
+        Assert.DoesNotContain(svc.Sessions, s => s.Id == SessionUuidOf(agentFile));
+        Assert.DoesNotContain(svc.Sessions, s => s.Id == WorkflowsDirName);
+        Assert.Contains(svc.Sessions, s => s.Id == ProjectDirName);
+        Assert.Contains(svc.GetContextWindow(ProjectDirName).Subagents, s => s.AgentId == "kilo");
+    }
+
+    // -------------------------------------------------------------------------
     // Fixture helpers
     // -------------------------------------------------------------------------
 
@@ -182,38 +299,57 @@ public class JsonlServiceSubagentTests : IDisposable
         => new(projectsDirectoryOverride: _tempDir, cacheDirectoryOverride: _cacheDir);
 
     /// <summary>
-    /// Subagent files live at {projectDir}/{sessionUuid}/subagents/agent-{id}.jsonl, so two hops up
-    /// from the agent file is the session UUID — the value that must never become a session id.
+    /// Walks up to the "subagents" directory and takes one more hop — the session UUID, the value
+    /// that must never become a session id. A fixed hop count would not do: the Agent-tool layout
+    /// puts the file two levels below the session directory, the workflow layout four
+    /// (subagents/workflows/{runId}/), where two hops would return "workflows".
     /// </summary>
-    private static string SessionUuidOf(string agentFilePath) =>
-        Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(agentFilePath)))!;
+    private static string SessionUuidOf(string agentFilePath)
+    {
+        var dir = Path.GetDirectoryName(agentFilePath);
+        while (dir is not null && !string.Equals(Path.GetFileName(dir), SubagentsDirName, StringComparison.OrdinalIgnoreCase))
+            dir = Path.GetDirectoryName(dir);
+
+        return Path.GetFileName(Path.GetDirectoryName(dir))!;
+    }
 
     /// <summary>
     /// Stages: {_tempDir}/{ProjectDirName}/{sessionUuid}.jsonl (main session,
     /// one fresh assistant entry — required by FindSubagentFilesForSession)
-    /// + {_tempDir}/{ProjectDirName}/{sessionUuid}/subagents/agent-{id}.jsonl
-    /// (the subagent file with one assistant entry at assistantTimestamp).
-    /// Returns the absolute path of the subagent file so the caller can adjust
-    /// its mtime.
+    /// + the subagent file with one assistant entry at assistantTimestamp, either at
+    /// {sessionUuid}/subagents/agent-{id}.jsonl (workflowId null, Agent tool) or at
+    /// {sessionUuid}/subagents/workflows/{workflowId}/agent-{id}.jsonl (workflow run).
+    /// Pass an existing sessionUuid to stage several agents into the same session — a second
+    /// session file would otherwise become the newest one and hide the first agent.
+    /// Returns the absolute path of the subagent file so the caller can adjust its mtime.
     /// </summary>
-    private string ArrangeSubagentFixture(DateTimeOffset assistantTimestamp, string agentId)
+    private string ArrangeSubagentFixture(
+        DateTimeOffset assistantTimestamp,
+        string agentId,
+        string? workflowId = null,
+        string? sessionUuid = null)
     {
         var projectDir = Path.Combine(_tempDir, ProjectDirName);
         Directory.CreateDirectory(projectDir);
 
-        var sessionUuid = Guid.NewGuid().ToString();
+        sessionUuid ??= Guid.NewGuid().ToString();
 
         // Main session JSONL — fresh assistant entry, must exist + be newest.
         var sessionFile = Path.Combine(projectDir, $"{sessionUuid}.jsonl");
-        WriteAssistantJsonlLine(
-            sessionFile,
-            sessionId: sessionUuid,
-            isSidechain: false,
-            timestamp: DateTimeOffset.UtcNow);
+        if (!File.Exists(sessionFile))
+        {
+            WriteAssistantJsonlLine(
+                sessionFile,
+                sessionId: sessionUuid,
+                isSidechain: false,
+                timestamp: DateTimeOffset.UtcNow);
+        }
 
-        // Subagent file under {sessionUuid}/subagents/agent-{id}.jsonl
-        var subagentDir = Path.Combine(projectDir, sessionUuid, "subagents");
+        var subagentDir = workflowId is null
+            ? Path.Combine(projectDir, sessionUuid, SubagentsDirName)
+            : Path.Combine(projectDir, sessionUuid, SubagentsDirName, WorkflowsDirName, workflowId);
         Directory.CreateDirectory(subagentDir);
+
         var agentFile = Path.Combine(subagentDir, $"agent-{agentId}.jsonl");
         WriteAssistantJsonlLine(
             agentFile,

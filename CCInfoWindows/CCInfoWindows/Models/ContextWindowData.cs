@@ -13,6 +13,13 @@ public record SubagentContextData
     public string? ModelName { get; init; }
     public DateTimeOffset LastActivity { get; init; }
 
+    /// <summary>
+    /// Run id of the workflow that spawned this agent, taken literally from the directory name
+    /// under subagents/workflows/ (e.g. "wf_11f45d5b-27d"). Null for agents spawned by the Agent
+    /// tool, which live one level higher. Only used to group agents of one run into a single row.
+    /// </summary>
+    public string? WorkflowId { get; init; }
+
     public double Utilization
     {
         get

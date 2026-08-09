@@ -22,6 +22,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
     private const int DebounceMilliseconds = 2_000;
     private const string CacheFileName = "jsonl-cache.json";
     private const string SubagentsDirectoryName = "subagents";
+    private const string WorkflowsDirectoryName = "workflows";
     private const string AgentFilePattern = "agent-*.jsonl";
     private const string JsonlFilePattern = "*.jsonl";
     private const long TierBreakpointTokens = 200_000;
@@ -886,11 +887,15 @@ public sealed class JsonlService : IJsonlService, IDisposable
     {
         var result = new List<string>();
 
-        // Primary: {sessionUUID}/subagents/agent-*.jsonl
+        // Primary: {sessionUUID}/subagents/agent-*.jsonl (Agent tool) and
+        // {sessionUUID}/subagents/workflows/wf_{runId}/agent-*.jsonl (workflow runs).
+        // Recursive so one scan covers both depths — a top-level-only scan returned zero
+        // hits for a pure workflow session, which then silently fell through to the
+        // project-level fallback below and produced an empty list.
         var sessionDir = Path.ChangeExtension(sessionFile, null);
         var subagentDir = Path.Combine(sessionDir, SubagentsDirectoryName);
         if (Directory.Exists(subagentDir))
-            result.AddRange(Directory.GetFiles(subagentDir, AgentFilePattern));
+            result.AddRange(Directory.GetFiles(subagentDir, AgentFilePattern, SearchOption.AllDirectories));
 
         // Fallback: project dir level agent files
         if (result.Count == 0)
@@ -954,7 +959,8 @@ public sealed class JsonlService : IJsonlService, IDisposable
                     TotalTokens = totalTokens,
                     MaxTokens = maxTokens,
                     ModelName = modelName,
-                    LastActivity = lastActivity
+                    LastActivity = lastActivity,
+                    WorkflowId = ExtractWorkflowId(file)
                 });
             }
             catch (IOException ex)
@@ -968,6 +974,20 @@ public sealed class JsonlService : IJsonlService, IDisposable
         }
 
         return result.OrderBy(a => a.AgentId, StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>
+    /// Run id of a workflow agent, read from the path rather than from the neighbouring
+    /// .meta.json — a string check against zero extra file handles, and the metadata carries
+    /// nothing the aggregated row needs. Returns null for the flat Agent-tool layout.
+    /// </summary>
+    private static string? ExtractWorkflowId(string filePath)
+    {
+        var runDir = Path.GetDirectoryName(filePath);
+        var containerName = Path.GetFileName(Path.GetDirectoryName(runDir));
+        return string.Equals(containerName, WorkflowsDirectoryName, StringComparison.OrdinalIgnoreCase)
+            ? Path.GetFileName(runDir)
+            : null;
     }
 
     private static string ExtractAgentId(string filePath)
