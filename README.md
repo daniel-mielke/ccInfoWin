@@ -2,7 +2,7 @@
 
 Real-time Claude Code usage monitoring for Windows. A Windows port of [ccInfo](https://github.com/stefanlange/ccInfo) (macOS).
 
-**Current version:** v1.6.0 — macOS v1.15.2 feature parity + hardening.
+**Current version:** v1.6.1 — macOS v1.15.2 feature parity + hardening.
 
 ## Features
 

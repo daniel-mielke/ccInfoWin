@@ -102,6 +102,12 @@ fixed and re-verified in-app, then confirmed clean by a manual retest on 2026-08
 The fifth is deliberately unfixed: the default window size is too small for the footer. Judged a
 non-issue — resizing solves it and no data is hidden.
 
+**v1.6.1 (2026-08-09) — installer patch.** `installer/setup.iss` carried `Flags: checked`, which is
+not a valid `[Tasks]` flag, so `iscc` aborted before writing anything. It went unnoticed because Inno
+Setup was never installed on the build machine: a release step CLAUDE.md mandates had in fact never
+run once. Removing the flag is behaviour-neutral — `[Tasks]` entries are pre-selected by default.
+v1.6.0 shipped with the broken script, hence the patch tag rather than moving a published tag.
+
 ---
 
 ## v1.4 macOS v1.11.1 Feature Parity (Shipped: 2026-05-07)
