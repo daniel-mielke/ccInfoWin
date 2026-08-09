@@ -1,11 +1,11 @@
 # Milestones
 
-## v1.6 macOS v1.15.2 Feature Parity (Code complete: 2026-08-05 · UAT: 2026-08-06 · remediation in progress · NOT tagged)
+## v1.6 macOS v1.15.2 Feature Parity (Shipped: 2026-08-09)
 
 **Phases completed:** 6 phases (0-5), 5 commits, no GSD (ultracode / plan mode)
 **Changes:** 45 files, +3,399/-705 lines
 **Tests:** 345 → 434 GREEN (+89, incl. 3 `AxisLabelFitsInGutter` cases from the U6 fix); baseline made
-truly green in phase 0. Then 434 → 673 across the post-UAT remediation waves below.
+truly green in phase 0. Then 434 → 797 across the post-UAT remediation waves below.
 
 **Key accomplishments:**
 
@@ -48,10 +48,9 @@ U6 failed on the first attempt (axis labels wrapped — "100%" measures 24.36px 
 was fixed in `d975646` by widening `ChartRenderer.LeftMargin` 22 → 32. Full record with per-checkpoint
 evidence in `.planning/STATE.md`.
 
-**Post-UAT remediation wave (2026-08-06, in progress — branch `fix/repo-review-2026-08-06`):** a
-full-repo review of `b16c992` produced 46 findings (2 High, 31 Medium, 13 Low). Waves 1 and 2 have
-landed — 10 commits, 673/673 tests green. Highlights, because several change behaviour the UAT
-recorded:
+**Post-UAT remediation (2026-08-06 … 08-08, branch `fix/repo-review-2026-08-06`):** a full-repo
+review of `b16c992` produced 46 findings (2 High, 31 Medium, 13 Low). **All 46 are fixed** across
+five waves — 797/797 tests green. Highlights, because several change behaviour the UAT recorded:
 
 - Deduplication was inert against real JSONL: `BuildDeduplicationKey` read a `uniqueHash` field
   Claude Code never writes, so the key was always empty and every assistant turn was counted 2–4×.
@@ -85,11 +84,23 @@ recorded:
   banner and no log. Timers are created before cache hydration now, and the existing
   `HasApiError`/`ApiErrorMessage` InfoBar is actually used.
 
-**Outstanding before the tag:** the test-suite findings (31–33), rewiring `IsPricingError` off
-`IPricingService.Source` instead of an exception that can never be thrown, deleting the three dead
-messenger channels (finding 37), and — most importantly — **re-looking the UAT checkpoints the
-remediation invalidated**. U1–U11 were verified against pre-fix behaviour; STATE.md's
-"Review-Remediation 2026-08-06" section says which ones still hold and which do not.
+**Post-remediation UAT (2026-08-07/08) — the re-look that unblocked the tag.** The original U1–U11
+run predated the fixes, so its evidence had to be discarded and re-taken. All nine behaviour changes
+the remediation introduced were verified in the running app, **0 regressions**. Record and 21
+screenshots in `.planning/reviews/2026-08-07_ui-uat-post-remediation.md` (gitignored).
+
+That pass found five defects, **all pre-existing** rather than caused by the remediation. Four were
+fixed and re-verified in-app, then confirmed clean by a manual retest on 2026-08-08 (tests 773 → 797):
+
+- `1ede115` — one malformed LiteLLM pricing entry discarded the whole catalogue, and the failure
+  logged on every retry; per-entry parsing plus flood suppression now.
+- `0ff3b61` — MainView's icon-only buttons had lost their tooltip and automation name.
+- `379879b` — dropdown captions ignored a runtime language switch (`LabeledOption` + `LanguageApplied`).
+- `668b2f5` — session rename never persisted: WinUI's default `UpdateSourceTrigger=LostFocus` wrote the
+  TextBox back *after* the save command had already read the stale value.
+
+The fifth is deliberately unfixed: the default window size is too small for the footer. Judged a
+non-issue — resizing solves it and no data is hidden.
 
 ---
 

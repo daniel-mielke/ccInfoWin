@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: macOS ccInfo v1.15.2 Feature Parity
-status: uat_complete
+status: shipped
 workflow: ultracode / plan-mode (NOT GSD -- see CLAUDE.md "Workflows")
 roadmap: .planning/milestones/v1.6-ROADMAP.md
-stopped_at: Visual UAT complete (U1-U11 pass). A full-repo review then produced 46 findings; remediation waves 1+2 have landed on branch fix/repo-review-2026-08-06. The ship tag is NOT ready -- the UAT evidence predates the fixes. See "Review-Remediation 2026-08-06".
-last_updated: "2026-08-06T17:10:00.000Z"
-last_activity: 2026-08-06 -- full-repo review (46 findings); remediation waves 1+2 landed, 673/673 tests green
+stopped_at: v1.6 shipped -- tagged v1.6.0 on master 2026-08-09. All 46 review findings fixed, post-remediation UAT re-taken 2026-08-07/08 (0 regressions), 797/797 tests green. Next milestone planned but not started -- see .planning/milestones/v1.7-ROADMAP.md (workflow subagent visibility).
+last_updated: "2026-08-09T08:40:00.000Z"
+last_activity: 2026-08-09 -- v1.6.0 tagged; v1.7 roadmap written (workflow subagents are invisible because the subagent scan is not recursive)
 progress:
   total_phases: 6
   completed_phases: 6
