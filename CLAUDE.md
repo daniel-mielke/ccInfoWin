@@ -34,16 +34,6 @@ edit/commit guards are opt-in via `.planning/config.json` `hooks.*` and are
 currently **off** — they advise, never block. Don't enable `hooks.community`
 or `hooks.workflow_guard` unless you want GSD enforcement everywhere.
 
-## Stack
-
-- **Language:** C# 13 / .NET 9
-- **UI Framework:** WinUI 3 (Windows App SDK 1.8)
-- **MVVM:** CommunityToolkit.Mvvm 8.4 (source generators)
-- **DI:** Microsoft.Extensions.DependencyInjection
-- **Credentials:** AdysTech.CredentialManager 3.1 (Win32 Credential Manager / DPAPI)
-- **Charts:** Win2D 1.3.2 (`ChartDrawing`, `ChartRenderer`, `ChartColors`, `ExportHelper`, `MainView`)
-- **Web:** WebView2 (embedded in WinUI 3)
-
 ## MVVM Conventions
 
 - Use `[ObservableProperty]` for bindable properties (generates PascalCase property from `_camelCase` field)
@@ -65,21 +55,6 @@ or `hooks.workflow_guard` unless you want GSD enforcement everywhere.
 - _camelCase: private fields
 - I-prefix: interfaces (e.g., `INavigationService`)
 - Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`
-
-## Project Structure
-
-```
-CCInfoWindows/CCInfoWindows/
-  Models/          -- Plain data objects (AppSettings, UsageData, etc.)
-  ViewModels/      -- Observable state + commands
-  Views/           -- XAML pages (LoginView, MainView, SettingsView)
-  Services/        -- Business logic + I/O
-    Interfaces/    -- Service contracts
-  Messages/        -- CommunityToolkit.Mvvm messenger message types
-  Helpers/         -- Pure utility functions
-  Converters/      -- XAML value converters
-  Assets/          -- Static resources (icons, images)
-```
 
 ## Build Commands
 
@@ -123,19 +98,6 @@ dotnet build CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj -c Release -o CCIn
 - **`Debug.WriteLine` is not a diagnostic channel** -- it carries `[Conditional("DEBUG")]`, so the compiler erases it from the Release build the users run. A catch body whose only statement is `Debug.WriteLine` is an empty catch body in production.
 - **Unhandled exceptions** keep going to `crash.log` via `App.OnUnhandledException`, which also mirrors them into `app.log`. `AppPaths` owns both paths -- never rebuild `%LOCALAPPDATA%\CCInfoWindows` by hand.
 - **Never pass a token or raw credential to the log** -- the sink's `sk-ant-*` redaction is defence in depth, not a licence.
-
-## Clean Code Rules (authoritative)
-
-Based on Robert C. Martin's Clean Code principles. All generated code MUST follow these rules:
-
-- **No magic numbers** -- extract hard-coded values into named constants with meaningful names
-- **Meaningful names** -- variables, methods, classes must reveal intent; if a name needs a comment, rename it
-- **Small functions (SRP)** -- each function does one thing well; break large functions into smaller, focused ones
-- **DRY** -- never duplicate logic; reuse via methods, classes, or abstractions
-- **Wrap external libraries** -- never embed third-party API calls directly in business logic; use wrapper classes so libraries can be swapped without refactoring consumers
-- **Minimal comments** -- code should be self-documenting; only comment unusual behavior or non-obvious "why"; never comment obvious things
-- **Delete commented-out code** -- Git preserves history; commented-out code is noise, just delete it
-- **F.I.R.S.T. tests** -- Fast, Independent, Repeatable, Self-Validating, Timely
 
 ## Secure Coding Rules (authoritative, OWASP-based)
 
