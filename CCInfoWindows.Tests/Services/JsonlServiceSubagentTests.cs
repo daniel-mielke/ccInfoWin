@@ -292,8 +292,387 @@ public class JsonlServiceSubagentTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
+    // v1.7 redesign: the staleness gate applies per RUN, and journal.jsonl feeds the counts
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// The core of the redesign. A workflow row reports the SUMMED context of its run, and a
+    /// finished agent stops writing — so a per-agent gate drops exactly the agents the sum needs.
+    /// Measured on the real 43-agent run, the per-agent gate left a median 22 % of the true token
+    /// sum visible and 4.4 % at the moment of the last write. As long as any agent of the run is
+    /// fresh, every agent of that run must be read.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_WorkflowRun_StaleAgentStaysVisibleWhileASiblingIsFresh()
+    {
+        var staleFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow.AddMinutes(-5),
+            agentId: "finished",
+            workflowId: "wf_gate-1");
+        var freshFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "running",
+            workflowId: "wf_gate-1",
+            sessionUuid: SessionUuidOf(staleFile));
+
+        var staleMtime = DateTime.UtcNow.AddMinutes(-5);
+        File.SetLastWriteTimeUtc(staleFile, staleMtime);
+        AssertMtimeWasSet(staleFile, staleMtime);
+        AssertMtimeIsFresh(freshFile);
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var subagents = svc.GetContextWindow(ProjectDirName).Subagents;
+
+        // Pre-fix: only "running" survives and the row under-reports the run's tokens.
+        Assert.Contains(subagents, s => s.AgentId == "finished");
+        Assert.Contains(subagents, s => s.AgentId == "running");
+    }
+
+    /// <summary>
+    /// The other half of the per-run gate: once nothing in the run is fresh, the whole run goes —
+    /// not one agent of it stays behind. This is what retires a finished run from the display.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_WorkflowRun_AllAgentsStale_WholeRunDisappears()
+    {
+        var firstFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow.AddMinutes(-5),
+            agentId: "gone-a",
+            workflowId: "wf_gate-2");
+        var secondFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow.AddMinutes(-5),
+            agentId: "gone-b",
+            workflowId: "wf_gate-2",
+            sessionUuid: SessionUuidOf(firstFile));
+
+        var staleMtime = DateTime.UtcNow.AddMinutes(-5);
+        foreach (var file in new[] { firstFile, secondFile })
+        {
+            File.SetLastWriteTimeUtc(file, staleMtime);
+            AssertMtimeWasSet(file, staleMtime);
+        }
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var subagents = svc.GetContextWindow(ProjectDirName).Subagents;
+
+        Assert.DoesNotContain(subagents, s => s.WorkflowId == "wf_gate-2");
+    }
+
+    /// <summary>
+    /// Regression guard for the grouping key. Plain Agent-tool files have a null run id; grouping
+    /// them by that null would put every plain agent of a session into ONE group and let a single
+    /// fresh agent drag all of its stale siblings back onto the screen. Each plain file must stay a
+    /// group of one.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_PlainSubagents_FreshOneDoesNotReviveStaleSibling()
+    {
+        var staleFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow.AddMinutes(-5),
+            agentId: "plain-stale");
+        var freshFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "plain-fresh",
+            sessionUuid: SessionUuidOf(staleFile));
+
+        var staleMtime = DateTime.UtcNow.AddMinutes(-5);
+        File.SetLastWriteTimeUtc(staleFile, staleMtime);
+        AssertMtimeWasSet(staleFile, staleMtime);
+        AssertMtimeIsFresh(freshFile);
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var subagents = svc.GetContextWindow(ProjectDirName).Subagents;
+
+        Assert.Contains(subagents, s => s.AgentId == "plain-fresh");
+        Assert.DoesNotContain(subagents, s => s.AgentId == "plain-stale");
+    }
+
+    /// <summary>
+    /// journal.jsonl is the only place the agent counts exist: one "started" line per spawned agent,
+    /// one "result" line per finished one. Both numbers land on every agent of the run, because the
+    /// display groups by run id and reads them off one member.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_WorkflowRunWithJournal_CarriesStartedAndDoneCounts()
+    {
+        var agentFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "counted",
+            workflowId: "wf_journal-1");
+        ArrangeWorkflowJournal(agentFile, started: 30, done: 29);
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var subagent = svc.GetContextWindow(ProjectDirName).Subagents.Single(s => s.AgentId == "counted");
+
+        Assert.Equal(30, subagent.RunAgentsStarted);
+        Assert.Equal(29, subagent.RunAgentsDone);
+    }
+
+    /// <summary>
+    /// No journal — older runs and other harness versions have none. Zero counts are the signal for
+    /// the label to drop the count rather than render a fabricated "0/0".
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_WorkflowRunWithoutJournal_ReportsZeroCounts()
+    {
+        ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "uncounted",
+            workflowId: "wf_journal-2");
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var subagent = svc.GetContextWindow(ProjectDirName).Subagents.Single(s => s.AgentId == "uncounted");
+
+        Assert.Equal(0, subagent.RunAgentsStarted);
+        Assert.Equal(0, subagent.RunAgentsDone);
+    }
+
+    /// <summary>
+    /// A journal beyond the 1 MB tail window would be read only from its tail, producing a count
+    /// that is quietly too low. The guard reports no count at all instead — the row then shows
+    /// tokens only, which is honest, where "12/14 agents done" for a 300-agent run is not.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_OversizedJournal_ReportsZeroCountsRatherThanAPartialOne()
+    {
+        var agentFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "oversized",
+            workflowId: "wf_journal-3");
+        ArrangeWorkflowJournal(agentFile, started: 4, done: 4, padToBytes: 1_100_000);
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var subagent = svc.GetContextWindow(ProjectDirName).Subagents.Single(s => s.AgentId == "oversized");
+
+        Assert.Equal(0, subagent.RunAgentsStarted);
+        Assert.Equal(0, subagent.RunAgentsDone);
+    }
+
+    // -------------------------------------------------------------------------
+    // Phase 4: run metadata for the row tooltip
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// The script lives in a DIFFERENT tree from the agent transcripts —
+    /// {session}/workflows/scripts/{name}-{runId}.js against
+    /// {session}/subagents/workflows/{runId}/ — and both trees contain a directory called
+    /// "workflows" at different depths. The parser itself is covered in WorkflowScriptMetaTests;
+    /// this is the guard on the service walking to the right place and matching the right file.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_WorkflowRunWithScript_ReadsNameDescriptionAndPhases()
+    {
+        var agentFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "described",
+            workflowId: "wf_meta-1");
+        ArrangeWorkflowScript(
+            agentFile,
+            """
+            export const meta = {
+              name: 'review-v16-to-v17',
+              description: 'Multi-dimensional review of the diff',
+              phases: [
+                { title: 'Review', detail: 'per dimension' },
+                { title: 'Verify' },
+              ],
+            }
+            """);
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var subagent = svc.GetContextWindow(ProjectDirName).Subagents.Single(s => s.AgentId == "described");
+
+        Assert.Equal("review-v16-to-v17", subagent.RunName);
+        Assert.Equal("Multi-dimensional review of the diff", subagent.RunDescription);
+        Assert.Equal(["Review", "Verify"], subagent.RunPhases.Select(p => p.Title));
+        Assert.Equal("per dimension", subagent.RunPhases[0].Detail);
+    }
+
+    /// <summary>
+    /// The run directory's creation time is the ONLY start time the display ever uses. A run also
+    /// writes an exact startTime into a completed-run JSON, but that file appears at completion, and
+    /// a completed run stops writing — the staleness gate has dropped its row before the file
+    /// exists, so reading it would be code that never runs against a visible row.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_WorkflowRun_TakesTheStartTimeFromTheRunDirectory()
+    {
+        var agentFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "live",
+            workflowId: "wf_meta-2");
+        var runDirectory = Path.GetDirectoryName(agentFile)!;
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var subagent = svc.GetContextWindow(ProjectDirName).Subagents.Single(s => s.AgentId == "live");
+
+        Assert.Equal(
+            new DateTimeOffset(Directory.GetCreationTimeUtc(runDirectory), TimeSpan.Zero),
+            subagent.RunStartedUtc);
+        Assert.Null(subagent.RunName);
+        Assert.Null(subagent.RunDescription);
+        Assert.Empty(subagent.RunPhases);
+    }
+
+    /// <summary>
+    /// A completed-run JSON next to a run must change nothing — it is the file whose handling was
+    /// deliberately removed. Without this the fallback could be reintroduced unnoticed.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_CompletedRunJsonPresent_IsIgnored()
+    {
+        var agentFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "ignores-json",
+            workflowId: "wf_meta-4");
+        ArrangeCompletedRunJson(agentFile, name: "json-name", summary: "json-summary");
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var subagent = svc.GetContextWindow(ProjectDirName).Subagents.Single(s => s.AgentId == "ignores-json");
+
+        Assert.Null(subagent.RunName);
+        Assert.Null(subagent.RunDescription);
+    }
+
+    [Fact]
+    public async Task GetContextWindow_PlainSubagent_CarriesNoRunMetadata()
+    {
+        ArrangeSubagentFixture(assistantTimestamp: DateTimeOffset.UtcNow, agentId: "plain-meta");
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var subagent = svc.GetContextWindow(ProjectDirName).Subagents.Single(s => s.AgentId == "plain-meta");
+
+        Assert.Equal(default, subagent.RunStartedUtc);
+        Assert.Null(subagent.RunName);
+        Assert.Null(subagent.RunDescription);
+    }
+
+    /// <summary>
+    /// Both fields are free text out of a user-written script (CLAUDE.md: file content is
+    /// untrusted). A newline would break the tooltip's line layout and an unbounded length would
+    /// stretch it, so control characters become spaces and the description is capped at 200
+    /// characters. Asserted through the service, not the parser, so the sanitisation cannot be
+    /// bypassed by a future caller that skips it.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_ScriptWithNewlineAndOverlongDescription_ArrivesSingleLineAndCapped()
+    {
+        var agentFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "hostile",
+            workflowId: "wf_meta-3");
+        var description = new string('a', 150) + @"\nsecond line\t" + new string('b', 150);
+        ArrangeWorkflowScript(
+            agentFile,
+            $"export const meta = {{ name: 'nasty', description: '{description}' }}");
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var subagent = svc.GetContextWindow(ProjectDirName).Subagents.Single(s => s.AgentId == "hostile");
+
+        Assert.Equal(200, subagent.RunDescription!.Length);
+        Assert.All(subagent.RunDescription, c => Assert.False(char.IsControl(c)));
+    }
+
+    // -------------------------------------------------------------------------
     // Fixture helpers
     // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Writes a run's script — which lives in a DIFFERENT tree from the agent transcripts:
+    /// {session}/workflows/scripts/{name}-{runId}.js, not {session}/subagents/workflows/{runId}/.
+    /// Both trees hold a directory called "workflows"; conflating them is the fixture's version of
+    /// the same mistake the production path can make.
+    ///
+    /// The file name deliberately carries a leading name segment, because production matches the run
+    /// id as a SUFFIX and a fixture named plainly "{runId}.js" would not exercise that.
+    /// </summary>
+    private static void ArrangeWorkflowScript(string workflowAgentFile, string script)
+    {
+        var runDirectory = Path.GetDirectoryName(workflowAgentFile)!;
+        var sessionDirectory = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(runDirectory)))!;
+        var scriptsDirectory = Path.Combine(sessionDirectory, WorkflowsDirName, "scripts");
+        Directory.CreateDirectory(scriptsDirectory);
+
+        File.WriteAllText(
+            Path.Combine(scriptsDirectory, $"some-workflow-{Path.GetFileName(runDirectory)}.js"), script);
+    }
+
+    /// <summary>
+    /// Writes the completed-run JSON a finished run leaves behind. Only used to prove it is IGNORED
+    /// — nothing reads it any more, see GetContextWindow_CompletedRunJsonPresent_IsIgnored.
+    /// </summary>
+    private static void ArrangeCompletedRunJson(string workflowAgentFile, string name, string summary)
+    {
+        var runDirectory = Path.GetDirectoryName(workflowAgentFile)!;
+        var sessionDirectory = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(runDirectory)))!;
+        var metadataDirectory = Path.Combine(sessionDirectory, WorkflowsDirName);
+        Directory.CreateDirectory(metadataDirectory);
+
+        var json = JsonSerializer.Serialize(new
+        {
+            workflowName = name,
+            summary,
+            startTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            timestamp = DateTimeOffset.UtcNow.ToString("O")
+        });
+
+        File.WriteAllText(Path.Combine(metadataDirectory, Path.GetFileName(runDirectory) + ".json"), json);
+    }
+
+    /// <summary>
+    /// Writes a journal.jsonl next to a workflow agent file: one "started" line per spawned agent
+    /// and one "result" line per finished one, in the interleaved order a real run produces.
+    /// padToBytes inflates the result payloads to exercise the oversized-journal guard.
+    /// </summary>
+    private static void ArrangeWorkflowJournal(string workflowAgentFile, int started, int done, int padToBytes = 0)
+    {
+        var runDir = Path.GetDirectoryName(workflowAgentFile)!;
+        var padding = padToBytes > 0 ? new string('x', Math.Max(1, padToBytes / Math.Max(done, 1))) : string.Empty;
+
+        var lines = new List<string>();
+        for (var i = 0; i < started; i++)
+        {
+            lines.Add(JsonSerializer.Serialize(new { type = "started", key = $"v2:{i:x8}", agentId = $"a{i:x4}" }));
+            if (i < done)
+                lines.Add(JsonSerializer.Serialize(new { type = "result", key = $"v2:{i:x8}", agentId = $"a{i:x4}", result = padding }));
+        }
+
+        File.WriteAllLines(Path.Combine(runDir, "journal.jsonl"), lines);
+    }
+
+    /// <summary>
+    /// Asserts a fixture file's mtime is inside the 30s activity window, so a failure downstream
+    /// points at the code rather than at an AV product that touched the file.
+    /// </summary>
+    private static void AssertMtimeIsFresh(string filePath)
+    {
+        var age = DateTime.UtcNow - File.GetLastWriteTimeUtc(filePath);
+        Assert.True(
+            age < TimeSpan.FromSeconds(20),
+            $"fixture file should be fresh but its mtime is {age} old — test environment hostile to mtime control (AV likely).");
+    }
 
     private JsonlService BuildService()
         => new(projectsDirectoryOverride: _tempDir, cacheDirectoryOverride: _cacheDir);

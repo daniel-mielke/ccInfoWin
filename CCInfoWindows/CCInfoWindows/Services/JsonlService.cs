@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using CCInfoWindows.Helpers;
@@ -24,6 +25,9 @@ public sealed class JsonlService : IJsonlService, IDisposable
     private const string SubagentsDirectoryName = "subagents";
     private const string WorkflowsDirectoryName = "workflows";
     private const string AgentFilePattern = "agent-*.jsonl";
+    private const string WorkflowJournalFileName = "journal.jsonl";
+    private const string JournalStartedType = "started";
+    private const string JournalResultType = "result";
     private const string JsonlFilePattern = "*.jsonl";
     private const long TierBreakpointTokens = 200_000;
     private const int MaxWatcherRestarts = 5;
@@ -892,6 +896,9 @@ public sealed class JsonlService : IJsonlService, IDisposable
         // Recursive so one scan covers both depths — a top-level-only scan returned zero
         // hits for a pure workflow session, which then silently fell through to the
         // project-level fallback below and produced an empty list.
+        //
+        // Windows-only: the workflows/ branch has no macOS counterpart — upstream ccInfo knows
+        // only the flat Agent-tool path. Full note on SubagentContextData.WorkflowId.
         var sessionDir = Path.ChangeExtension(sessionFile, null);
         var subagentDir = Path.Combine(sessionDir, SubagentsDirectoryName);
         if (Directory.Exists(subagentDir))
@@ -912,68 +919,243 @@ public sealed class JsonlService : IJsonlService, IDisposable
         return result;
     }
 
+    /// <summary>
+    /// Reads the context state of every subagent that is still worth showing.
+    ///
+    /// The staleness gate is applied per RUN, not per agent. A workflow row reports the SUMMED
+    /// context of its whole run, and a finished agent stops writing — so a per-agent gate drops
+    /// exactly the agents whose tokens that sum needs. Measured against the real 43-agent run under
+    /// wf_11f45d5b-27d: the per-agent gate leaves a median of 22 % of the true sum visible, and
+    /// 4.4 % (210 K of 4.76 M) at the moment of the run's last write, which is the snapshot the row
+    /// then keeps showing for hours (G-2).
+    ///
+    /// Plain Agent-tool files carry a null run id and each form their own single-file group, so
+    /// their behaviour is byte-for-byte what it was: one agent, one gate.
+    ///
+    /// ponytail: a live run therefore re-reads all of its agent files per pass (12.7 MB / ~3 200
+    /// JSON lines worst case measured, vs ~3-5 MB before) instead of only the concurrently-writing
+    /// wave. A dead run still opens nothing, so the cost does not grow with finished runs. Memoize
+    /// on (path, mtime, length) if that per-pass cost ever shows up — finished agents of a live run
+    /// never change again, which is where nearly all of it sits.
+    /// </summary>
     private static IReadOnlyList<SubagentContextData> BuildSubagentContext(List<string> subagentFiles, IPricingService pricingService)
     {
         var result = new List<SubagentContextData>();
         var cutoff = DateTimeOffset.UtcNow.AddSeconds(-SubagentActivityWindowSeconds);
 
-        foreach (var file in subagentFiles)
+        // Group key: the run id for workflow agents, the file path itself for plain ones — the
+        // latter keeps every Agent-tool file in a group of one. Grouping plain agents together
+        // instead would let one fresh agent drag every stale sibling back onto the screen.
+        foreach (var run in subagentFiles.GroupBy(f => ExtractWorkflowId(f) ?? f, StringComparer.Ordinal))
         {
-            try
-            {
-                // macOS parity (findActiveAgents / contentModificationDate): every tool-result
-                // write bumps NTFS LastWriteTime, so long tool-calls keep the agent visible
-                // even when the last assistant entry is older than the cutoff. UTC-only
-                // arithmetic — Kind=Utc guaranteed by GetLastWriteTimeUtc, explicit zero
-                // offset makes the requirement obvious at the comparison site.
-                var mtimeUtc = File.GetLastWriteTimeUtc(file);
-                var lastActivity = new DateTimeOffset(mtimeUtc, TimeSpan.Zero);
+            // macOS parity (findActiveAgents / contentModificationDate): every tool-result
+            // write bumps NTFS LastWriteTime, so long tool-calls keep the agent visible
+            // even when the last assistant entry is older than the cutoff. UTC-only
+            // arithmetic — Kind=Utc guaranteed by GetLastWriteTimeUtc, explicit zero
+            // offset makes the requirement obvious at the comparison site. A file deleted
+            // between the glob and this call reports 1601-01-01 and so counts as stale.
+            var agents = run
+                .Select(f => (File: f, LastActivity: new DateTimeOffset(File.GetLastWriteTimeUtc(f), TimeSpan.Zero)))
+                .ToList();
 
-                // Short-circuit BEFORE ReadTailLines: stale files are never opened.
-                if (lastActivity < cutoff)
-                    continue;
+            // Short-circuit BEFORE any read: a run with nothing fresh is over or idle, and not one
+            // of its files is opened.
+            if (agents.TrueForAll(a => a.LastActivity < cutoff))
+                continue;
 
-                var lines = ReadTailLines(file);
-                // Subagent files have isSidechain=true on all entries by design —
-                // do not apply the sidechain filter here.
-                var entries = ParseJsonlEntries(lines)
-                    .Where(e => string.Equals(e.Type, "assistant", StringComparison.OrdinalIgnoreCase))
-                    .ToList();
+            var workflowId = ExtractWorkflowId(agents[0].File);
+            var runDirectory = workflowId is null ? null : Path.GetDirectoryName(agents[0].File);
+            var progress = ReadWorkflowProgress(runDirectory);
+            var metadata = ReadWorkflowMetadata(runDirectory);
 
-                // Guard preserved: fresh mtime but no assistant entries yet
-                // (agent just started — only user / tool-result lines). Without an
-                // assistant entry we have no model + token data to display.
-                if (entries.Count == 0)
-                    continue;
-
-                var lastEntry = entries[^1];
-                var totalTokens = ComputeContextTokens(lastEntry);
-                var modelName = lastEntry.Message?.Model;
-                var maxTokens = ModelContextLimits.GetMaxContextTokens(
-                    modelName, pricingService.GetPrice, observedTokens: totalTokens);
-                var agentId = ExtractAgentId(file);
-
-                result.Add(new SubagentContextData
-                {
-                    AgentId = agentId,
-                    TotalTokens = totalTokens,
-                    MaxTokens = maxTokens,
-                    ModelName = modelName,
-                    LastActivity = lastActivity,
-                    WorkflowId = ExtractWorkflowId(file)
-                });
-            }
-            catch (IOException ex)
-            {
-                AppLog.Write(SubagentContextSource, ex, $"Failed to parse subagent file {file}.");
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                AppLog.Write(SubagentContextSource, ex, $"Access denied for subagent file {file}.");
-            }
+            foreach (var (file, lastActivity) in agents)
+                AddSubagent(result, file, lastActivity, workflowId, progress, metadata, pricingService);
         }
 
         return result.OrderBy(a => a.AgentId, StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>
+    /// Appends one subagent's context state, or nothing at all when the file cannot be read or
+    /// carries no assistant entry yet. Degrades per file: one unreadable agent must not cost the
+    /// whole section.
+    /// </summary>
+    private static void AddSubagent(
+        List<SubagentContextData> result,
+        string file,
+        DateTimeOffset lastActivity,
+        string? workflowId,
+        (int Started, int Done) progress,
+        WorkflowMetadata metadata,
+        IPricingService pricingService)
+    {
+        try
+        {
+            var lines = ReadTailLines(file);
+            // Subagent files have isSidechain=true on all entries by design —
+            // do not apply the sidechain filter here.
+            var entries = ParseJsonlEntries(lines)
+                .Where(e => string.Equals(e.Type, "assistant", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            // Guard preserved: fresh mtime but no assistant entries yet
+            // (agent just started — only user / tool-result lines). Without an
+            // assistant entry we have no model + token data to display.
+            if (entries.Count == 0)
+                return;
+
+            var lastEntry = entries[^1];
+            var totalTokens = ComputeContextTokens(lastEntry);
+            var modelName = lastEntry.Message?.Model;
+            var maxTokens = ModelContextLimits.GetMaxContextTokens(
+                modelName, pricingService.GetPrice, observedTokens: totalTokens);
+            var agentId = ExtractAgentId(file);
+
+            result.Add(new SubagentContextData
+            {
+                AgentId = agentId,
+                TotalTokens = totalTokens,
+                MaxTokens = maxTokens,
+                ModelName = modelName,
+                LastActivity = lastActivity,
+                WorkflowId = workflowId,
+                RunAgentsStarted = progress.Started,
+                RunAgentsDone = progress.Done,
+                RunStartedUtc = metadata.StartedUtc,
+                RunName = metadata.Name,
+                RunDescription = metadata.Description,
+                RunPhases = metadata.Phases ?? []
+            });
+        }
+        catch (IOException ex)
+        {
+            AppLog.Write(SubagentContextSource, ex, $"Failed to parse subagent file {file}.");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            AppLog.Write(SubagentContextSource, ex, $"Access denied for subagent file {file}.");
+        }
+    }
+
+    /// <summary>
+    /// Counts spawned and finished agents of one workflow run from its journal.jsonl: one
+    /// "started" line per spawned agent, one "result" line per finished one. Far cheaper than the
+    /// transcripts — 0.37 MB / 62 lines for the largest run on this machine against 12.7 MB across
+    /// its 43 agent files — and the only place the two numbers exist at all.
+    ///
+    /// Windows-only: journal.jsonl is a workflow-run artefact that upstream ccInfo never reads.
+    /// Full note on SubagentContextData.WorkflowId.
+    ///
+    /// Returns (0, 0) rather than a partial count whenever the journal is missing or larger than
+    /// <see cref="TailWindowBytes"/>: <see cref="ReadTailLines"/> would silently see only the tail
+    /// of an oversized journal, and a count that is quietly too low is worse than no count. The row
+    /// falls back to showing tokens only.
+    /// </summary>
+    private static (int Started, int Done) ReadWorkflowProgress(string? runDirectory)
+    {
+        if (runDirectory is null)
+            return default;
+
+        var journal = Path.Combine(runDirectory, WorkflowJournalFileName);
+
+        try
+        {
+            var info = new FileInfo(journal);
+            if (!info.Exists || info.Length > TailWindowBytes)
+                return default;
+
+            var started = 0;
+            var done = 0;
+            foreach (var entry in ParseJsonlEntries(ReadTailLines(journal)))
+            {
+                if (string.Equals(entry.Type, JournalStartedType, StringComparison.Ordinal)) started++;
+                else if (string.Equals(entry.Type, JournalResultType, StringComparison.Ordinal)) done++;
+            }
+
+            return (started, done);
+        }
+        catch (IOException ex)
+        {
+            AppLog.Write(SubagentContextSource, ex, $"Failed to read workflow journal {journal}.");
+            return default;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            AppLog.Write(SubagentContextSource, ex, $"Access denied for workflow journal {journal}.");
+            return default;
+        }
+    }
+
+    /// <summary>
+    /// Run-level facts the workflow row's tooltip needs but the transcripts do not carry: when the
+    /// run started, what it is called, what it does, and its declared phases. <c>default</c> for
+    /// plain subagents — which leaves <see cref="Phases"/> null, hence the coalesce at the one site
+    /// that reads it.
+    /// </summary>
+    private readonly record struct WorkflowMetadata(
+        DateTimeOffset StartedUtc,
+        string? Name,
+        string? Description,
+        IReadOnlyList<WorkflowPhase>? Phases);
+
+    /// <summary>
+    /// Script metadata by absolute run directory. Cached because the script is written once, when
+    /// the run is created, and never touched again — while this method runs on every poll tick for
+    /// every live run.
+    ///
+    /// Hits only. A miss means "the scripts folder was not there yet" at least as often as it means
+    /// "this run has no script", and caching a miss would blank the name for the rest of the
+    /// session.
+    ///
+    /// Static because the whole subagent path is: keying on the absolute directory keeps two service
+    /// instances (tests) from seeing each other's entries.
+    ///
+    /// ponytail: never evicted. One entry per workflow run seen in this process, a few hundred bytes
+    /// each. Add an eviction if a session ever accumulates thousands of runs.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, WorkflowScriptMeta.ScriptMeta> WorkflowScriptCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The run-level facts behind the workflow row's tooltip.
+    ///
+    /// Windows-only: the script is a workflow-run artefact with no macOS counterpart. Full note on
+    /// SubagentContextData.WorkflowId.
+    ///
+    /// Name, description and phases come from the run's SCRIPT, which exists from run creation
+    /// onwards. There is deliberately no second source: a run also writes a completed-run JSON
+    /// carrying the same three fields plus a real startTime, but that file appears only at run
+    /// COMPLETION (measured: ctime == mtime == the run's end time across all 8 runs on this machine,
+    /// 22-39 minutes after the start) — and a completed run stops writing, so the 30-second
+    /// staleness gate has already dropped its row by then. Code to read it would never execute
+    /// against a row anyone can see.
+    ///
+    /// The start time therefore comes from the run directory, which is created with the first agent
+    /// and measured 2-4 s after the real start.
+    /// </summary>
+    private static WorkflowMetadata ReadWorkflowMetadata(string? runDirectory)
+    {
+        if (runDirectory is null)
+            return default;
+
+        // …/{session}/subagents/workflows/{runId} → …/{session}, then down a DIFFERENT branch:
+        // {session}/workflows/scripts/*-{runId}.js. Both trees have a directory called "workflows"
+        // and they sit at different depths — the obvious place to get it wrong.
+        var sessionDirectory = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(runDirectory)));
+        var runId = Path.GetFileName(runDirectory);
+
+        var script = WorkflowScriptCache.TryGetValue(runDirectory, out var cachedScript)
+            ? cachedScript
+            : WorkflowScriptMeta.Read(sessionDirectory, runId);
+
+        if (script.Name is not null || script.Phases.Count > 0)
+            WorkflowScriptCache[runDirectory] = script;
+
+        return new WorkflowMetadata(
+            new DateTimeOffset(Directory.GetCreationTimeUtc(runDirectory), TimeSpan.Zero),
+            script.Name,
+            script.Description,
+            script.Phases);
     }
 
     /// <summary>
