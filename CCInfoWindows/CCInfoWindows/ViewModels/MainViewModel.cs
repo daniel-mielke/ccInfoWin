@@ -29,7 +29,9 @@ public class SubagentDisplayData
     public double Percentage { get; init; }
     public required string PercentageText { get; init; }
     public required string ModelBadge { get; init; }
-    public required SolidColorBrush BadgeColor { get; init; }
+    /// <summary>Null on workflow rows, where the template collapses the badge — the agents of one
+    /// run can be on different models, so there is no single badge to show.</summary>
+    public required SolidColorBrush? BadgeColor { get; init; }
 
     /// <summary>Leading glyph: arrow for a single subagent, gear for a workflow run.</summary>
     public required string Icon { get; init; }
@@ -42,7 +44,66 @@ public class SubagentDisplayData
     /// the agents of one run can be on different models (D-3).
     /// </summary>
     public bool IsWorkflow { get; init; }
+
+    /// <summary>
+    /// Hover content for workflow rows: everything the one-line, trimmed row has no space for. Null
+    /// on plain rows, where the label TextBlock carrying it is collapsed anyway.
+    /// </summary>
+    public WorkflowTooltipData? Tooltip { get; init; }
 }
+
+/// <summary>
+/// One rendered row of the tooltip's phase table: the phase name and its optional one-line summary.
+/// The phases carry no visible numbering — the table is read as a sequence, and a number column
+/// spent width on information the row order already carries.
+/// </summary>
+public record WorkflowPhaseRow(string Title, string? Detail);
+
+/// <summary>
+/// One labelled line of the tooltip, split so the two halves can be coloured independently: the
+/// label is the quiet part, the value the one being read.
+///
+/// <see cref="Label"/> keeps its trailing space ("Name: "), because the template renders the two as
+/// adjacent Runs inside a single wrapping TextBlock — concatenation, not a layout with a gap.
+/// <see cref="Value"/> is empty for a line that is nothing but a label, like the leading type line.
+/// </summary>
+public record WorkflowTooltipLine(string Label, string Value);
+
+/// <summary>
+/// The workflow tooltip in the two pieces the template lays out: one flat run of labelled lines,
+/// then the phase TABLE.
+///
+/// One list and not two, so no line can end up with more air around it than its neighbours — the
+/// earlier header/footer split put a gap in the middle of what reads as a single block of facts.
+///
+/// The phases stay separate because their details wrap. A <c>TextBlock</c> with
+/// <c>TextWrapping="Wrap"</c> has no hanging indent — the second line of a wrapped, indented list
+/// item jumps back to the left margin and the list structure collapses. A Grid per phase row keeps
+/// the wrapped remainder under its own column.
+/// </summary>
+public record WorkflowTooltipData(
+    IReadOnlyList<WorkflowTooltipLine> Lines,
+    string PhasesCaption,
+    IReadOnlyList<WorkflowPhaseRow> Phases)
+{
+    /// <summary>Drives one Visibility binding over the caption and the table together.</summary>
+    public bool HasPhases => Phases.Count > 0;
+}
+
+/// <summary>
+/// The run-level facts one workflow row is built from, aggregated out of its agents. A record
+/// instead of yet more delegate type arguments: label and tooltip are formatted from the same eight
+/// values, so they take the same parameter and stay in step.
+/// </summary>
+public record WorkflowRowFacts(
+    string RunId,
+    int AgentsDone,
+    int AgentsStarted,
+    long TotalTokens,
+    DateTimeOffset StartedUtc,
+    string? Name,
+    string? Description,
+    IReadOnlyList<WorkflowPhase> Phases);
 
 /// <summary>
 /// Flat display item for the session ComboBox.
@@ -68,9 +129,24 @@ public class SessionDisplayItem
 public partial class MainViewModel : ObservableObject,
     IRecipient<AuthStateChangedMessage>
 {
-    private const string PlainSubagentIcon = "↳";      // downwards arrow with tip rightwards
-    private const string WorkflowSubagentIcon = "⚙";   // gear
+    // Escapes, not literals: U+2699 resolves through DWrite fallback to Segoe UI Emoji — a COLOUR
+    // font, which silently ignores Foreground and made the gear the brightest element in its row at
+    // ~7.8:1 where the declared #636366 gives 2.84:1 (D-2). The template pins FontFamily to
+    // "Segoe UI Symbol" so both glyphs stay monochrome. Keeping the source pure ASCII also puts
+    // them out of reach of the PowerShell bulk edit that has already corrupted non-ASCII here once.
+    private const string PlainSubagentIcon = "\u21B3";     // downwards arrow with tip rightwards
+    private const string WorkflowSubagentIcon = "\u2699";  // gear
     private const string WorkflowSubagentLabelKey = "WorkflowSubagentLabel";
+    private const string WorkflowSubagentLabelTokensOnlyKey = "WorkflowSubagentLabelTokensOnly";
+    private const string WorkflowTooltipKindKey = "WorkflowTooltipKind";
+    private const string WorkflowTooltipNameKey = "WorkflowTooltipName";
+    private const string WorkflowTooltipDescriptionKey = "WorkflowTooltipDescription";
+    private const string WorkflowTooltipIdKey = "WorkflowTooltipId";
+    private const string WorkflowTooltipAgentsKey = "WorkflowTooltipAgents";
+    private const string WorkflowTooltipStartKey = "WorkflowTooltipStart";
+    private const string WorkflowTooltipContextKey = "WorkflowTooltipContext";
+    private const string WorkflowTooltipPhasesKey = "WorkflowTooltipPhases";
+    private const string WorkflowTooltipLogSource = "MainViewModel.WorkflowTooltip";
 
     private const string PollLogSource = "MainViewModel.PollUsage";
     private const string StartupLogSource = "MainViewModel.InitializeAsync";
@@ -1397,7 +1473,7 @@ public partial class MainViewModel : ObservableObject,
         HasActiveSession = true;
 
         SubagentContexts.Clear();
-        foreach (var row in BuildSubagentRows(context.Subagents, _brushFactory, FormatWorkflowLabel))
+        foreach (var row in BuildSubagentRows(context.Subagents, _brushFactory, FormatWorkflowRow))
             SubagentContexts.Add(row);
 
         RecomputeStatisticsForCurrentTab();
@@ -1408,53 +1484,65 @@ public partial class MainViewModel : ObservableObject,
     /// the first agent on (D-1) — a single run reached 44 agents on this machine, which would be
     /// roughly 1230 px of bars in a ~600 px window.
     ///
-    /// The percentage of such a row is the MAXIMUM of the group, never the average (D-2): 20 agents
-    /// at 5 % and one at 95 % average to a reassuring 9 % while that one agent is running into its
-    /// autocompact. Only the furthest-along agent carries a decision.
+    /// A workflow row carries NO bar and NO percentage. Utilization is a ratio against a PER-AGENT
+    /// ceiling (context / MaxTokens); over a group that ceiling does not exist — 43 agents have 43
+    /// windows — so maximum, mean and sum alike yield a number with no reference quantity. The row
+    /// reports extensive quantities instead, which do add up over a group: agents finished out of
+    /// agents started, and the summed context of the run. Same reason the CLI shows those two.
     ///
     /// Static so it can be exercised without a ViewModel instance; the two delegates keep the WinRT
     /// brush type and the localizer out of the test path.
+    ///
+    /// Windows-only: the whole workflow branch of this method — grouping, the gear row, the label —
+    /// has no macOS counterpart. The plain-subagent branch does. Full note on
+    /// SubagentContextData.WorkflowId; decisions D-1…D-13 in
+    /// `.planning/milestones/v1.7-ROADMAP.md`.
     /// </summary>
     internal static List<SubagentDisplayData> BuildSubagentRows(
         IReadOnlyList<SubagentContextData> subagents,
         Func<string, SolidColorBrush> brushFactory,
-        Func<string, int, string> workflowLabelFormatter)
+        Func<WorkflowRowFacts, (string Label, WorkflowTooltipData Tooltip)> workflowFormatter)
     {
         // Plain subagents keep their incoming AgentId order, workflow rows follow sorted by run id.
         // Deterministic ordering keeps rows from swapping places between two polls.
         var rows = subagents
             .Where(s => s.WorkflowId is null)
-            .Select(s => CreateSubagentRow(
+            .Select(s => CreatePlainRow(
                 s.AgentId,
                 s.Utilization,
-                PlainSubagentIcon,
                 ModelContextLimits.GetDisplayName(s.ModelName),
                 brushFactory(ModelContextLimits.GetBadgeColorHex(s.ModelName))))
             .ToList();
 
+        // Max, not First: every agent of a run carries the same run-level counts, and Max keeps a
+        // hand-built list whose members disagree from reporting the lowest of them. Same reasoning
+        // for the start time (Min = the earliest claimed start) and for the two text fields, where
+        // the first non-null wins over a member that happened to read the file before it existed.
         var workflowRows = subagents
             .Where(s => s.WorkflowId is not null)
             .GroupBy(s => s.WorkflowId!)
             .OrderBy(g => g.Key, StringComparer.Ordinal)
-            .Select(g => CreateSubagentRow(
+            .Select(g => CreateWorkflowRow(
                 g.Key,
-                g.Max(s => s.Utilization),
-                WorkflowSubagentIcon,
-                ModelContextLimits.GetDisplayName(null),
-                brushFactory(ModelContextLimits.GetBadgeColorHex(null)),
-                label: workflowLabelFormatter(g.Key, g.Count())));
+                workflowFormatter(new WorkflowRowFacts(
+                    g.Key,
+                    g.Max(s => s.RunAgentsDone),
+                    g.Max(s => s.RunAgentsStarted),
+                    g.Sum(s => s.TotalTokens),
+                    g.Min(s => s.RunStartedUtc),
+                    g.Select(s => s.RunName).FirstOrDefault(n => n is not null),
+                    g.Select(s => s.RunDescription).FirstOrDefault(d => d is not null),
+                    g.Select(s => s.RunPhases).FirstOrDefault(p => p.Count > 0) ?? []))));
 
         rows.AddRange(workflowRows);
         return rows;
     }
 
-    private static SubagentDisplayData CreateSubagentRow(
+    private static SubagentDisplayData CreatePlainRow(
         string agentId,
         double utilization,
-        string icon,
         string modelBadge,
-        SolidColorBrush badgeColor,
-        string? label = null)
+        SolidColorBrush badgeColor)
     {
         var percentage = Math.Min(utilization * 100, 100);
         return new SubagentDisplayData
@@ -1465,24 +1553,175 @@ public partial class MainViewModel : ObservableObject,
             PercentageText = $"{percentage:0}%",
             ModelBadge = modelBadge,
             BadgeColor = badgeColor,
-            Icon = icon,
-            Label = label ?? string.Empty,
-            IsWorkflow = label is not null
+            Icon = PlainSubagentIcon,
+            Label = string.Empty,
+            IsWorkflow = false,
+            Tooltip = null
         };
     }
+
+    /// <summary>
+    /// A workflow row is label-only: the template collapses the bar, the percentage and the model
+    /// badge for it, so the zeroed numeric members are never read. The badge is absent because the
+    /// agents of one run can be on different models.
+    /// </summary>
+    private static SubagentDisplayData CreateWorkflowRow(string workflowId, (string Label, WorkflowTooltipData Tooltip) text) =>
+        new()
+        {
+            AgentId = workflowId,
+            Utilization = 0,
+            Percentage = 0,
+            PercentageText = string.Empty,
+            ModelBadge = string.Empty,
+            BadgeColor = null,
+            Icon = WorkflowSubagentIcon,
+            Label = text.Label,
+            IsWorkflow = true,
+            Tooltip = text.Tooltip
+        };
 
     /// <summary>
     /// Composes the workflow row label in the ViewModel rather than via l:Uids.Uid in the
     /// DataTemplate: WinUI3Localizer does not apply attached-property uids to template instances
     /// created at runtime, which would leave the text blank. The run id is inserted verbatim so it
     /// stays comparable to /workflows output and to the directory name on disk (D-6).
+    ///
+    /// A run with no journal.jsonl (older runs, other harness versions) reports zero started agents;
+    /// the label then drops the count rather than showing a fabricated "0/0".
     /// </summary>
-    private static string FormatWorkflowLabel(string workflowId, int agentCount) =>
-        string.Format(
-            CultureInfo.CurrentCulture,
-            Localizer.Get().GetLocalizedString(WorkflowSubagentLabelKey),
-            workflowId,
-            agentCount);
+    private static string FormatWorkflowLabel(WorkflowRowFacts facts)
+    {
+        var tokens = TokenFormatter.FormatTokenCount(facts.TotalTokens);
+
+        return facts.AgentsStarted <= 0
+            ? string.Format(
+                CultureInfo.CurrentCulture,
+                Localizer.Get().GetLocalizedString(WorkflowSubagentLabelTokensOnlyKey),
+                facts.RunId,
+                tokens)
+            : string.Format(
+                CultureInfo.CurrentCulture,
+                Localizer.Get().GetLocalizedString(WorkflowSubagentLabelKey),
+                facts.RunId,
+                facts.AgentsDone,
+                facts.AgentsStarted,
+                tokens);
+    }
+
+    /// <summary>
+    /// The row's two texts from one set of facts, so they can never disagree about the same run.
+    /// This is the seam the localizer lives behind: <see cref="BuildSubagentRows"/> takes it as a
+    /// delegate and stays testable without a WinUI3Localizer host.
+    /// </summary>
+    private static (string Label, WorkflowTooltipData Tooltip) FormatWorkflowRow(WorkflowRowFacts facts) =>
+        (FormatWorkflowLabel(facts),
+         FormatWorkflowTooltip(
+             facts,
+             key => Localizer.Get().GetLocalizedString(key),
+             LocalizedText.ResolveOrNull(WorkflowTooltipStartPatternUid, WorkflowTooltipLogSource),
+             CultureInfo.CurrentUICulture));
+
+    internal const string WorkflowTooltipStartPatternUid = "WorkflowTooltipStartPattern";
+
+    /// <summary>
+    /// Hover text for a workflow row: what the one-line, trimmed row has no space for. Every value
+    /// carries a label (D-17) — the row can be terse because it sits under a gear next to its
+    /// neighbours, a tooltip is read in isolation and has to explain itself.
+    ///
+    /// Windows-only, no macOS counterpart. Full note on SubagentContextData.WorkflowId.
+    ///
+    /// Three lines are conditional. Name and description are missing for runs whose script cannot be
+    /// read; the agent count is missing for a run with no journal. All three are dropped rather than
+    /// shown as an empty placeholder.
+    ///
+    /// The token line is labelled "context", never "usage": it is the summed FINAL context of the
+    /// run's agents, measured at 3.25 M against 112.65 M actually consumed for the same run — a
+    /// factor of 34.6, so "usage" would not be imprecise but wrong by an order of magnitude.
+    ///
+    /// Line structure is decided here rather than in the resw, exactly as ComputeTooltipText does for
+    /// the session ComboBox: it is layout, not translation. One line per list entry, with no \n
+    /// anywhere — the template renders each entry as its own TextBlock so the wrapping description
+    /// cannot drag its neighbours around.
+    ///
+    /// The phases are NOT part of that list. They are a table — see
+    /// <see cref="WorkflowTooltipData"/> for why wrapping defeats an indented text list.
+    /// They come from the run's script file, so unlike name and description they are available for
+    /// the whole life of a live run.
+    /// </summary>
+    internal static WorkflowTooltipData FormatWorkflowTooltip(
+        WorkflowRowFacts facts,
+        Func<string, string> localize,
+        string? startPattern,
+        CultureInfo culture)
+    {
+        // Order: identity and measurements first, free text after. The run id, counts, start and
+        // context are one line each and always present, so they form a stable block whose lines do
+        // not move when a run has no name. Name and description are the only two that wrap to
+        // several lines and the only two that can be missing entirely — putting them last keeps
+        // everything above them at a fixed position from one run to the next.
+        List<WorkflowTooltipLine> lines =
+        [
+            Line(localize(WorkflowTooltipKindKey), culture),
+            Line(localize(WorkflowTooltipIdKey), culture, facts.RunId)
+        ];
+
+        if (facts.AgentsStarted > 0)
+            lines.Add(Line(localize(WorkflowTooltipAgentsKey), culture, facts.AgentsDone, facts.AgentsStarted));
+
+        lines.Add(Line(
+            localize(WorkflowTooltipStartKey),
+            culture,
+            CountdownFormatter.FormatWithPattern(facts.StartedUtc, startPattern, WorkflowTooltipStartPatternUid, culture)));
+
+        lines.Add(Line(
+            localize(WorkflowTooltipContextKey),
+            culture,
+            TokenFormatter.FormatTokenCount(facts.TotalTokens)));
+
+        if (facts.Name is not null)
+            lines.Add(Line(localize(WorkflowTooltipNameKey), culture, facts.Name));
+
+        if (facts.Description is not null)
+            lines.Add(Line(localize(WorkflowTooltipDescriptionKey), culture, facts.Description));
+
+        var phases = facts.Phases.Select(p => new WorkflowPhaseRow(p.Title, p.Detail)).ToList();
+
+        // The count stays on the caption even though the numbers left the rows: "how many phases"
+        // is not something a numberless table can be counted for at a glance.
+        return new WorkflowTooltipData(
+            lines,
+            phases.Count > 0 ? string.Format(culture, localize(WorkflowTooltipPhasesKey), phases.Count) : string.Empty,
+            phases);
+    }
+
+    /// <summary>
+    /// Splits one resw template into its label half and its formatted value half, cutting at the
+    /// first placeholder: "Name: {0}" becomes ("Name: ", "code-clone-review").
+    ///
+    /// Done here rather than by adding a second resw key per line, because the label is not a
+    /// separate string — it is the part of the sentence in front of the value, and a translation
+    /// that moves the value ("Agents: {0}/{1} fertig") keeps working: everything up to the first
+    /// placeholder is the label, everything from it on is formatted with the original indices
+    /// intact.
+    ///
+    /// A template with no placeholder is all label and no value, which is exactly right for the
+    /// leading type line. One with a leading placeholder degrades to all value, no label — it loses
+    /// the grey, not the text.
+    ///
+    /// ponytail: does not understand "{{" escapes. No tooltip template contains one; if one ever
+    /// does, the split lands inside the escape and that line renders wrong. Use a dedicated label
+    /// key for that line if it happens.
+    /// </summary>
+    private static WorkflowTooltipLine Line(string template, CultureInfo culture, params object[] values)
+    {
+        var placeholder = template.IndexOf('{', StringComparison.Ordinal);
+
+        return placeholder < 0
+            ? new WorkflowTooltipLine(template, string.Empty)
+            : new WorkflowTooltipLine(
+                template[..placeholder],
+                string.Format(culture, template[placeholder..], values));
+    }
 
     /// <summary>
     /// Recomputes the statistics panel for whichever tab is active, without the loading spinner.

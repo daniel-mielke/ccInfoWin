@@ -112,9 +112,53 @@
     <value>Inaktiv seit &gt; {0}min</value>
   </data>
 
-  <!-- MainView workflow subagent row (v1.7). {0} = run id, verbatim, never translated. {1} = agent count. -->
+  <!-- MainView workflow subagent row (v1.7). Windows-only: no macOS counterpart, upstream ccInfo
+       has no workflow display and therefore no equivalent key. Full note on
+       SubagentContextData.WorkflowId.
+       {0} = run id, verbatim, never translated.
+       {1} = agents finished, {2} = agents started so far (a growing denominator by design,
+       not a planned total), {3} = summed context of the run, already formatted (e.g. "3.3M"). -->
   <data name="WorkflowSubagentLabel" xml:space="preserve">
-    <value>{0} · {1} aktiv</value>
+    <value>{0} · {1}/{2} Agents fertig · {3} Tokens</value>
+  </data>
+
+  <!-- Same row for a run without journal.jsonl: no agent count exists, so it is left out rather
+       than guessed. {0} = run id, {1} = formatted token sum. -->
+  <data name="WorkflowSubagentLabelTokensOnly" xml:space="preserve">
+    <value>{0} · {1} Tokens</value>
+  </data>
+
+  <!-- MainView workflow row hover tooltip (v1.7 Phase 4). Windows-only, same note as above.
+       One key per line, each carrying the LABEL for its value (D-17): a tooltip is read in
+       isolation, so a bare "wf_eda3abc2-8c9" would not say what it is. The VALUES are never
+       translated — run id, workflow name and description go into their placeholder verbatim.
+       The noun sits BEFORE the number ("Agents: 1/8 fertig") to sidestep pluralisation, which
+       WinUI3Localizer 2.3.0 cannot do.
+       WorkflowTooltipContext says "Kontext", never "Verbrauch": the number is the summed FINAL
+       context of the run's agents, measured 34.6x smaller than what the run actually consumed. -->
+  <data name="WorkflowTooltipKind" xml:space="preserve">
+    <value>Workflow</value>
+  </data>
+  <data name="WorkflowTooltipName" xml:space="preserve">
+    <value>Name: {0}</value>
+  </data>
+  <data name="WorkflowTooltipDescription" xml:space="preserve">
+    <value>Beschreibung: {0}</value>
+  </data>
+  <data name="WorkflowTooltipPhases" xml:space="preserve">
+    <value>Phasen ({0})</value>
+  </data>
+  <data name="WorkflowTooltipId" xml:space="preserve">
+    <value>ID: {0}</value>
+  </data>
+  <data name="WorkflowTooltipAgents" xml:space="preserve">
+    <value>Agents: {0}/{1} fertig</value>
+  </data>
+  <data name="WorkflowTooltipStart" xml:space="preserve">
+    <value>Start: {0}</value>
+  </data>
+  <data name="WorkflowTooltipContext" xml:space="preserve">
+    <value>Kontext: {0} Tokens</value>
   </data>
 
   <!-- MainView Session Expired InfoBar -->
@@ -394,6 +438,13 @@
   <!-- Weekly/Sonnet reset date. .NET custom date format string, per locale: an English reader
        parses the German "06.08." as June 8th, so the field order has to change with the language. -->
   <data name="WeeklyResetDatePattern" xml:space="preserve">
+    <value>ddd dd.MM., HH:mm</value>
+  </data>
+
+  <!-- Workflow run start time in the row tooltip. Same layout as WeeklyResetDatePattern on purpose
+       — the app should not carry two date styles. Date included, not just the time: a run started
+       yesterday would otherwise read as today's. -->
+  <data name="WorkflowTooltipStartPattern" xml:space="preserve">
     <value>ddd dd.MM., HH:mm</value>
   </data>
 

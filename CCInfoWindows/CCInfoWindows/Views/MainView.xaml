@@ -24,6 +24,20 @@
         </Storyboard>
 
         <!-- Session list for ComboBox (flat, sorted by activity) -->
+
+        <!-- One labelled line of the workflow tooltip. Defined once and used by both the header and
+             the footer list. Two Runs in ONE TextBlock rather than two TextBlocks in a row: a
+             description of 82-161 characters has to wrap, and it has to wrap as one sentence
+             across the label/value boundary. The label carries its own trailing space. -->
+        <DataTemplate x:Key="WorkflowTooltipLineTemplate" x:DataType="viewmodels:WorkflowTooltipLine">
+            <!-- FontSize and LineHeight are stated, not inherited. This template is defined in
+                 Page.Resources but instantiated inside the card, and relying on the card's implicit
+                 TextBlock style to reach it left this line rendering a size apart from the rest. -->
+            <TextBlock TextWrapping="Wrap" FontSize="12" LineHeight="18">
+                <Run Text="{x:Bind Label}" Foreground="{ThemeResource SecondaryTextBrush}" />
+                <Run Text="{x:Bind Value}" />
+            </TextBlock>
+        </DataTemplate>
     </Page.Resources>
 
     <Grid Background="{ThemeResource AppBackgroundBrush}"
@@ -235,8 +249,14 @@
                     <ItemsRepeater ItemsSource="{x:Bind ViewModel.SubagentContexts, Mode=OneWay}">
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="viewmodels:SubagentDisplayData">
-                                <!-- Layout: [icon] [Badge | workflow label] [ProgressBar] [xx%].
-                                     Both row types share these four columns, so no DataTemplateSelector. -->
+                                <!-- Layout: [icon] [Badge] [ProgressBar] [xx%] for a plain subagent,
+                                     [icon] [label spanning 1-3] for a workflow run. Both row types
+                                     share these four columns, so no DataTemplateSelector.
+
+                                     Windows-only: the workflow row type has no macOS counterpart —
+                                     upstream ccInfo renders plain subagents only. See the full note
+                                     on SubagentContextData.WorkflowId before aligning this template
+                                     with any future upstream design. -->
                                 <Grid Margin="0,2,0,0" ColumnSpacing="4">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="16" />
@@ -245,9 +265,15 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
-                                    <!-- Arrow for a single subagent, gear for a workflow run -->
+                                    <!-- Arrow for a single subagent, gear for a workflow run.
+                                         FontFamily is pinned: left to DWrite fallback, U+2699
+                                         resolves to Segoe UI Emoji, a COLOUR font that ignores
+                                         Foreground and rendered the gear as the brightest element
+                                         in the row (D-2). Segoe UI Symbol covers both glyphs
+                                         monochrome. -->
                                     <TextBlock Grid.Column="0"
                                                Text="{x:Bind Icon}"
+                                               FontFamily="Segoe UI Symbol"
                                                FontSize="15"
                                                Foreground="{ThemeResource TertiaryTextBrush}"
                                                VerticalAlignment="Center" />
@@ -264,30 +290,52 @@
                                                    Foreground="White" />
                                     </Border>
 
-                                    <!-- Run id + agent count (workflow rows only). Composed in the
-                                         ViewModel: l:Uids.Uid does not reach runtime template instances. -->
-                                    <TextBlock Grid.Column="1"
+                                    <!-- Run id + agent progress + summed tokens (workflow rows only).
+                                         Composed in the ViewModel: l:Uids.Uid does not reach runtime
+                                         template instances. Spans the bar and percentage columns,
+                                         which are collapsed for this row type — the star column in
+                                         the span absorbs the width, so the trimming has a bound to
+                                         work against at any window size. -->
+                                    <TextBlock Grid.Column="1" Grid.ColumnSpan="3"
                                                Text="{x:Bind Label}"
                                                FontSize="12"
+                                               TextTrimming="CharacterEllipsis"
                                                Foreground="{ThemeResource SecondaryTextBrush}"
                                                VerticalAlignment="Center"
-                                               Visibility="{x:Bind IsWorkflow, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                               Tag="{x:Bind Tooltip}"
+                                               PointerEntered="OnWorkflowRowPointerEntered"
+                                               PointerExited="OnWorkflowRowPointerExited"
+                                               PointerCanceled="OnWorkflowRowPointerExited"
+                                               Visibility="{x:Bind IsWorkflow, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <!-- The hover content is NOT a ToolTip and does not live here
+                                             — see WorkflowTooltipOverlay at the end of this file for
+                                             why. The pointer handlers above drive it. They sit on
+                                             THIS TextBlock rather than on the Grid because it is
+                                             Collapsed on plain rows and receives no pointer events
+                                             there: "no hover card for plain rows" needs no converter
+                                             and no null check. Trade-off: hovering the gear in
+                                             column 0 shows nothing. Accepted. -->
+                                    </TextBlock>
 
-                                    <!-- Progress bar -->
+                                    <!-- Progress bar and percentage: plain subagents only. A run has
+                                         no single context ceiling to be a percentage OF (43 agents,
+                                         43 windows), so the workflow row reports counts and a token
+                                         sum instead. -->
                                     <ProgressBar Grid.Column="2"
                                                  Value="{x:Bind Percentage}" Maximum="100"
                                                  Background="{ThemeResource ProgressTrackBrush}"
                                                  Style="{StaticResource AppProgressBarStyle}"
                                                  Margin="6,0"
-                                                 VerticalAlignment="Center" />
+                                                 VerticalAlignment="Center"
+                                                 Visibility="{x:Bind IsWorkflow, Converter={StaticResource InvertedBoolToVisibilityConverter}}" />
 
-                                    <!-- Percentage text -->
                                     <TextBlock Grid.Column="3"
                                                Text="{x:Bind PercentageText}"
                                                FontSize="12"
                                                Margin="6,0,0,0"
                                                Foreground="{ThemeResource SecondaryTextBrush}"
-                                               VerticalAlignment="Center" />
+                                               VerticalAlignment="Center"
+                                               Visibility="{x:Bind IsWorkflow, Converter={StaticResource InvertedBoolToVisibilityConverter}}" />
                                 </Grid>
                             </DataTemplate>
                         </ItemsRepeater.ItemTemplate>
@@ -737,6 +785,131 @@
 
             </StackPanel>
         </ScrollViewer>
+
+        <!-- ==========================================================================
+             Workflow hover card.
+
+             Windows-only, like the rest of the workflow display. Full note on
+             SubagentContextData.WorkflowId.
+
+             NOT a ToolTip. ToolTipService cannot express any of what this has to do:
+               - a ToolTip anchors to its target element, so "below the hovered row" and
+                 "always at the same x relative to the WINDOW" are two different anchors
+                 and it can only honour one;
+               - its popup is free to leave the window, which is exactly what it did —
+                 it opened upward and hung off the top edge of the app;
+               - its content cannot scroll, so a window narrower than the card has no
+                 way to reach the clipped part.
+
+             Living in the page's own visual tree instead solves all three by
+             construction: the Canvas is clipped to the window, x is a constant, and y
+             is computed per row in the code-behind.
+
+             Last child of the root Grid and spanning both rows, so it paints above
+             everything. The Canvas has no Background, which keeps it hit-transparent
+             everywhere except over the card itself — the card stays interactive (the
+             scrollbar has to be usable) without swallowing clicks on the page. -->
+        <Canvas x:Name="TooltipLayer" Grid.Row="0" Grid.RowSpan="2">
+            <Border x:Name="WorkflowTooltipOverlay"
+                    Visibility="Collapsed"
+                    Canvas.Left="10"
+                    Background="{ThemeResource ToolTipBackgroundBrush}"
+                    BorderBrush="{ThemeResource PrimaryTextBrush}"
+                    BorderThickness="2"
+                    CornerRadius="{ThemeResource ControlCornerRadius}"
+                    Padding="14,12,14,10"
+                    SizeChanged="OnWorkflowTooltipSizeChanged"
+                    PointerExited="OnWorkflowTooltipPointerExited">
+                <!-- The content's Width is set in the code-behind, never here, and it is
+                     an explicit Width rather than a MinWidth. A ScrollViewer offers its
+                     child INFINITE width, and an infinitely wide TextBlock never wraps:
+                     with only a MinWidth the description rendered as one endless line,
+                     and — because the child was then measured at one line's height and
+                     arranged at several — the card was also clipped along its bottom
+                     edge. Pinning the width removes both at once. -->
+                <Grid RowDefinitions="*,Auto">
+                <ScrollViewer x:Name="WorkflowTooltipScroll"
+                              Grid.Row="0"
+                              HorizontalScrollMode="Auto"
+                              HorizontalScrollBarVisibility="Hidden"
+                              VerticalScrollBarVisibility="Disabled"
+                              VerticalScrollMode="Disabled"
+                              ViewChanged="OnWorkflowTooltipViewChanged">
+                    <StackPanel x:Name="WorkflowTooltipContent">
+                        <!-- One list, not a header and a footer with a gap between them:
+                             every fact line gets the same air as its neighbours. -->
+                        <ItemsControl ItemsSource="{Binding Lines}"
+                                      ItemTemplate="{StaticResource WorkflowTooltipLineTemplate}" />
+
+                        <!-- Phase table, last block. A Grid per row rather than a text
+                             list: TextWrapping has no hanging indent, so a wrapped
+                             detail in a text list falls back to the left margin and the
+                             structure collapses. The title column is a fixed width
+                             because WinUI has no SharedSizeGroup — a longer title wraps
+                             inside its column instead of pushing the details out of
+                             alignment. -->
+                        <StackPanel Margin="0,8,0,0"
+                                    Visibility="{Binding HasPhases, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock Text="{Binding PhasesCaption}"
+                                       FontSize="12" LineHeight="18"
+                                       Foreground="{ThemeResource SecondaryTextBrush}" />
+                            <ItemsControl ItemsSource="{Binding Phases}" Margin="0,4,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="viewmodels:WorkflowPhaseRow">
+                                        <Grid Margin="0,0,0,7">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="96" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{x:Bind Title}"
+                                                       TextWrapping="Wrap"
+                                                       FontSize="12" LineHeight="18"
+                                                       Margin="0,0,8,0" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{x:Bind Detail}"
+                                                       TextWrapping="Wrap"
+                                                       FontSize="12" LineHeight="18"
+                                                       Foreground="{ThemeResource SecondaryTextBrush}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
+                    <!-- Hand-built scrollbar, because Windows hides the real one.
+                         ScrollBarVisibility="Visible" does NOT mean visible: the OS
+                         setting Control Panel\Accessibility\DynamicScrollbars defaults
+                         to auto-hide, and WinUI honours it by animating the bar's
+                         opacity to zero until the pointer interacts with the
+                         ScrollViewer. Verified through UIA on the real window — the
+                         Horizontal ScrollBar element was present and enabled with a
+                         zero-sized rectangle. An app cannot opt out of that setting,
+                         and overriding it means replacing the whole ScrollBar
+                         ControlTemplate. This track is smaller than that override and
+                         does the one thing asked for: it is always there while there is
+                         something to scroll. -->
+                    <Border x:Name="TooltipScrollTrack"
+                            Grid.Row="1"
+                            Height="8"
+                            CornerRadius="4"
+                            Margin="0,8,0,0"
+                            Visibility="Collapsed"
+                            Background="{ThemeResource ControlAltFillColorTertiaryBrush}"
+                            PointerPressed="OnTooltipScrollTrackPointerPressed"
+                            PointerMoved="OnTooltipScrollTrackPointerMoved"
+                            PointerReleased="OnTooltipScrollTrackPointerReleased"
+                            PointerCaptureLost="OnTooltipScrollTrackPointerReleased">
+                        <Border x:Name="TooltipScrollThumb"
+                                HorizontalAlignment="Left"
+                                CornerRadius="4"
+                                Background="{ThemeResource TertiaryTextBrush}" />
+                    </Border>
+                </Grid>
+            </Border>
+        </Canvas>
 
     </Grid>
 </Page>

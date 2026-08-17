@@ -10,9 +10,11 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.Web.WebView2.Core;
 using CommunityToolkit.Mvvm.Messaging;
+using Windows.Foundation;
 using WinUI3Localizer;
 
 namespace CCInfoWindows.Views;
@@ -72,6 +74,18 @@ public sealed partial class MainView : Page
         InitializeComponent();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+
+        // handledEventsToo: the ScrollViewer inside the card handles pointer events itself, so
+        // XAML attribute handlers on the card would never see them. See
+        // OnWorkflowTooltipPointerPressed.
+        WorkflowTooltipOverlay.AddHandler(
+            PointerPressedEvent, new PointerEventHandler(OnWorkflowTooltipPointerPressed), true);
+        WorkflowTooltipOverlay.AddHandler(
+            PointerMovedEvent, new PointerEventHandler(OnWorkflowTooltipPointerMoved), true);
+        WorkflowTooltipOverlay.AddHandler(
+            PointerReleasedEvent, new PointerEventHandler(OnWorkflowTooltipPointerReleased), true);
+        WorkflowTooltipOverlay.AddHandler(
+            PointerCaptureLostEvent, new PointerEventHandler(OnWorkflowTooltipPointerReleased), true);
     }
 
     /// <summary>
@@ -418,6 +432,263 @@ public sealed partial class MainView : Page
         {
             ViewModel.DismissMigrationToastCommand.Execute(null);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Workflow hover card
+    //
+    // Windows-only, like the rest of the workflow display — full note on
+    // SubagentContextData.WorkflowId. This is positioning code, not application logic:
+    // it converts a row's position in the visual tree into a canvas offset, which is
+    // exactly the kind of work that cannot move to a ViewModel (CLAUDE.md's no-logic-in-
+    // code-behind rule is about behaviour, and TransformToVisual has no ViewModel-side
+    // equivalent). Everything the card DISPLAYS is composed in MainViewModel.
+    // -------------------------------------------------------------------------
+
+    /// <summary>Constant x offset from the window's left edge — the card never moves sideways.</summary>
+    private const double TooltipLeftMargin = 10;
+
+    /// <summary>Narrowest the card may render; below this its content scrolls instead of shrinking.</summary>
+    private const double TooltipMinWidth = 340;
+
+    private const double TooltipMaxWidth = 360;
+
+    /// <summary>
+    /// Padding (14 + 14) and border (2 + 2) between the card's edge and its content. Must be kept in
+    /// step with the card's Padding and BorderThickness in MainView.xaml — it is what turns the
+    /// card's outer width into the width available to the content, and so decides both the wrap
+    /// point and when the scrollbar appears.
+    /// </summary>
+    private const double TooltipChromeWidth = 32;
+
+    /// <summary>Where the card wants to sit, before containment clamps it.</summary>
+    private double _tooltipDesiredTop;
+
+    private bool _isPanningTooltip;
+    private double _panStartX;
+    private double _panStartOffset;
+
+    /// <summary>
+    /// Opens the card under the hovered workflow row.
+    ///
+    /// The row hands over its content through Tag rather than DataContext: ItemsRepeater's
+    /// generated containers are bound with x:Bind, so relying on an inherited DataContext here
+    /// would be relying on a detail of the repeater rather than on something the template states.
+    /// </summary>
+    private void OnWorkflowRowPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement row || row.Tag is not WorkflowTooltipData tooltip)
+            return;
+
+        WorkflowTooltipOverlay.DataContext = tooltip;
+
+        // Symmetric margins: the card is contained by construction (the Canvas is clipped to the
+        // window), but a card flush against the right edge reads as clipped even when it is not.
+        var cardWidth = Math.Clamp(TooltipLayer.ActualWidth - (2 * TooltipLeftMargin), 0, TooltipMaxWidth);
+        WorkflowTooltipOverlay.Width = cardWidth;
+
+        // The content never goes below the width a 340-wide card would give it. When the window
+        // cannot supply that, the card shrinks with the window but the content does not — which is
+        // what puts the horizontal scrollbar on screen instead of quietly cutting the text off.
+        WorkflowTooltipContent.Width = Math.Max(TooltipMinWidth, cardWidth) - TooltipChromeWidth;
+
+        // Measured in the overlay's own coordinate space, so the value already accounts for the
+        // scroll position of the panel the row lives in. Flush against the row's bottom edge, with
+        // no gap: the pointer has to be able to travel from row to card without crossing a strip
+        // that belongs to neither, or the card would close on its way to its own scrollbar.
+        _tooltipDesiredTop = row.TransformToVisual(TooltipLayer)
+            .TransformPoint(new Point(0, row.ActualHeight)).Y;
+
+        // ActualHeight is still last hover's until this one lays out; OnWorkflowTooltipSizeChanged
+        // corrects it. Setting it here too keeps a repeat hover of the same-sized card — which
+        // raises no SizeChanged at all — from opening at the previous row's offset.
+        Canvas.SetTop(WorkflowTooltipOverlay, ClampTooltipTop(WorkflowTooltipOverlay.ActualHeight));
+        WorkflowTooltipOverlay.Visibility = Visibility.Visible;
+    }
+
+    private void OnWorkflowTooltipSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        Canvas.SetTop(WorkflowTooltipOverlay, ClampTooltipTop(e.NewSize.Height));
+        UpdateTooltipScrollbar();
+    }
+
+    private void OnWorkflowTooltipViewChanged(object? sender, ScrollViewerViewChangedEventArgs e) =>
+        UpdateTooltipScrollbar();
+
+    /// <summary>
+    /// Sizes and places the hand-built scroll thumb, and hides the whole track when the content
+    /// fits. See the XAML for why the framework's own scrollbar is not used.
+    /// </summary>
+    private void UpdateTooltipScrollbar()
+    {
+        var scrollable = WorkflowTooltipScroll.ScrollableWidth;
+
+        // Sub-pixel overflow is rounding noise, not something to offer a scrollbar for.
+        if (scrollable <= 1)
+        {
+            TooltipScrollTrack.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        TooltipScrollTrack.Visibility = Visibility.Visible;
+
+        var trackWidth = TooltipScrollTrack.ActualWidth;
+        var extent = WorkflowTooltipScroll.ExtentWidth;
+        if (trackWidth <= 0 || extent <= 0)
+            return;
+
+        // Floor of 24 px: proportional sizing alone makes the thumb a few pixels wide once the
+        // content is several times the viewport, at which point it is neither visible nor grabbable.
+        var thumbWidth = Math.Clamp(trackWidth * WorkflowTooltipScroll.ViewportWidth / extent, 24, trackWidth);
+        TooltipScrollThumb.Width = thumbWidth;
+        TooltipScrollThumb.Margin = new Thickness(
+            (trackWidth - thumbWidth) * (WorkflowTooltipScroll.HorizontalOffset / scrollable), 0, 0, 0);
+    }
+
+    private void OnTooltipScrollTrackPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        TooltipScrollTrack.CapturePointer(e.Pointer);
+        ScrollToTrackPosition(e);
+    }
+
+    private void OnTooltipScrollTrackPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (e.Pointer.IsInContact)
+            ScrollToTrackPosition(e);
+    }
+
+    private void OnTooltipScrollTrackPointerReleased(object sender, PointerRoutedEventArgs e) =>
+        TooltipScrollTrack.ReleasePointerCapture(e.Pointer);
+
+    /// <summary>
+    /// Jump-and-drag in one: pressing anywhere on the track centres the thumb there, and holding
+    /// keeps following the pointer. Cheaper than a separate thumb-drag path, and a click on the
+    /// track scrolling to that spot is what a user expects anyway.
+    /// </summary>
+    private void ScrollToTrackPosition(PointerRoutedEventArgs e)
+    {
+        var travel = TooltipScrollTrack.ActualWidth - TooltipScrollThumb.ActualWidth;
+        if (travel <= 0)
+            return;
+
+        var x = e.GetCurrentPoint(TooltipScrollTrack).Position.X - (TooltipScrollThumb.ActualWidth / 2);
+        var fraction = Math.Clamp(x / travel, 0, 1);
+
+        WorkflowTooltipScroll.ChangeView(
+            fraction * WorkflowTooltipScroll.ScrollableWidth, null, null, disableAnimation: true);
+    }
+
+    /// <summary>
+    /// "Below the row" holds until the card would run past the bottom of the window, at which point
+    /// containment wins and it slides up by just enough to fit. A card taller than the window is
+    /// pinned to the top — its own scrollbar is horizontal only, so there is nothing better to do
+    /// than show the beginning of it.
+    /// </summary>
+    private double ClampTooltipTop(double cardHeight)
+    {
+        var lowestFittingTop = TooltipLayer.ActualHeight - cardHeight;
+        return lowestFittingTop <= 0 ? 0 : Math.Clamp(_tooltipDesiredTop, 0, lowestFittingTop);
+    }
+
+    /// <summary>
+    /// The card sits flush under the row, so a pointer leaving the row downwards is usually
+    /// entering the card — and the card has to stay reachable, because its horizontal scrollbar is
+    /// the only way to read a card wider than the window. Hit-testing the new position beats a
+    /// close-and-reopen timer: no delay, no flicker, no state to unwind.
+    /// </summary>
+    private void OnWorkflowRowPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (IsPointerOverTooltip(e))
+            return;
+
+        HideWorkflowTooltip();
+    }
+
+    private void OnWorkflowTooltipPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        // A drag that runs past the card's edge must not close the thing being dragged.
+        if (_isPanningTooltip)
+            return;
+
+        HideWorkflowTooltip();
+    }
+
+    /// <summary>
+    /// Middle-button drag-to-pan across the card.
+    ///
+    /// Registered with AddHandler(..., handledEventsToo: true) rather than as XAML attributes: the
+    /// ScrollViewer between the card and the pointer marks pointer events handled as part of its own
+    /// input processing, and a plain PointerPressed="..." attribute on the card never fires.
+    ///
+    /// The content follows the pointer — dragging left pulls the text left and reveals what is off
+    /// to the right, the same direction as grabbing a sheet of paper. The framework offers nothing
+    /// here: ScrollViewer has no middle-button panning, and its touch panning modes do not apply to
+    /// a mouse.
+    /// </summary>
+    private void OnWorkflowTooltipPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        var point = e.GetCurrentPoint(WorkflowTooltipOverlay);
+        if (!point.Properties.IsMiddleButtonPressed || WorkflowTooltipScroll.ScrollableWidth <= 0)
+            return;
+
+        _isPanningTooltip = true;
+        _panStartX = point.Position.X;
+        _panStartOffset = WorkflowTooltipScroll.HorizontalOffset;
+        WorkflowTooltipOverlay.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void OnWorkflowTooltipPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isPanningTooltip)
+            return;
+
+        var x = e.GetCurrentPoint(WorkflowTooltipOverlay).Position.X;
+        WorkflowTooltipScroll.ChangeView(
+            _panStartOffset - (x - _panStartX), null, null, disableAnimation: true);
+        e.Handled = true;
+    }
+
+    private void OnWorkflowTooltipPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isPanningTooltip)
+            return;
+
+        _isPanningTooltip = false;
+        WorkflowTooltipOverlay.ReleasePointerCapture(e.Pointer);
+        e.Handled = true;
+    }
+
+    private bool IsPointerOverTooltip(PointerRoutedEventArgs e)
+    {
+        if (WorkflowTooltipOverlay.Visibility != Visibility.Visible)
+            return false;
+
+        var position = e.GetCurrentPoint(TooltipLayer).Position;
+        var left = Canvas.GetLeft(WorkflowTooltipOverlay);
+        var top = Canvas.GetTop(WorkflowTooltipOverlay);
+
+        return position.X >= left
+               && position.X <= left + WorkflowTooltipOverlay.ActualWidth
+               && position.Y >= top
+               && position.Y <= top + WorkflowTooltipOverlay.ActualHeight;
+    }
+
+    /// <summary>
+    /// Deliberately NOT wired to the subagent list being rebuilt, though the temptation is real:
+    /// this card outlives its row, where a ToolTip died with the element it hung off. But every
+    /// poll clears and refills that list, so closing on the rebuild made the card blink away every
+    /// few seconds while it was being read — worse than the case it guarded against.
+    ///
+    /// The residual case is a run going stale while the pointer rests on it: the row vanishes, no
+    /// PointerExited is ever raised for it, and the card stays until the pointer moves across it or
+    /// onto another row. It closes on the first pointer movement either way.
+    /// </summary>
+    private void HideWorkflowTooltip()
+    {
+        _isPanningTooltip = false;
+        WorkflowTooltipOverlay.Visibility = Visibility.Collapsed;
+        WorkflowTooltipOverlay.DataContext = null;
     }
 
     private void OnSpinnerCompleted(object? sender, object e)
