@@ -1,0 +1,2 @@
+{"type":"user","uuid":"00000000-0000-4000-8000-k00000000003","isSidechain":true,"timestamp":"2026-08-17T11:00:00.000Z","message":{"role":"user","content":"mock task"}}
+{"type":"assistant","uuid":"00000000-0000-4000-8001-k00000000003","isSidechain":true,"timestamp":"2026-08-17T11:31:14.638Z","message":{"id":"msg_mockamock00000000003","model":"claude-sonnet-5","role":"assistant","usage":{"input_tokens":2,"cache_creation_input_tokens":6415,"cache_read_input_tokens":59884,"output_tokens":8110,"service_tier":"standard"}}}
