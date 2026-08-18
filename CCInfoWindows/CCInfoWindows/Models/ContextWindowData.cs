@@ -35,12 +35,13 @@ public record SubagentContextData
     ///
     /// So everything reachable from this field is an extension BEYOND parity, not a catch-up. If
     /// upstream ever ships its own workflow view, that is a collision with decisions already taken
-    /// here — compare the two designs first, do not blindly align. Decisions D-1…D-13 and their
+    /// here — compare the two designs first, do not blindly align. Decisions D-1…D-27 and their
     /// measurements: `.planning/milestones/v1.7-ROADMAP.md`.
     ///
-    /// Every other site carrying this feature repeats the marker `Windows-only` and points back
-    /// here: JsonlService (discovery + journal), MainViewModel (row and label composition),
-    /// MainView.xaml (the row template), and the WorkflowSubagent* resw keys.
+    /// Most sites carrying this feature repeat the marker `Windows-only` and point back here —
+    /// JsonlService (discovery + journal), MainViewModel (row and label composition), MainView.xaml
+    /// (the row template), the WorkflowSubagent* resw keys — but grep it as a starting point, not
+    /// as a complete list.
     /// </summary>
     public string? WorkflowId { get; init; }
 

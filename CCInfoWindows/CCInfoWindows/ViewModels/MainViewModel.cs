@@ -25,7 +25,6 @@ namespace CCInfoWindows.ViewModels;
 public class SubagentDisplayData
 {
     public required string AgentId { get; init; }
-    public double Utilization { get; init; }
     public double Percentage { get; init; }
     public required string PercentageText { get; init; }
     public required string ModelBadge { get; init; }
@@ -103,7 +102,7 @@ public record WorkflowTooltipData(
 /// instead of yet more delegate type arguments: label and tooltip are formatted from the same eight
 /// values, so they take the same parameter and stay in step.
 /// </summary>
-public record WorkflowRowFacts(
+internal record WorkflowRowFacts(
     string RunId,
     int AgentsDone,
     int AgentsStarted,
@@ -139,7 +138,7 @@ public partial class MainViewModel : ObservableObject,
 {
     // Escapes, not literals: U+2699 resolves through DWrite fallback to Segoe UI Emoji — a COLOUR
     // font, which silently ignores Foreground and made the gear the brightest element in its row at
-    // ~7.8:1 where the declared #636366 gives 2.84:1 (D-2). The template pins FontFamily to
+    // ~7.8:1 where the declared #636366 gives 2.84:1 (D-11). The template pins FontFamily to
     // "Segoe UI Symbol" so both glyphs stay monochrome. Keeping the source pure ASCII also puts
     // them out of reach of the PowerShell bulk edit that has already corrupted non-ASCII here once.
     private const string PlainSubagentIcon = "\u21B3";     // downwards arrow with tip rightwards
@@ -1557,7 +1556,7 @@ public partial class MainViewModel : ObservableObject,
     ///
     /// Windows-only: the whole workflow branch of this method — grouping, the gear row, the label —
     /// has no macOS counterpart. The plain-subagent branch does. Full note on
-    /// SubagentContextData.WorkflowId; decisions D-1…D-13 in
+    /// SubagentContextData.WorkflowId; decisions D-1…D-27 in
     /// `.planning/milestones/v1.7-ROADMAP.md`.
     /// </summary>
     internal static List<SubagentDisplayData> BuildSubagentRows(
@@ -1616,7 +1615,6 @@ public partial class MainViewModel : ObservableObject,
         return new SubagentDisplayData
         {
             AgentId = agentId,
-            Utilization = utilization,
             Percentage = percentage,
             PercentageText = $"{percentage:0}%",
             ModelBadge = modelBadge,
@@ -1641,7 +1639,6 @@ public partial class MainViewModel : ObservableObject,
         new()
         {
             AgentId = workflowId,
-            Utilization = 0,
             Percentage = 0,
             PercentageText = string.Empty,
             ModelBadge = string.Empty,
@@ -1661,20 +1658,24 @@ public partial class MainViewModel : ObservableObject,
     ///
     /// A run with no journal.jsonl (older runs, other harness versions) reports zero started agents;
     /// the label then drops the count rather than showing a fabricated "0/0".
+    ///
+    /// Takes the localizer as a delegate for the same reason <see cref="FormatWorkflowTooltip"/>
+    /// does: <c>Localizer.Get()</c> needs a WinUI3Localizer host, so a direct call would leave the
+    /// only production composition of the row text reachable through the UI alone.
     /// </summary>
-    private static string FormatWorkflowLabel(WorkflowRowFacts facts)
+    internal static string FormatWorkflowLabel(WorkflowRowFacts facts, Func<string, string> localize)
     {
         var tokens = TokenFormatter.FormatTokenCount(facts.TotalTokens);
 
         return facts.AgentsStarted <= 0
             ? string.Format(
                 CultureInfo.CurrentCulture,
-                Localizer.Get().GetLocalizedString(WorkflowSubagentLabelTokensOnlyKey),
+                localize(WorkflowSubagentLabelTokensOnlyKey),
                 facts.RunId,
                 tokens)
             : string.Format(
                 CultureInfo.CurrentCulture,
-                Localizer.Get().GetLocalizedString(WorkflowSubagentLabelKey),
+                localize(WorkflowSubagentLabelKey),
                 facts.RunId,
                 facts.AgentsDone,
                 facts.AgentsStarted,
@@ -1686,13 +1687,17 @@ public partial class MainViewModel : ObservableObject,
     /// This is the seam the localizer lives behind: <see cref="BuildSubagentRows"/> takes it as a
     /// delegate and stays testable without a WinUI3Localizer host.
     /// </summary>
-    private static (string Label, WorkflowTooltipData Tooltip) FormatWorkflowRow(WorkflowRowFacts facts) =>
-        (FormatWorkflowLabel(facts),
-         FormatWorkflowTooltip(
-             facts,
-             key => Localizer.Get().GetLocalizedString(key),
-             LocalizedText.ResolveOrNull(WorkflowTooltipStartPatternUid, WorkflowTooltipLogSource),
-             CultureInfo.CurrentUICulture));
+    private static (string Label, WorkflowTooltipData Tooltip) FormatWorkflowRow(WorkflowRowFacts facts)
+    {
+        static string Localize(string key) => Localizer.Get().GetLocalizedString(key);
+
+        return (FormatWorkflowLabel(facts, Localize),
+                FormatWorkflowTooltip(
+                    facts,
+                    Localize,
+                    LocalizedText.ResolveOrNull(WorkflowTooltipStartPatternUid, WorkflowTooltipLogSource),
+                    CultureInfo.CurrentUICulture));
+    }
 
     internal const string WorkflowTooltipStartPatternUid = "WorkflowTooltipStartPattern";
 
