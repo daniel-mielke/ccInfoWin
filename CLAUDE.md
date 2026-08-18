@@ -59,8 +59,9 @@ or `hooks.workflow_guard` unless you want GSD enforcement everywhere.
 ## Build Commands
 
 ```bash
-# Run in debug mode -- shorthand from the repo root, any shell
-.\dev
+# Run in debug mode -- shorthand from the repo root. The form differs per shell:
+.\dev        # PowerShell / cmd
+./dev.cmd    # Git Bash -- there the backslash escapes the "d", so .\dev runs as ".dev" and fails
 
 # Debug build (default)
 dotnet build CCInfoWindows/CCInfoWindows/CCInfoWindows.csproj
