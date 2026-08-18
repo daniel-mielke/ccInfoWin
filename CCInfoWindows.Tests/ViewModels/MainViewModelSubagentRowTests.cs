@@ -479,6 +479,96 @@ public class MainViewModelSubagentRowTests
             startLine);
     }
 
+    // -------------------------------------------------------------------------
+    // G-2: rows of a run that stopped writing are retired on the countdown tick
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// The defect itself: nothing repaints after a run's last write, because that write comes from
+    /// the run's own agents, so the row outlives the run indefinitely.
+    /// </summary>
+    [Fact]
+    public void RetireStaleRows_DropsARunThatStoppedWritingLongAgo()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var rows = MainViewModel.BuildSubagentRows(
+            [Agent("a1", 10_000, workflowId: "wf_done", runAgentsStarted: 4, runAgentsDone: 4,
+                   lastActivity: now - TimeSpan.FromHours(2))],
+            NullBrush,
+            TestLabel);
+
+        MainViewModel.RetireStaleRows(rows, now);
+
+        Assert.Empty(rows);
+    }
+
+    /// <summary>
+    /// The reason the window is ten minutes and not the service's 30 s. Measured on the real
+    /// 43-agent run: 26 % of its runtime had NO agent fresh within 30 s, and one agent went 474 s
+    /// without a write inside a single model call. The 30 s gate is calibrated for write-triggered
+    /// sampling, where a repaint proves an agent just wrote; sampled on a clock it would delete the
+    /// row of a run that is still going. Shrink SubagentRetirementWindow below ~8 min and this
+    /// fails.
+    /// </summary>
+    [Fact]
+    public void RetireStaleRows_KeepsALiveRunAcrossTheLongestMeasuredWriteGap()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var rows = MainViewModel.BuildSubagentRows(
+            [Agent("straggler", 10_000, workflowId: "wf_live", runAgentsStarted: 43, runAgentsDone: 42,
+                   lastActivity: now - TimeSpan.FromSeconds(474))],
+            NullBrush,
+            TestLabel);
+
+        MainViewModel.RetireStaleRows(rows, now);
+
+        Assert.Single(rows);
+    }
+
+    /// <summary>
+    /// A run is retired on its NEWEST agent, mirroring the service's per-run gate: one agent still
+    /// writing keeps the whole run on screen, however long its finished siblings have been quiet.
+    /// </summary>
+    [Fact]
+    public void RetireStaleRows_KeepsARunWhoseFinishedAgentsAreStaleButOneStillWrites()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var rows = MainViewModel.BuildSubagentRows(
+            [
+                Agent("finished", 10_000, workflowId: "wf_mixed", runAgentsStarted: 2, runAgentsDone: 1,
+                      lastActivity: now - TimeSpan.FromHours(3)),
+                Agent("writing", 20_000, workflowId: "wf_mixed", runAgentsStarted: 2, runAgentsDone: 1,
+                      lastActivity: now)
+            ],
+            NullBrush,
+            TestLabel);
+
+        MainViewModel.RetireStaleRows(rows, now);
+
+        Assert.Single(rows);
+    }
+
+    /// <summary>
+    /// Plain Agent-tool rows freeze for the same reason and are retired the same way — and the
+    /// stale one must not take its live neighbour with it.
+    /// </summary>
+    [Fact]
+    public void RetireStaleRows_RetiresPlainRowsIndividually()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var rows = MainViewModel.BuildSubagentRows(
+            [
+                Agent("stale", 10_000, lastActivity: now - TimeSpan.FromHours(1)),
+                Agent("live", 20_000, lastActivity: now)
+            ],
+            NullBrush,
+            TestLabel);
+
+        MainViewModel.RetireStaleRows(rows, now);
+
+        Assert.Equal("live", Assert.Single(rows).AgentId);
+    }
+
     private static string StartLineOf(WorkflowTooltipData tooltip) =>
         TextLines(tooltip).Single(l => l.StartsWith("Start:", StringComparison.Ordinal));
 
@@ -529,13 +619,14 @@ public class MainViewModelSubagentRowTests
         DateTimeOffset startedUtc = default,
         string? name = null,
         string? description = null,
-        IReadOnlyList<WorkflowPhase>? phases = null) => new()
+        IReadOnlyList<WorkflowPhase>? phases = null,
+        DateTimeOffset? lastActivity = null) => new()
     {
         AgentId = agentId,
         TotalTokens = tokens,
         MaxTokens = MaxTokens,
         ModelName = "claude-sonnet-4-20250514",
-        LastActivity = DateTimeOffset.UtcNow,
+        LastActivity = lastActivity ?? DateTimeOffset.UtcNow,
         WorkflowId = workflowId,
         RunAgentsStarted = runAgentsStarted,
         RunAgentsDone = runAgentsDone,

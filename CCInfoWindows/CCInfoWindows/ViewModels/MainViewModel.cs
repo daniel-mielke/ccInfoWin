@@ -50,6 +50,14 @@ public class SubagentDisplayData
     /// on plain rows, where the label TextBlock carrying it is collapsed anyway.
     /// </summary>
     public WorkflowTooltipData? Tooltip { get; init; }
+
+    /// <summary>
+    /// Newest agent write behind this row, as the service already measured it from the file mtime
+    /// (<c>SubagentContextData.LastActivity</c>). Carried onto the row so the countdown tick can
+    /// retire a run that stopped writing without going back to disk to rediscover it — see
+    /// <see cref="MainViewModel.RetireStaleRows"/>. Windows-only.
+    /// </summary>
+    public DateTimeOffset LastActivity { get; init; }
 }
 
 /// <summary>
@@ -322,6 +330,20 @@ public partial class MainViewModel : ObservableObject,
 
     /// <summary>Countdown labels have minute resolution, so a faster tick would only burn CPU.</summary>
     private static readonly TimeSpan CountdownTickInterval = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// How long a subagent row outlives the newest write behind it before the countdown tick drops
+    /// it (G-2). Windows-only.
+    ///
+    /// Deliberately NOT the service's 30 s activity window. That value is calibrated for
+    /// WRITE-triggered sampling, where a repaint happens only because some agent just wrote, so
+    /// "nothing fresh" reliably means "over". Sampled on a clock instead, the same 30 s deletes the
+    /// row of a run that is still going: measured against the real 43-agent run, 26 % of its
+    /// runtime had no agent fresh within 30 s, and one agent went 474 s without a write inside a
+    /// single model call (.planning/reviews/2026-08-09_v16-v17-review.md). Ten minutes clears that
+    /// measured gap with margin while still bounding a finished run's row to minutes, not hours.
+    /// </summary>
+    internal static readonly TimeSpan SubagentRetirementWindow = TimeSpan.FromMinutes(10);
 
     // --- UI state ---
 
@@ -649,7 +671,7 @@ public partial class MainViewModel : ObservableObject,
 
         _countdownTimer = winuiDispatcherQueue.CreateTimer();
         _countdownTimer.Interval = CountdownTickInterval;
-        _countdownTimer.Tick += (s, e) => UpdateCountdowns();
+        _countdownTimer.Tick += (s, e) => OnCountdownTick();
         _countdownTimer.Start();
     }
 
@@ -1012,6 +1034,46 @@ public partial class MainViewModel : ObservableObject,
         RecomputeNextWindowLabel();
         WeeklyCountdown = CountdownFormatter.FormatCountdown(_weeklyResetsAt);
         SonnetCountdown = CountdownFormatter.FormatCountdown(_sonnetResetsAt);
+    }
+
+    /// <summary>
+    /// Everything the one-minute timer does. A named method rather than a multi-statement Tick
+    /// lambda because <see cref="StartTimers"/> is unreachable from tests —
+    /// DispatcherQueue.GetForCurrentThread() returns null in a headless host — so anything left
+    /// inside the lambda could never be exercised.
+    /// </summary>
+    internal void OnCountdownTick()
+    {
+        UpdateCountdowns();
+        RetireStaleRows(SubagentContexts, DateTimeOffset.UtcNow);
+    }
+
+    /// <summary>
+    /// G-2 (Windows-only): drops subagent rows whose run has stopped writing.
+    ///
+    /// SubagentContexts is only ever rebuilt by <see cref="ApplyContextWindow"/>, which is reachable
+    /// only from a DataUpdated batch — and the last write of a workflow run comes from the run's own
+    /// agents. So nothing repaints after a run ends, the service's staleness gate never gets a pass
+    /// at which the run is already stale, and a finished run keeps a row in a section that claims to
+    /// show live agents for hours.
+    ///
+    /// Expired against <see cref="SubagentDisplayData.LastActivity"/>, which the service already
+    /// measured and shipped on every row: re-reading the session to rediscover it would mean a tail
+    /// read plus a recursive glob per tick, and would drag the whole KONTEXTFENSTER repaint —
+    /// statistics, pricing, badge brushes — onto the clock with it.
+    ///
+    /// RemoveAt rather than Clear+refill so the repeater raises Remove instead of Reset and the
+    /// surviving rows keep their realized containers.
+    /// </summary>
+    internal static void RetireStaleRows(IList<SubagentDisplayData> rows, DateTimeOffset nowUtc)
+    {
+        var cutoff = nowUtc - SubagentRetirementWindow;
+
+        for (var i = rows.Count - 1; i >= 0; i--)
+        {
+            if (rows[i].LastActivity < cutoff)
+                rows.RemoveAt(i);
+        }
     }
 
     /// <summary>
@@ -1511,7 +1573,8 @@ public partial class MainViewModel : ObservableObject,
                 s.AgentId,
                 s.Utilization,
                 ModelContextLimits.GetDisplayName(s.ModelName),
-                brushFactory(ModelContextLimits.GetBadgeColorHex(s.ModelName))))
+                brushFactory(ModelContextLimits.GetBadgeColorHex(s.ModelName)),
+                s.LastActivity))
             .ToList();
 
         // Max, not First: every agent of a run carries the same run-level counts, and Max keeps a
@@ -1532,7 +1595,11 @@ public partial class MainViewModel : ObservableObject,
                     g.Min(s => s.RunStartedUtc),
                     g.Select(s => s.RunName).FirstOrDefault(n => n is not null),
                     g.Select(s => s.RunDescription).FirstOrDefault(d => d is not null),
-                    g.Select(s => s.RunPhases).FirstOrDefault(p => p.Count > 0) ?? []))));
+                    g.Select(s => s.RunPhases).FirstOrDefault(p => p.Count > 0) ?? [])),
+                // Max, like the service's own per-run gate (JsonlService.BuildSubagentContext):
+                // one agent still writing keeps the whole run on screen, however many of its
+                // siblings have already finished and gone quiet.
+                g.Max(s => s.LastActivity)));
 
         rows.AddRange(workflowRows);
         return rows;
@@ -1542,7 +1609,8 @@ public partial class MainViewModel : ObservableObject,
         string agentId,
         double utilization,
         string modelBadge,
-        SolidColorBrush badgeColor)
+        SolidColorBrush badgeColor,
+        DateTimeOffset lastActivity)
     {
         var percentage = Math.Min(utilization * 100, 100);
         return new SubagentDisplayData
@@ -1556,7 +1624,8 @@ public partial class MainViewModel : ObservableObject,
             Icon = PlainSubagentIcon,
             Label = string.Empty,
             IsWorkflow = false,
-            Tooltip = null
+            Tooltip = null,
+            LastActivity = lastActivity
         };
     }
 
@@ -1565,7 +1634,10 @@ public partial class MainViewModel : ObservableObject,
     /// badge for it, so the zeroed numeric members are never read. The badge is absent because the
     /// agents of one run can be on different models.
     /// </summary>
-    private static SubagentDisplayData CreateWorkflowRow(string workflowId, (string Label, WorkflowTooltipData Tooltip) text) =>
+    private static SubagentDisplayData CreateWorkflowRow(
+        string workflowId,
+        (string Label, WorkflowTooltipData Tooltip) text,
+        DateTimeOffset lastActivity) =>
         new()
         {
             AgentId = workflowId,
@@ -1577,7 +1649,8 @@ public partial class MainViewModel : ObservableObject,
             Icon = WorkflowSubagentIcon,
             Label = text.Label,
             IsWorkflow = true,
-            Tooltip = text.Tooltip
+            Tooltip = text.Tooltip,
+            LastActivity = lastActivity
         };
 
     /// <summary>
