@@ -1,5 +1,95 @@
 # Milestones
 
+## v1.7 Workflow Subagent Visibility (Code complete 2026-08-17, not yet tagged)
+
+**Phases completed:** 5 phases (1-3, 3b, 4, 5), 10 commits, no GSD (plan mode / ultracode)
+**Changes:** 22 files, +3,810/-149 lines
+**Tests:** 797 → 887 GREEN (809 after phases 1–3, 818 after 3b, 832 after 4, 874 after 5, 879 after
+the release fixes below, 887 after the keyboard/D-3 pass)
+
+**This milestone is a Windows-only extension, not parity.** Upstream ccInfo has no workflow
+display at all — it predates Claude Code's `Workflow` tool. Every code site that touches it
+carries a grepable `Windows-only` marker so a future parity pass does not mistake it for drift.
+
+**Key accomplishments:**
+
+- Workflow subagents were invisible: they live nested under `subagents/workflows/{runId}/`, and
+  the scan only looked one level down. A 43-agent run showed nothing at all.
+- Each run collapses into **one** row rather than one row per agent — 44 agents would otherwise be
+  roughly 1,230 px of bars in a ~600 px window.
+- **The row carries no bar and no percentage** (phase 3b, overturning the phase-2 design). Agent
+  utilization is a ratio against a *per-agent* ceiling; over a group that ceiling does not exist,
+  so maximum, mean and sum alike produce a number with no reference quantity. The row reports the
+  two extensive quantities that do add up: `31/31 Agents fertig · 3.3M Tokens`.
+- **The 30 s staleness gate had to move from per-agent to per-run.** Applied per agent, the token
+  sum showed a median 22 % of the truth and 4.4 % in the frozen last snapshot — the finished agents
+  were being filtered out of their own run's total.
+- Hover card (phase 5) replaces the phase-4 `ToolTip`: an overlay in the page's visual tree, not a
+  `ToolTipService` popup. `ToolTip` could express none of the four requirements — it anchors to its
+  target rather than the window, its popup may leave the window (and did, flipping above the top
+  edge), and its content cannot scroll. Name, description and phases come from the run script
+  (`workflows/scripts/{name}-{runId}.js`), parsed with a bracket-counting, string-aware reader
+  because the `meta` block is a JavaScript object literal, not JSON.
+- The completed-run JSON was dropped as a source entirely: it is written at run *end*, by which
+  time the run has stopped writing and the row is already gone through the staleness gate. That
+  branch could never execute against a visible row — dead code wearing the shape of a case
+  distinction.
+
+**Release fixes (2026-08-17)** — the four open findings of
+`.planning/reviews/2026-08-09_v16-v17-review.md`:
+
+- **B-1** — the version triple and `README.md` still read 1.6.1 while the v1.7 code was complete.
+  Tagging that would have produced a permanent, undismissable update banner for every user running
+  exactly that build, because `UpdateService` compares the GitHub tag against the assembly version.
+- **B-2** — `installer/setup.iss` had flagless `[Tasks]`, which Inno Setup re-checks on every run
+  including upgrades, silently restoring autostart and the desktop icon for users who had turned
+  them off. `Flags: checkedonce` limits the default to first installs. Verified by actually
+  compiling the script — the predecessor `Flags: checked` was equally plausible-looking and equally
+  invalid, and went unnoticed for a year because `iscc` was never run.
+- **G-2** — nothing repainted a subagent row after the last write, and the last write of a workflow
+  run comes from the run's own agents, so a finished run kept its row for hours. The one-minute
+  countdown tick now retires rows against the `LastActivity` the service already measured.
+  **The review's own prescription ("re-read the context window on the poll tick") was not
+  followed, and the roadmap records why:** the poll timer can be switched off entirely ("Manual"),
+  and re-reading re-evaluates the service's 30 s gate at an arbitrary wall-clock instant — which
+  the review's *own* measurements rule out (26 % of a live 43-agent run had no agent fresh within
+  30 s; one agent went 474 s without a write inside a single model call). That would have deleted
+  the row of a run still in progress. The retirement window is therefore 10 minutes and independent
+  of the display gate, and a test pins it: shrink it below ~8 minutes and the suite goes red.
+- **G-3** — `CLAUDE.md` documented `.\dev` as working in "any shell"; in Git Bash the backslash
+  escapes the `d` and the command fails. Both forms are now stated.
+
+**Keyboard access and D-3 (2026-08-18)** — the last two open findings, tests 879 → **887**:
+
+- **D-3** — a live run re-read every agent transcript of that run on every poll pass, although the
+  finished agents of a live run never change again (12.7 MB / ~3 200 JSON lines measured for the
+  largest run). Reads are now memoized per file on `(mtime, length)`. Keyed on the **path**, not on
+  the `(path, mtime, length)` triple the review proposed: with the stamp in the key, a file that is
+  still being written adds an entry per pass instead of replacing one, so the dictionary would grow
+  with a run's write count rather than its agent count. `MaxTokens` is deliberately left out of the
+  memo — it comes from the price list, which fills in asynchronously, so caching it would freeze
+  whatever that list happened to know at first read.
+- **F-4 (keyboard half)** — the hover card hung on pointer events only. `IsTabStop` now rides on the
+  same label `TextBlock` the pointer handlers do, which is `Collapsed` on plain rows and therefore
+  keeps them out of the tab order without a converter. Focus opens the card, Escape closes it,
+  Enter/Space reopen it, Left/Right scroll it. **Measured in the running app** against the mockdata
+  fixture, through UIA rather than screenshots (which return blank frames on this machine).
+- **D-27, found by that measurement and not by design** — Escape closes the card but leaves focus
+  ON the row, so no further `GotFocus` is ever raised and the card was unreachable until the user
+  tabbed away and back. Enter/Space reopen it, ahead of the visibility guard; a convention test pins
+  that ordering by index comparison.
+- **U-6 / U-21 on the same row** — the glyph leaves the automation tree, and moves from
+  `TertiaryTextBrush` to `SecondaryTextBrush`: computed, not guessed, at 2.84:1 (dark) / 2.99:1
+  (light) against the 3:1 floor of WCAG 1.4.11, versus 5.22:1 / 4.65:1 after. A new test reads the
+  palette out of `AppTheme.xaml`, so the brush cannot be quietly reverted.
+
+**Deliberately not built:** screen-reader output (the review's `AutomationProperties.HelpText`
+suggestion). The user's call — the app supports no screen reader at all, so one `HelpText` on this
+one row would be an island. That also makes U-6 formally moot; it was taken along because it is a
+single attribute, not because the finding carries.
+
+---
+
 ## v1.6 macOS v1.15.2 Feature Parity (Shipped: 2026-08-09)
 
 **Phases completed:** 6 phases (0-5), 5 commits, no GSD (ultracode / plan mode)
