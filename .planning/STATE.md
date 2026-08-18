@@ -5,9 +5,9 @@ milestone_name: Workflow Subagent Visibility
 status: implemented
 workflow: ultracode / plan-mode (NOT GSD -- see CLAUDE.md "Workflows")
 roadmap: .planning/milestones/v1.7-ROADMAP.md
-stopped_at: v1.7 code complete and verified against real 43-agent workflow data 2026-08-09. 809/809 tests green, Release build clean. NOT tagged, NOT shipped -- no version bump yet. Open -- see "v1.7 -- Ergebnis" below for the one deferred verification point (live watcher load).
-last_updated: "2026-08-09T12:30:00.000Z"
-last_activity: 2026-08-09 -- v1.7 implemented (recursive subagent scan + aggregated workflow row); v1.6.1 remains the shipped release
+stopped_at: v1.7 code complete, version bumped to 1.7.0, work continues on feat/workflow-tooltip-hover-card (pushed, 13 commits ahead of master). NOT tagged, NOT merged -- v1.6.1 is still the shipped release. Open -- see "v1.7 -- Ergebnis" below for the one deferred verification point (live watcher load).
+last_updated: "2026-08-18T11:00:00.000Z"
+last_activity: 2026-08-18 -- workflow row redesign (no bar, no percentage) plus hover card on feat/workflow-tooltip-hover-card; the Laufzeitbeleg below documents the superseded phase-2 design
 progress:
   total_phases: 3
   completed_phases: 3
@@ -29,6 +29,14 @@ eine der geänderten Dateien (vorbestehende MVVMTK-Warnungen auf `[ObservablePro
 | 3 | Verifikation am laufenden Release-Build | **fertig bis auf einen Punkt**, siehe unten |
 
 ### Laufzeitbeleg
+
+> **ÜBERHOLT — historisches Protokoll, kein gültiger Beleg.** Der Abschnitt dokumentiert den
+> Phase-2-Entwurf mit Balken und Prozentzahl in der Workflow-Zeile. Phase 3b hat beides entfernt,
+> die Zeile lautet seither `31/31 Agents fertig · 3.3M Tokens`; Phase 5 ersetzte den Tooltip durch
+> die Hover-Card. Damit sind die Zeilen **D-2** und **Breitenprüfung** unten gegenstandslos: die
+> Breitenmessung lief bei 1,6× der Standardbreite, und bei echter Standardbreite blieben dem Balken
+> ~104 DIP gegen ~189 DIP einer normalen Zeile — die Balkenlängen benachbarter Zeilen waren also
+> nicht einmal vergleichbar. Gültiger Stand: `.planning/MILESTONES.md`, Abschnitt v1.7.
 
 Kein echter Workflow-Lauf ausgelöst (der hätte ≥10 Agents und entsprechend Tokens gekostet).
 Stattdessen die **echten** Agent-Dateien der bestehenden Runs unter die aktive Session kopiert und
@@ -64,7 +72,12 @@ Die CPU-Messung lief gegen einen **ruhenden** Dateibestand. Phase 3 Punkt 3 ziel
 billig belegt, die **Watcher-Frequenz unter Last** nicht. Falls das je auffällt, ist der Debounce
 der Ort für den Fix, nicht der Scan.
 
-Ebenfalls nicht gemacht: Versionsbump und Tag. v1.6.1 bleibt die ausgelieferte Version.
+### Stand bei HEAD 19b8fe8 (2026-08-18)
+
+Versionstripel im csproj und `README.md` stehen auf **1.7.0**, die `[Tasks]` in `installer/setup.iss`
+tragen `checkedonce`, `.planning/MILESTONES.md` hat seinen v1.7-Eintrag. Der Branch
+`feat/workflow-tooltip-hover-card` ist gepusht (deckungsgleich mit `origin`, 13 Commits vor
+`master`), aber **weder getaggt noch gemerged** — ausgeliefert bleibt v1.6.1.
 
 
 
