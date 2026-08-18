@@ -44,6 +44,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
     private const string SaveCacheSource = "JsonlService.SaveCache";
     private const string CwdDiagnosticSource = "JsonlService.LogMissingCwdSurrogate";
     private const string SubagentContextSource = "JsonlService.BuildSubagentContext";
+    private const string WorkflowProgressSource = "JsonlService.ReadWorkflowProgress";
     private const string ContextWindowSource = "JsonlService.GetContextWindow";
     private const string ScanSource = "JsonlService.ScanProjectsDirectory";
     private const string FileChangeSource = "JsonlService.ProcessPendingFileChanges";
@@ -1007,8 +1008,9 @@ public sealed class JsonlService : IJsonlService, IDisposable
     /// replacing one, and the dictionary grows with the run's write count rather than its agent
     /// count. The stamp lives in the value and is compared on read.
     ///
-    /// Static for the same reason as <see cref="WorkflowScriptCache"/>: absolute paths keep two
-    /// service instances (tests) out of each other's entries.
+    /// Static for the same reason as <see cref="WorkflowScriptCache"/>: two service instances
+    /// (tests) share the entries, which is safe because an absolute path names the same file for
+    /// every instance.
     ///
     /// Windows-only: reached only from the subagent path. Full note on SubagentContextData.WorkflowId.
     ///
@@ -1050,6 +1052,9 @@ public sealed class JsonlService : IJsonlService, IDisposable
                 // (agent just started — only user / tool-result lines). Without an
                 // assistant entry we have no model + token data to display. Not cached: the file is
                 // mid-write, so the stamp would miss on the next pass regardless.
+                // A workflow run therefore stays invisible until one of its agents emits an assistant
+                // entry — a deliberate trade against D-1: the gap is seconds wide, and a synthetic
+                // zero-token context would flow into the run's aggregation.
                 if (entries.Count == 0)
                     return;
 
@@ -1097,8 +1102,8 @@ public sealed class JsonlService : IJsonlService, IDisposable
     /// <summary>
     /// Counts spawned and finished agents of one workflow run from its journal.jsonl: one
     /// "started" line per spawned agent, one "result" line per finished one. Far cheaper than the
-    /// transcripts — 0.37 MB / 62 lines for the largest run on this machine against 12.7 MB across
-    /// its 43 agent files — and the only place the two numbers exist at all.
+    /// transcripts — 0.37 MB / 62 lines for a 31-agent run against 12.7 MB across the 43 agent
+    /// files of the largest run on this machine — and the only place the two numbers exist at all.
     ///
     /// Windows-only: journal.jsonl is a workflow-run artefact that upstream ccInfo never reads.
     /// Full note on SubagentContextData.WorkflowId.
@@ -1133,12 +1138,12 @@ public sealed class JsonlService : IJsonlService, IDisposable
         }
         catch (IOException ex)
         {
-            AppLog.Write(SubagentContextSource, ex, $"Failed to read workflow journal {journal}.");
+            AppLog.Write(WorkflowProgressSource, ex, $"Failed to read workflow journal {journal}.");
             return default;
         }
         catch (UnauthorizedAccessException ex)
         {
-            AppLog.Write(SubagentContextSource, ex, $"Access denied for workflow journal {journal}.");
+            AppLog.Write(WorkflowProgressSource, ex, $"Access denied for workflow journal {journal}.");
             return default;
         }
     }
@@ -1164,8 +1169,8 @@ public sealed class JsonlService : IJsonlService, IDisposable
     /// "this run has no script", and caching a miss would blank the name for the rest of the
     /// session.
     ///
-    /// Static because the whole subagent path is: keying on the absolute directory keeps two service
-    /// instances (tests) from seeing each other's entries.
+    /// Static because the whole subagent path is: two service instances (tests) share the entries,
+    /// which is safe because an absolute directory names the same run for every instance.
     ///
     /// ponytail: never evicted. One entry per workflow run seen in this process, a few hundred bytes
     /// each. Add an eviction if a session ever accumulates thousands of runs.
