@@ -56,10 +56,13 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 
 [Tasks]
-; No Flags: tasks are pre-selected by default. "checked" is not a valid [Tasks] flag and
-; aborted the compile -- this script had never actually been run through iscc.
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "autostart"; Description: "Start at Windows login"; GroupDescription: "Options:"
+; "checkedonce" pre-selects both tasks on a FIRST install only. A flagless task is re-checked on
+; every run, upgrades included -- which would silently rewrite the autostart registry value and
+; restore the desktop icon for a user who had turned them off. The in-app Settings toggle reads
+; that registry value back (Helpers/RegistryHelper.cs), so the upgrade would also flip the toggle.
+; ("checked" is not a valid [Tasks] flag at all and aborted the compile before 3c87661.)
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
+Name: "autostart"; Description: "Start at Windows login"; GroupDescription: "Options:"; Flags: checkedonce
 
 [Files]
 Source: "{#ReleaseDir}\*"; DestDir: "{app}"; Excludes: "\win-x64,*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
