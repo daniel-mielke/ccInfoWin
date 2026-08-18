@@ -673,6 +673,124 @@ public class JsonlServiceSubagentTests : IDisposable
             age < TimeSpan.FromSeconds(20),
             $"fixture file should be fresh but its mtime is {age} old — test environment hostile to mtime control (AV likely).");
     }
+    // -------------------------------------------------------------------------
+    // D-3: agent transcripts are memoized on (mtime, length)
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// An agent file whose mtime and length did not move must NOT be re-read. Proven without a
+    /// mock: the file's CONTENT is swapped for a different token count while the stamp is held
+    /// constant, so a token count that still reads as the old one can only have come from the
+    /// memo. The stamp equality is asserted, not assumed — a length that quietly changed would
+    /// make this test pass for the wrong reason.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_UnchangedAgentFile_ServesTheMemoizedSnapshot()
+    {
+        var agentFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "memo-hit");
+        var sessionUuid = SessionUuidOf(agentFile);
+
+        RewriteAgentFileWithTokens(agentFile, sessionUuid, fourDigitTokens: 1000);
+        var mtime = DateTime.UtcNow;
+        File.SetLastWriteTimeUtc(agentFile, mtime);
+        AssertMtimeWasSet(agentFile, mtime);
+        var lengthBefore = new FileInfo(agentFile).Length;
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var first = svc.GetContextWindow(ProjectDirName).Subagents
+            .Single(s => s.AgentId == "memo-hit").TotalTokens;
+
+        // Same stamp, different content. Four-digit token counts on both sides keep the byte
+        // length identical; every other field of the line is fixed-width.
+        RewriteAgentFileWithTokens(agentFile, sessionUuid, fourDigitTokens: 9000);
+        File.SetLastWriteTimeUtc(agentFile, mtime);
+        AssertMtimeWasSet(agentFile, mtime);
+        Assert.Equal(lengthBefore, new FileInfo(agentFile).Length);
+
+        var second = svc.GetContextWindow(ProjectDirName).Subagents
+            .Single(s => s.AgentId == "memo-hit").TotalTokens;
+
+        Assert.Equal(first, second);
+    }
+
+    /// <summary>
+    /// Positive control for the test above: a bumped mtime must invalidate the memo. Without this,
+    /// the memo test would also pass on a cache that never invalidates at all.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_AgentFileWithABumpedMtime_IsReRead()
+    {
+        var agentFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "memo-mtime");
+        var sessionUuid = SessionUuidOf(agentFile);
+
+        RewriteAgentFileWithTokens(agentFile, sessionUuid, fourDigitTokens: 1000);
+        var mtime = DateTime.UtcNow.AddSeconds(-5);
+        File.SetLastWriteTimeUtc(agentFile, mtime);
+        AssertMtimeWasSet(agentFile, mtime);
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var first = svc.GetContextWindow(ProjectDirName).Subagents
+            .Single(s => s.AgentId == "memo-mtime").TotalTokens;
+
+        // Same length, newer mtime — still inside the 30 s activity window, so the row stays.
+        RewriteAgentFileWithTokens(agentFile, sessionUuid, fourDigitTokens: 9000);
+        var bumped = DateTime.UtcNow;
+        File.SetLastWriteTimeUtc(agentFile, bumped);
+        AssertMtimeWasSet(agentFile, bumped);
+
+        var second = svc.GetContextWindow(ProjectDirName).Subagents
+            .Single(s => s.AgentId == "memo-mtime").TotalTokens;
+
+        Assert.NotEqual(first, second);
+    }
+
+    /// <summary>
+    /// Second positive control: length alone must invalidate the memo. This is the case a
+    /// mtime-only stamp would miss — a file restored from a copy, or a write whose 100 ns mtime
+    /// tick collided with the previous one.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_AgentFileWithTheSameMtimeButADifferentLength_IsReRead()
+    {
+        var agentFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "memo-length");
+        var sessionUuid = SessionUuidOf(agentFile);
+
+        RewriteAgentFileWithTokens(agentFile, sessionUuid, fourDigitTokens: 1000);
+        var mtime = DateTime.UtcNow;
+        File.SetLastWriteTimeUtc(agentFile, mtime);
+        AssertMtimeWasSet(agentFile, mtime);
+        var lengthBefore = new FileInfo(agentFile).Length;
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var first = svc.GetContextWindow(ProjectDirName).Subagents
+            .Single(s => s.AgentId == "memo-length").TotalTokens;
+
+        // A second, higher-token entry appended: the last assistant entry is what counts, so the
+        // token total moves — and so does the length, while the mtime is put back.
+        WriteAssistantJsonlLineWithTokens(agentFile, sessionUuid, fourDigitTokens: 9000);
+        File.SetLastWriteTimeUtc(agentFile, mtime);
+        AssertMtimeWasSet(agentFile, mtime);
+        Assert.NotEqual(lengthBefore, new FileInfo(agentFile).Length);
+
+        var second = svc.GetContextWindow(ProjectDirName).Subagents
+            .Single(s => s.AgentId == "memo-length").TotalTokens;
+
+        Assert.NotEqual(first, second);
+    }
+
+
 
     private JsonlService BuildService()
         => new(projectsDirectoryOverride: _tempDir, cacheDirectoryOverride: _cacheDir);
@@ -788,4 +906,50 @@ public class JsonlServiceSubagentTests : IDisposable
         });
         File.AppendAllText(filePath, line + "\n");
     }
+
+    /// <summary>
+    /// Replaces the file with exactly one assistant entry carrying the given token count.
+    /// </summary>
+    private static void RewriteAgentFileWithTokens(string filePath, string sessionId, int fourDigitTokens)
+    {
+        File.Delete(filePath);
+        WriteAssistantJsonlLineWithTokens(filePath, sessionId, fourDigitTokens);
+    }
+
+    /// <summary>
+    /// Appends one assistant entry whose three context-token fields all carry fourDigitTokens.
+    ///
+    /// All three, so the line moves the total whichever of them ComputeContextTokens sums. Four
+    /// digits, because every other field of the line is fixed-width (Guids, an "O"-format
+    /// timestamp), which makes two calls with different four-digit counts produce byte-identical
+    /// LENGTHS with different CONTENT — the only way to observe a memo hit from the outside.
+    /// </summary>
+    private static void WriteAssistantJsonlLineWithTokens(string filePath, string sessionId, int fourDigitTokens)
+    {
+        Assert.InRange(fourDigitTokens, 1000, 9999);
+
+        var line = JsonSerializer.Serialize(new
+        {
+            uuid = Guid.NewGuid().ToString(),
+            requestId = $"req_{Guid.NewGuid():N}",
+            sessionId,
+            timestamp = DateTimeOffset.UtcNow.ToString("O"),
+            isSidechain = true,
+            type = "assistant",
+            message = new
+            {
+                id = $"msg_{Guid.NewGuid():N}",
+                model = "claude-sonnet-4-20250514",
+                usage = new
+                {
+                    input_tokens = fourDigitTokens,
+                    output_tokens = 5,
+                    cache_read_input_tokens = fourDigitTokens,
+                    cache_creation_input_tokens = fourDigitTokens
+                }
+            }
+        });
+        File.AppendAllText(filePath, line + "\n");
+    }
+
 }

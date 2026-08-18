@@ -932,11 +932,11 @@ public sealed class JsonlService : IJsonlService, IDisposable
     /// Plain Agent-tool files carry a null run id and each form their own single-file group, so
     /// their behaviour is byte-for-byte what it was: one agent, one gate.
     ///
-    /// ponytail: a live run therefore re-reads all of its agent files per pass (12.7 MB / ~3 200
-    /// JSON lines worst case measured, vs ~3-5 MB before) instead of only the concurrently-writing
-    /// wave. A dead run still opens nothing, so the cost does not grow with finished runs. Memoize
-    /// on (path, mtime, length) if that per-pass cost ever shows up — finished agents of a live run
-    /// never change again, which is where nearly all of it sits.
+    /// A live run therefore takes in all of its agent files per pass (12.7 MB / ~3 200 JSON lines
+    /// worst case measured, vs ~3-5 MB before) rather than only the concurrently-writing wave. Those
+    /// reads are memoized per file on (mtime, length) — see <see cref="AgentSnapshotCache"/>, which
+    /// is what D-3 asked for — so a finished agent of a live run costs one stat per pass, not a
+    /// re-read. A dead run still opens nothing at all: the gate below short-circuits first.
     /// </summary>
     private static IReadOnlyList<SubagentContextData> BuildSubagentContext(List<string> subagentFiles, IPricingService pricingService)
     {
@@ -980,6 +980,45 @@ public sealed class JsonlService : IJsonlService, IDisposable
     /// carries no assistant entry yet. Degrades per file: one unreadable agent must not cost the
     /// whole section.
     /// </summary>
+    /// <summary>
+    /// One agent transcript's parsed result, with the (mtime, length) stamp it was produced from.
+    /// A stamp mismatch means the agent wrote again and the file has to be re-read.
+    ///
+    /// MaxTokens is deliberately absent. It comes from <c>pricingService.GetPrice</c>, whose list
+    /// starts out empty and fills in asynchronously, so a cached ceiling would freeze whatever the
+    /// price list happened to know at the first read of this file. It is recomputed per pass from
+    /// the cached token count — an in-memory lookup, no I/O.
+    /// </summary>
+    private readonly record struct AgentSnapshot(
+        long MtimeTicks,
+        long Length,
+        string AgentId,
+        long TotalTokens,
+        string? ModelName);
+
+    /// <summary>
+    /// Parsed agent transcripts by absolute path (review finding D-3). A live run reads every agent
+    /// file of that run on every poll pass — but the finished agents of a live run never change
+    /// again, and that is where nearly all of the bytes sit: 12.7 MB / ~3 200 JSON lines for the
+    /// largest run measured on this machine.
+    ///
+    /// Keyed on the path alone, NOT on (path, mtime, length) as the review wrote it. With the stamp
+    /// in the KEY, every pass over a file that is still being written adds an entry instead of
+    /// replacing one, and the dictionary grows with the run's write count rather than its agent
+    /// count. The stamp lives in the value and is compared on read.
+    ///
+    /// Static for the same reason as <see cref="WorkflowScriptCache"/>: absolute paths keep two
+    /// service instances (tests) out of each other's entries.
+    ///
+    /// Windows-only: reached only from the subagent path. Full note on SubagentContextData.WorkflowId.
+    ///
+    /// ponytail: never evicted, one entry per agent file seen in this process, ~100 bytes each. Add
+    /// an eviction when one process has walked enough sessions for that to matter.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, AgentSnapshot> AgentSnapshotCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+
     private static void AddSubagent(
         List<SubagentContextData> result,
         string file,
@@ -991,32 +1030,50 @@ public sealed class JsonlService : IJsonlService, IDisposable
     {
         try
         {
-            var lines = ReadTailLines(file);
-            // Subagent files have isSidechain=true on all entries by design —
-            // do not apply the sidechain filter here.
-            var entries = ParseJsonlEntries(lines)
-                .Where(e => string.Equals(e.Type, "assistant", StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            // D-3: one stat, against a read of up to a full transcript. lastActivity is the mtime the
+            // caller already measured for the staleness gate, so the stamp costs only the length.
+            var mtimeTicks = lastActivity.UtcTicks;
+            var length = new FileInfo(file).Length;
 
-            // Guard preserved: fresh mtime but no assistant entries yet
-            // (agent just started — only user / tool-result lines). Without an
-            // assistant entry we have no model + token data to display.
-            if (entries.Count == 0)
-                return;
+            if (!AgentSnapshotCache.TryGetValue(file, out var snapshot)
+                || snapshot.MtimeTicks != mtimeTicks
+                || snapshot.Length != length)
+            {
+                var lines = ReadTailLines(file);
+                // Subagent files have isSidechain=true on all entries by design —
+                // do not apply the sidechain filter here.
+                var entries = ParseJsonlEntries(lines)
+                    .Where(e => string.Equals(e.Type, "assistant", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
 
-            var lastEntry = entries[^1];
-            var totalTokens = ComputeContextTokens(lastEntry);
-            var modelName = lastEntry.Message?.Model;
+                // Guard preserved: fresh mtime but no assistant entries yet
+                // (agent just started — only user / tool-result lines). Without an
+                // assistant entry we have no model + token data to display. Not cached: the file is
+                // mid-write, so the stamp would miss on the next pass regardless.
+                if (entries.Count == 0)
+                    return;
+
+                var lastEntry = entries[^1];
+                snapshot = new AgentSnapshot(
+                    mtimeTicks,
+                    length,
+                    ExtractAgentId(file),
+                    ComputeContextTokens(lastEntry),
+                    lastEntry.Message?.Model);
+
+                AgentSnapshotCache[file] = snapshot;
+            }
+
+            // Outside the snapshot on purpose — see AgentSnapshot for why the ceiling cannot be cached.
             var maxTokens = ModelContextLimits.GetMaxContextTokens(
-                modelName, pricingService.GetPrice, observedTokens: totalTokens);
-            var agentId = ExtractAgentId(file);
+                snapshot.ModelName, pricingService.GetPrice, observedTokens: snapshot.TotalTokens);
 
             result.Add(new SubagentContextData
             {
-                AgentId = agentId,
-                TotalTokens = totalTokens,
+                AgentId = snapshot.AgentId,
+                TotalTokens = snapshot.TotalTokens,
                 MaxTokens = maxTokens,
-                ModelName = modelName,
+                ModelName = snapshot.ModelName,
                 LastActivity = lastActivity,
                 WorkflowId = workflowId,
                 RunAgentsStarted = progress.Started,
