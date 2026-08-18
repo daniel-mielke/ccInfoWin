@@ -13,9 +13,9 @@
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>13.0</LangVersion>
-    <Version>1.6.1</Version>
-    <AssemblyVersion>1.6.1.0</AssemblyVersion>
-    <FileVersion>1.6.1.0</FileVersion>
+    <Version>1.7.0</Version>
+    <AssemblyVersion>1.7.0.0</AssemblyVersion>
+    <FileVersion>1.7.0.0</FileVersion>
     <Product>CCInfoWindows</Product>
     <Description>Real-time Claude Code usage monitoring for Windows</Description>
     <Copyright>Copyright (c) 2026 Daniel Mielke</Copyright>
