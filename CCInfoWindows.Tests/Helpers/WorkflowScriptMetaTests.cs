@@ -193,6 +193,16 @@ public class WorkflowScriptMetaTests
         Assert.Equal("two lines", meta.Name);
     }
 
+    /// <summary>
+    /// The cap the NAME is read through. The Sanitize cap test below passes its own length in, so
+    /// nothing else pins the 60 the row label and the hover card were laid out for.
+    /// </summary>
+    [Fact]
+    public void Parse_OverlongName_IsCappedAt60Characters() =>
+        Assert.Equal(
+            60,
+            WorkflowScriptMeta.Parse($"export const meta = {{ name: '{new string('a', 100)}' }}").Name!.Length);
+
     // -------------------------------------------------------------------------
     // Sanitize
     // -------------------------------------------------------------------------

@@ -346,6 +346,10 @@ public class JsonlServiceSubagentTests : IDisposable
             agentId: "gone-b",
             workflowId: "wf_gate-2",
             sessionUuid: SessionUuidOf(firstFile));
+        var controlFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "control",
+            sessionUuid: SessionUuidOf(firstFile));
 
         var staleMtime = DateTime.UtcNow.AddMinutes(-5);
         foreach (var file in new[] { firstFile, secondFile })
@@ -353,12 +357,16 @@ public class JsonlServiceSubagentTests : IDisposable
             File.SetLastWriteTimeUtc(file, staleMtime);
             AssertMtimeWasSet(file, staleMtime);
         }
+        AssertMtimeIsFresh(controlFile);
 
         using var svc = BuildService();
         await svc.InitializeAsync();
 
         var subagents = svc.GetContextWindow(ProjectDirName).Subagents;
 
+        // Positive control: without it a broken fixture path or an Empty result passes the
+        // DoesNotContain below on its own.
+        Assert.Contains(subagents, s => s.AgentId == "control");
         Assert.DoesNotContain(subagents, s => s.WorkflowId == "wf_gate-2");
     }
 
@@ -593,6 +601,71 @@ public class JsonlServiceSubagentTests : IDisposable
 
         Assert.Equal(200, subagent.RunDescription!.Length);
         Assert.All(subagent.RunDescription, c => Assert.False(char.IsControl(c)));
+    }
+
+    /// <summary>
+    /// D-16: a metadata MISS is never cached. A miss means "the scripts folder was not there yet"
+    /// at least as often as it means "this run has no script", so caching one would blank the name
+    /// for the rest of the session. Both queries run on the SAME service instance — a second
+    /// service, or a second temp directory, would miss a poisoned cache entry entirely.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_ScriptAppearsAfterAMiss_IsReadOnTheNextQuery()
+    {
+        var agentFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "late-meta",
+            workflowId: "wf_meta-5");
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        Assert.Null(svc.GetContextWindow(ProjectDirName).Subagents
+            .Single(s => s.AgentId == "late-meta").RunName);
+
+        ArrangeWorkflowScript(agentFile, "export const meta = { name: 'late' }");
+
+        Assert.Equal(
+            "late",
+            svc.GetContextWindow(ProjectDirName).Subagents.Single(s => s.AgentId == "late-meta").RunName);
+    }
+
+    /// <summary>
+    /// Both run-scoped reads are keyed by run directory, and the script is matched by run id as a
+    /// SUFFIX — exactly the kind of match that cross-wires two runs of one session. Every other
+    /// journal and script test stages a single run, where a swapped key is indistinguishable from
+    /// the right one.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_TwoConcurrentRuns_KeepTheirOwnJournalAndScript()
+    {
+        var firstFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "pair-a",
+            workflowId: "wf_pair-a");
+        var secondFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "pair-b",
+            workflowId: "wf_pair-b",
+            sessionUuid: SessionUuidOf(firstFile));
+        ArrangeWorkflowJournal(firstFile, started: 30, done: 29);
+        ArrangeWorkflowJournal(secondFile, started: 4, done: 2);
+        ArrangeWorkflowScript(firstFile, "export const meta = { name: 'first-run' }");
+        ArrangeWorkflowScript(secondFile, "export const meta = { name: 'second-run' }");
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var subagents = svc.GetContextWindow(ProjectDirName).Subagents;
+        var first = subagents.Single(s => s.AgentId == "pair-a");
+        var second = subagents.Single(s => s.AgentId == "pair-b");
+
+        Assert.Equal(30, first.RunAgentsStarted);
+        Assert.Equal(29, first.RunAgentsDone);
+        Assert.Equal("first-run", first.RunName);
+        Assert.Equal(4, second.RunAgentsStarted);
+        Assert.Equal(2, second.RunAgentsDone);
+        Assert.Equal("second-run", second.RunName);
     }
 
     // -------------------------------------------------------------------------

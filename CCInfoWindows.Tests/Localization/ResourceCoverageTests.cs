@@ -105,6 +105,18 @@ public class ResourceCoverageTests
         // the first '.'), so both the entry and its .Text suffix have to stay.
         "SectionHeaderFiveHour.Text",
         "ResetInLabel.Text",
+        // v1.7 (Windows-only): workflow row label + hover card, all read by key from MainViewModel.
+        // The 11th key of that surface, WorkflowTooltipStartPattern, is guarded by DatePatternKeys.
+        "WorkflowSubagentLabel",
+        "WorkflowSubagentLabelTokensOnly",
+        "WorkflowTooltipKind",
+        "WorkflowTooltipName",
+        "WorkflowTooltipDescription",
+        "WorkflowTooltipId",
+        "WorkflowTooltipAgents",
+        "WorkflowTooltipStart",
+        "WorkflowTooltipContext",
+        "WorkflowTooltipPhases",
     ];
 
     /// <summary>
@@ -115,6 +127,7 @@ public class ResourceCoverageTests
     [
         CountdownFormatter.ResetDatePatternUid,
         MainViewModel.NextWindowPatternUid,
+        MainViewModel.WorkflowTooltipStartPatternUid,
     ];
 
     private static readonly Regex PlaceholderPattern = new(@"\{(\d+)\}", RegexOptions.Compiled);

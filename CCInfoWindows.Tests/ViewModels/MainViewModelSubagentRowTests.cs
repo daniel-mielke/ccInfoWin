@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Xml.Linq;
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Models;
 using CCInfoWindows.ViewModels;
@@ -65,7 +66,6 @@ public class MainViewModelSubagentRowTests
 
         var row = Assert.Single(MainViewModel.BuildSubagentRows(agents, NullBrush, TestLabel));
 
-        Assert.Equal(0, row.Utilization);
         Assert.Equal(0, row.Percentage);
         Assert.Equal(string.Empty, row.PercentageText);
     }
@@ -90,21 +90,26 @@ public class MainViewModelSubagentRowTests
     }
 
     /// <summary>
-    /// The run-level counts reach the label. They are carried redundantly on every agent of the run;
-    /// Max is what makes a list whose members disagree report the highest, not the first.
+    /// The run-level facts are carried redundantly on every agent of the run, and an agent that read
+    /// the journal or the script before either existed carries them zeroed or null. The members here
+    /// disagree on purpose, so all three aggregation choices are pinned at once: Max on the counts
+    /// (highest, not first), Min on the start (earliest, not first), first non-null on the name.
     /// </summary>
     [Fact]
-    public void BuildSubagentRows_WorkflowGroup_PassesRunProgressToLabel()
+    public void BuildSubagentRows_WorkflowGroup_AggregatesDisagreeingMembers()
     {
         List<SubagentContextData> agents =
         [
-            Agent("a", tokens: 1_000, workflowId: "wf_run-1", runAgentsStarted: 30, runAgentsDone: 29),
-            Agent("b", tokens: 2_000, workflowId: "wf_run-1", runAgentsStarted: 30, runAgentsDone: 29)
+            Agent("a", tokens: 1_000, workflowId: "wf_run-1", runAgentsStarted: 0, runAgentsDone: 0,
+                  startedUtc: RunStart.AddMinutes(5)),
+            Agent("b", tokens: 2_000, workflowId: "wf_run-1", runAgentsStarted: 30, runAgentsDone: 29,
+                  startedUtc: RunStart, name: "review", description: "does things")
         ];
 
         var row = Assert.Single(MainViewModel.BuildSubagentRows(agents, NullBrush, TestLabel));
 
         Assert.Equal("wf_run-1|29/30|3000", row.Label);
+        Assert.Equal($"tip:wf_run-1|{RunStart:O}|review|does things", Line(row.Tooltip!.Lines[0]));
     }
 
     /// <summary>
@@ -128,15 +133,18 @@ public class MainViewModelSubagentRowTests
     /// <summary>
     /// Also the guard that two runs never pool their counts or their token sums — each row is
     /// exactly one run.
+    ///
+    /// The later run id appears FIRST in the fixture: GroupBy preserves first-appearance order, so
+    /// fed in sorted order the assertions would hold with the OrderBy deleted.
     /// </summary>
     [Fact]
     public void BuildSubagentRows_TwoConcurrentRuns_ProducesTwoRowsWithVerbatimIds()
     {
         List<SubagentContextData> agents =
         [
+            Agent("c", tokens: 30_000, workflowId: "wf_99aabbcc-01", runAgentsStarted: 2, runAgentsDone: 2),
             Agent("b", tokens: 10_000, workflowId: "wf_11f45d5b-27d", runAgentsStarted: 8, runAgentsDone: 3),
-            Agent("a", tokens: 20_000, workflowId: "wf_11f45d5b-27d", runAgentsStarted: 8, runAgentsDone: 3),
-            Agent("c", tokens: 30_000, workflowId: "wf_99aabbcc-01", runAgentsStarted: 2, runAgentsDone: 2)
+            Agent("a", tokens: 20_000, workflowId: "wf_11f45d5b-27d", runAgentsStarted: 8, runAgentsDone: 3)
         ];
 
         var rows = MainViewModel.BuildSubagentRows(agents, NullBrush, TestLabel);
@@ -168,18 +176,24 @@ public class MainViewModelSubagentRowTests
     }
 
     /// <summary>
-    /// Plain rows keep the icon and the model badge they always had; only workflow rows swap the
-    /// glyph and drop the badge (D-3), so a regression here would be visible but silent.
+    /// Plain rows keep the icon, the model badge and the bar they always had; only workflow rows
+    /// swap the glyph, drop the badge (D-3) and lose the percentage, so a regression here would be
+    /// visible but silent.
+    ///
+    /// 83,500 tokens is exactly half of the effective ceiling (200,000 less the flat 33,000
+    /// autocompact buffer), so the expected percentage is a round number, not a rounding artefact.
     /// </summary>
     [Fact]
-    public void BuildSubagentRows_PlainSubagent_KeepsArrowIconAndEmptyLabel()
+    public void BuildSubagentRows_PlainSubagent_KeepsArrowIconEmptyLabelAndItsPercentage()
     {
-        var rows = MainViewModel.BuildSubagentRows([Agent("alpha", tokens: 10_000)], NullBrush, TestLabel);
+        var rows = MainViewModel.BuildSubagentRows([Agent("alpha", tokens: 83_500)], NullBrush, TestLabel);
 
         var row = Assert.Single(rows);
         Assert.False(row.IsWorkflow);
         Assert.Equal("\u21B3", row.Icon);
         Assert.Equal(string.Empty, row.Label);
+        Assert.Equal(50, row.Percentage);
+        Assert.Equal("50%", row.PercentageText);
     }
 
     [Fact]
@@ -199,6 +213,45 @@ public class MainViewModelSubagentRowTests
     public void BuildSubagentRows_NoSubagents_ProducesNoRows()
     {
         Assert.Empty(MainViewModel.BuildSubagentRows([], NullBrush, TestLabel));
+    }
+
+    // -------------------------------------------------------------------------
+    // The row label, against the SHIPPED templates — every test above injects TestLabel instead
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// D-7: `{runId} · {done}/{started} agents done · {tokens} tokens`. The counts are asymmetric so
+    /// a template whose two slots are swapped — in either the code or a translation — fails here
+    /// instead of rendering a plausible "31/29".
+    /// </summary>
+    [Theory]
+    [InlineData("en-US")]
+    [InlineData("de-DE")]
+    public void FormatWorkflowLabel_FillsTheShippedTemplate(string locale)
+    {
+        var label = MainViewModel.FormatWorkflowLabel(Facts(), Resw(locale));
+
+        Assert.Contains("wf_eda3abc2-8c9", label);
+        Assert.Contains("29/31", label, StringComparison.Ordinal);
+        Assert.DoesNotContain("31/29", label, StringComparison.Ordinal);
+        Assert.Contains("3.3M", label);
+    }
+
+    /// <summary>
+    /// A run with no journal.jsonl has no agent count, so the label takes the second template rather
+    /// than rendering a fabricated "0/0" — the slash is what tells the two templates apart.
+    /// </summary>
+    [Theory]
+    [InlineData("en-US")]
+    [InlineData("de-DE")]
+    public void FormatWorkflowLabel_WithoutJournal_UsesTheTokensOnlyTemplate(string locale)
+    {
+        var label = MainViewModel.FormatWorkflowLabel(
+            Facts() with { AgentsStarted = 0, AgentsDone = 0 }, Resw(locale));
+
+        Assert.Contains("wf_eda3abc2-8c9", label);
+        Assert.Contains("3.3M", label);
+        Assert.DoesNotContain("/", label, StringComparison.Ordinal);
     }
 
     // -------------------------------------------------------------------------
@@ -272,7 +325,8 @@ public class MainViewModelSubagentRowTests
             Facts(name: "review-v16-to-v17", description: "Multi-dimensional review"), Localize, Pattern, German)));
 
         Assert.Contains("wf_eda3abc2-8c9", text);
-        Assert.Contains("31/31", text);
+        Assert.Contains("29/31", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("31/29", text, StringComparison.Ordinal);
         Assert.Contains("3.3M", text);
         Assert.Contains("review-v16-to-v17", text);
         Assert.Contains("Multi-dimensional review", text);
@@ -388,7 +442,7 @@ public class MainViewModelSubagentRowTests
             .Lines.Single(l => l.Label.StartsWith("Agents", StringComparison.Ordinal));
 
         Assert.Equal("Agents: ", agents.Label);
-        Assert.Equal("31/31 fertig", agents.Value);
+        Assert.Equal("29/31 fertig", agents.Value);
     }
 
     /// <summary>
@@ -598,17 +652,37 @@ public class MainViewModelSubagentRowTests
         _ => throw new ArgumentOutOfRangeException(nameof(key), key, "unexpected tooltip resource key")
     };
 
+    /// <summary>
+    /// The SHIPPED templates of one locale, so the label assertions run against the file the user
+    /// gets rather than against a hand-copied literal. Read straight out of the resw the same way
+    /// ResourceCoverageTests does — xUnit cannot start a WinUI3Localizer host, and that class's own
+    /// reader is private to it.
+    /// </summary>
+    private static Func<string, string> Resw(string locale)
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Strings", locale, "Resources.resw");
+        Assert.True(File.Exists(path), $"Resw file not found at: {path}");
+
+        var values = XDocument.Load(path).Root!.Elements("data")
+            .Where(data => data.Attribute("name") is not null && data.Element("value") is not null)
+            .ToDictionary(data => data.Attribute("name")!.Value, data => data.Element("value")!.Value, StringComparer.Ordinal);
+
+        return key => values[key];
+    }
+
     private const string Pattern = "ddd dd.MM., HH:mm";
     private static readonly CultureInfo German = new("de-DE");
 
     // 2026-08-09T13:19:44Z — the real start of wf_eda3abc2-8c9, 15:19 in this machine's local time.
     private static readonly DateTimeOffset RunStart = new(2026, 8, 9, 13, 19, 44, TimeSpan.Zero);
 
+    // 29 done of 31 started, not the run's real 31/31: symmetric counts let a swapped
+    // {done}/{started} through every assertion in this file.
     private static WorkflowRowFacts Facts(
         string? name = null,
         string? description = null,
         IReadOnlyList<WorkflowPhase>? phases = null) =>
-        new("wf_eda3abc2-8c9", 31, 31, 3_252_640, RunStart, name, description, phases ?? []);
+        new("wf_eda3abc2-8c9", 29, 31, 3_252_640, RunStart, name, description, phases ?? []);
 
     private static SubagentContextData Agent(
         string agentId,
