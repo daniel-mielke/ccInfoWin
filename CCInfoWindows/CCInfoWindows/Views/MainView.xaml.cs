@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.ComponentModel;
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Messages;
@@ -15,6 +16,7 @@ using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.Web.WebView2.Core;
 using CommunityToolkit.Mvvm.Messaging;
 using Windows.Foundation;
+using VirtualKey = Windows.System.VirtualKey;
 using WinUI3Localizer;
 
 namespace CCInfoWindows.Views;
@@ -190,6 +192,7 @@ public sealed partial class MainView : Page
         try
         {
             ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+            ViewModel.SubagentContexts.CollectionChanged += OnSubagentContextsChanged;
             SpinnerStoryboard.Completed += OnSpinnerCompleted;
             ActualThemeChanged += OnActualThemeChanged;
             ViewModel.ApplyTheme(ActualTheme == ElementTheme.Dark);
@@ -252,6 +255,7 @@ public sealed partial class MainView : Page
 
         UsageChart.RemoveFromVisualTree();
         ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        ViewModel.SubagentContexts.CollectionChanged -= OnSubagentContextsChanged;
         SpinnerStoryboard.Completed -= OnSpinnerCompleted;
         ActualThemeChanged -= OnActualThemeChanged;
         WeakReferenceMessenger.Default.Unregister<ChartInvalidateMessage>(this);
@@ -462,25 +466,120 @@ public sealed partial class MainView : Page
     private const double TooltipChromeWidth = 32;
 
     /// <summary>Where the card wants to sit, before containment clamps it.</summary>
+    /// <summary>One arrow-key press worth of horizontal scroll across the hover card.</summary>
+    private const double TooltipKeyboardScrollStep = 40;
+
+
     private double _tooltipDesiredTop;
+
+    /// <summary>
+    /// Run id of the card currently on screen, or null when it is closed. Compared as a STRING and
+    /// not by row identity: every poll replaces the row objects, so an identity check would stop
+    /// matching the moment a poll ran between opening the card and retiring its run — which is the
+    /// normal case, not the rare one.
+    /// </summary>
+    private string? _openTooltipRunId;
+
 
     private bool _isPanningTooltip;
     private double _panStartX;
     private double _panStartOffset;
 
+    private void OnWorkflowRowPointerEntered(object sender, PointerRoutedEventArgs e) =>
+        ShowWorkflowTooltip(sender);
+
     /// <summary>
-    /// Opens the card under the hovered workflow row.
+    /// Keyboard counterpart of the hover. Nothing extra to do: the opener never read the pointer
+    /// position — the card is placed off the ROW's own geometry — so focus and hover open the same
+    /// card in the same place.
+    /// </summary>
+    private void OnWorkflowRowGotFocus(object sender, RoutedEventArgs e) =>
+        ShowWorkflowTooltip(sender);
+
+    private void OnWorkflowRowLostFocus(object sender, RoutedEventArgs e) =>
+        HideWorkflowTooltip();
+
+    /// <summary>
+    /// Enter and Space open the card, Escape closes it, Left/Right scroll it.
+    ///
+    /// The scrolling is not a nicety: a card wider than the window is read by scrolling it, and the
+    /// mouse gets two ways to do that (wheel, middle-button pan) while the keyboard had none — the
+    /// run name and description would stay cut off for exactly the users this change is for.
+    /// Handled is set so the arrows do not also move focus out of the row.
+    /// </summary>
+    private void OnWorkflowRowKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        // Enter and Space (re)open it, and this branch sits BEFORE the visibility guard because it is
+        // the one key that has to work while the card is closed. Measured in the running app: Escape
+        // closes the card while the row KEEPS focus, so no further GotFocus is ever raised for it —
+        // without a reopen key a keyboard user would have to tab away and back to see it again.
+        if (e.Key is VirtualKey.Enter or VirtualKey.Space)
+        {
+            ShowWorkflowTooltip(sender);
+            e.Handled = true;
+            return;
+        }
+
+        if (WorkflowTooltipOverlay.Visibility != Visibility.Visible)
+            return;
+
+        switch (e.Key)
+        {
+            case VirtualKey.Escape:
+                HideWorkflowTooltip();
+                e.Handled = true;
+                break;
+
+            case VirtualKey.Left:
+            case VirtualKey.Right:
+                var delta = e.Key == VirtualKey.Left ? -TooltipKeyboardScrollStep : TooltipKeyboardScrollStep;
+                WorkflowTooltipScroll.ChangeView(
+                    WorkflowTooltipScroll.HorizontalOffset + delta, null, null, disableAnimation: true);
+                e.Handled = true;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Closes the card when the run behind it is retired.
+    ///
+    /// Only on Remove, and this is the whole point: a poll clears and refills the list, which raises
+    /// Reset — closing on that made the card blink away every few seconds while it was being read.
+    /// MainViewModel.RetireStaleRows uses RemoveAt, so a retired run arrives here as a Remove with
+    /// the row in OldItems, and the two cases finally tell themselves apart.
+    /// </summary>
+    private void OnSubagentContextsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action != NotifyCollectionChangedAction.Remove || _openTooltipRunId is null || e.OldItems is null)
+            return;
+
+        foreach (var removed in e.OldItems)
+        {
+            if (removed is SubagentDisplayData row
+                && string.Equals(row.AgentId, _openTooltipRunId, StringComparison.Ordinal))
+            {
+                HideWorkflowTooltip();
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Opens the card under a workflow row, for pointer and keyboard alike.
     ///
     /// The row hands over its content through Tag rather than DataContext: ItemsRepeater's
     /// generated containers are bound with x:Bind, so relying on an inherited DataContext here
     /// would be relying on a detail of the repeater rather than on something the template states.
     /// </summary>
-    private void OnWorkflowRowPointerEntered(object sender, PointerRoutedEventArgs e)
+    private void ShowWorkflowTooltip(object sender)
     {
-        if (sender is not FrameworkElement row || row.Tag is not WorkflowTooltipData tooltip)
+        if (sender is not FrameworkElement row
+            || row.Tag is not SubagentDisplayData data
+            || data.Tooltip is not { } tooltip)
             return;
 
         WorkflowTooltipOverlay.DataContext = tooltip;
+        _openTooltipRunId = data.AgentId;
 
         // Symmetric margins: the card is contained by construction (the Canvas is clipped to the
         // window), but a card flush against the right edge reads as clipped even when it is not.
@@ -680,15 +779,17 @@ public sealed partial class MainView : Page
     /// poll clears and refills that list, so closing on the rebuild made the card blink away every
     /// few seconds while it was being read — worse than the case it guarded against.
     ///
-    /// The residual case is a run going stale while the pointer rests on it: the row vanishes, no
-    /// PointerExited is ever raised for it, and the card stays until the pointer moves across it or
-    /// onto another row. It closes on the first pointer movement either way.
+    /// A run going stale under a resting pointer used to leave the card standing with the dead
+    /// run's snapshot, because no PointerExited is ever raised for a row that vanished. That is
+    /// what OnSubagentContextsChanged closes: MainViewModel.RetireStaleRows removes the row, the
+    /// Remove carries it, and the card recognises its own run by id.
     /// </summary>
     private void HideWorkflowTooltip()
     {
         _isPanningTooltip = false;
         WorkflowTooltipOverlay.Visibility = Visibility.Collapsed;
         WorkflowTooltipOverlay.DataContext = null;
+        _openTooltipRunId = null;
     }
 
     private void OnSpinnerCompleted(object? sender, object e)

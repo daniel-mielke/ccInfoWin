@@ -188,6 +188,37 @@ public class ChartColorsTests
         }
     }
 
+    // --- U-21: the subagent row glyph is a graphical object, so WCAG 1.4.11 applies ---
+
+    /// <summary>
+    /// The brush MainView puts on the subagent row glyph has to clear 3:1 against the page it sits
+    /// on, in both themes (WCAG 1.4.11, non-text contrast).
+    ///
+    /// This is what D-11 did NOT cover: that fix made the glyph honour Foreground at all — it had
+    /// been resolving to Segoe UI Emoji, a colour font that ignores it — which is a different
+    /// question from whether the colour it now honours can be seen. Measured on the palette this
+    /// asserts against: TertiaryTextBrush, the original choice, gives 2.84:1 dark and 2.99:1 light
+    /// and misses in both.
+    ///
+    /// Paired with AppHostConventionTests, which pins that MainView actually draws the glyph in this
+    /// brush — without that, this test would guard a colour nothing renders.
+    /// </summary>
+    [Theory]
+    [InlineData("Dark")]
+    [InlineData("Light")]
+    public void TheSubagentRowGlyphBrush_ClearsTheNonTextContrastFloor(string themeKey)
+    {
+        var declared = LoadThemeBrushes(themeKey);
+
+        var ratio = ContrastRatio(declared["SecondaryTextBrush"], declared["AppBackgroundBrush"]);
+
+        Assert.True(
+            ratio >= 3.0,
+            $"{themeKey}: SecondaryTextBrush on AppBackgroundBrush is {ratio:F2}:1, below the 3:1 floor "
+            + "for graphical objects. The subagent row glyph is drawn in it (MainView.xaml).");
+    }
+
+
     private static Dictionary<string, Color> LoadThemeBrushes(string themeKey)
     {
         var root = XDocument.Load(FindAppThemePath()).Root!;
@@ -219,6 +250,28 @@ public class ChartColorsTests
 
     private static byte Hex(string digits, int index) =>
         byte.Parse(digits.AsSpan(index, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+    /// <summary>WCAG 2.x contrast ratio, (L1 + 0.05) / (L2 + 0.05) with L1 the lighter.</summary>
+    private static double ContrastRatio(Color a, Color b)
+    {
+        var (la, lb) = (RelativeLuminance(a), RelativeLuminance(b));
+        var (lighter, darker) = la >= lb ? (la, lb) : (lb, la);
+
+        return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    /// <summary>WCAG relative luminance. Alpha is ignored: both inputs are opaque page colours.</summary>
+    private static double RelativeLuminance(Color c)
+    {
+        static double Channel(byte v)
+        {
+            var s = v / 255.0;
+            return s <= 0.03928 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4);
+        }
+
+        return (0.2126 * Channel(c.R)) + (0.7152 * Channel(c.G)) + (0.0722 * Channel(c.B));
+    }
+
 
     private static string FindAppThemePath()
     {

@@ -270,13 +270,27 @@
                                          resolves to Segoe UI Emoji, a COLOUR font that ignores
                                          Foreground and rendered the gear as the brightest element
                                          in the row (D-2). Segoe UI Symbol covers both glyphs
-                                         monochrome. -->
+                                         monochrome.
+
+                                         SecondaryTextBrush, not Tertiary: measured against
+                                         AppBackgroundBrush, Tertiary gives 2.84:1 (dark) and
+                                         2.99:1 (light) and so misses the 3:1 of WCAG 1.4.11 for
+                                         graphical objects in both themes; Secondary gives 5.22:1
+                                         and 4.65:1 (U-21). D-11 only made the glyph honour
+                                         Foreground at all — whether that colour carries is a
+                                         separate question.
+
+                                         AccessibilityView="Raw" keeps it out of the automation
+                                         tree (U-6), where it was announced as a bare "gear" /
+                                         "downwards arrow" ahead of the row it decorates. The row
+                                         type is already in the label and in the badge. -->
                                     <TextBlock Grid.Column="0"
                                                Text="{x:Bind Icon}"
                                                FontFamily="Segoe UI Symbol"
                                                FontSize="15"
-                                               Foreground="{ThemeResource TertiaryTextBrush}"
-                                               VerticalAlignment="Center" />
+                                               Foreground="{ThemeResource SecondaryTextBrush}"
+                                               VerticalAlignment="Center"
+                                               AutomationProperties.AccessibilityView="Raw" />
 
                                     <!-- Model badge (single subagents only) -->
                                     <Border Grid.Column="1"
@@ -302,7 +316,12 @@
                                                TextTrimming="CharacterEllipsis"
                                                Foreground="{ThemeResource SecondaryTextBrush}"
                                                VerticalAlignment="Center"
-                                               Tag="{x:Bind Tooltip}"
+                                               Tag="{x:Bind}"
+                                               IsTabStop="True"
+                                               UseSystemFocusVisuals="True"
+                                               GotFocus="OnWorkflowRowGotFocus"
+                                               LostFocus="OnWorkflowRowLostFocus"
+                                               KeyDown="OnWorkflowRowKeyDown"
                                                PointerEntered="OnWorkflowRowPointerEntered"
                                                PointerExited="OnWorkflowRowPointerExited"
                                                PointerCanceled="OnWorkflowRowPointerExited"
@@ -314,7 +333,20 @@
                                              Collapsed on plain rows and receives no pointer events
                                              there: "no hover card for plain rows" needs no converter
                                              and no null check. Trade-off: hovering the gear in
-                                             column 0 shows nothing. Accepted. -->
+                                             column 0 shows nothing. Accepted.
+
+                                             IsTabStop rides on the same fact: a Collapsed element
+                                             is not a tab stop, so plain rows stay out of the tab
+                                             order without a converter, and only rows that HAVE a
+                                             card can be focused into one. GotFocus and Enter/Space
+                                             open it, LostFocus and Escape close it, Left/Right
+                                             scroll it —
+                                             the card is the only place the run name, description
+                                             and phases exist.
+
+                                             Tag carries the whole row rather than just its
+                                             Tooltip: the run id on it is what lets the card tell
+                                             "my run was retired" from "the list was rebuilt". -->
                                     </TextBlock>
 
                                     <!-- Progress bar and percentage: plain subagents only. A run has

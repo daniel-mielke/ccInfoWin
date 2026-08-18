@@ -34,6 +34,7 @@ public class AppHostConventionTests
 
     /// <summary>Not a .cs file, so it is read by relative path rather than through the by-name index.</summary>
     private const string SettingsViewXamlPath = @"Views\SettingsView.xaml";
+    private const string MainViewXamlPath = @"Views\MainView.xaml";
 
     private static readonly string[] AppHostFiles = [AppFile, MainWindowFile, MainViewFile];
 
@@ -258,6 +259,121 @@ public class AppHostConventionTests
         Assert.Contains("ViewModel.LogoutCommand", ReadSettingsViewXaml());
     }
 
+    /// <summary>
+    /// G-2 (Windows-only): RetireStaleRows is a static pure function covered by its own tests, but
+    /// nothing there proves a timer ever calls it — and unwired, the whole fix is inert. StartTimers
+    /// cannot be exercised headlessly (DispatcherQueue.GetForCurrentThread() returns null), so the
+    /// wiring is asserted on the source text, the same way MainView's teardown is above.
+    /// </summary>
+    [Fact]
+    public void TheCountdownTimerDrivesTheSubagentRowRetirement()
+    {
+        var mainViewModel = ProductionSourceFiles.Read(MainViewModelFile);
+
+        Assert.Contains("_countdownTimer.Tick += (s, e) => OnCountdownTick();", mainViewModel);
+        Assert.Contains("RetireStaleRows(SubagentContexts, DateTimeOffset.UtcNow);", mainViewModel);
+    }
+
+    /// <summary>
+    /// The hover card's keyboard path (Windows-only). None of it is reachable from a headless test —
+    /// it is XAML event wiring on a template instance — so the contract is asserted on the source,
+    /// the same way the countdown wiring is above.
+    ///
+    /// The tab stop rides on the label TextBlock rather than on the row Grid on purpose: that
+    /// TextBlock is Collapsed on plain subagent rows, and a Collapsed element is not a tab stop, so
+    /// only rows that actually HAVE a card can be focused into one. Moving these attributes up to
+    /// the Grid would silently put every plain row in the tab order with nothing to show.
+    /// </summary>
+    [Fact]
+    public void TheWorkflowHoverCardIsReachableByKeyboard()
+    {
+        var label = WorkflowLabelElement(ReadMainViewXaml());
+        var codeBehind = ProductionSourceFiles.Read(MainViewFile);
+
+        Assert.Contains("IsTabStop=\"True\"", label);
+        Assert.Contains("GotFocus=\"OnWorkflowRowGotFocus\"", label);
+        Assert.Contains("LostFocus=\"OnWorkflowRowLostFocus\"", label);
+        Assert.Contains("KeyDown=\"OnWorkflowRowKeyDown\"", label);
+
+        // Focus and hover must open the SAME card, or the keyboard path drifts from the mouse path.
+        Assert.Contains("private void OnWorkflowRowGotFocus(object sender, RoutedEventArgs e) =>", codeBehind);
+        Assert.Contains("ShowWorkflowTooltip(sender);", codeBehind);
+
+        // Escape closes it: a card that opens and cannot be dismissed is worse than none.
+        Assert.Contains("case VirtualKey.Escape:", codeBehind);
+
+        // And Enter/Space must reopen it. Measured in the running app: Escape leaves focus ON the
+        // row, so GotFocus never fires again — without this branch the card is gone for good until
+        // the user tabs away and back. The branch has to sit BEFORE the visibility guard, which is
+        // what the index comparison pins.
+        Assert.Contains("if (e.Key is VirtualKey.Enter or VirtualKey.Space)", codeBehind);
+
+        var keyDown = codeBehind.IndexOf("private void OnWorkflowRowKeyDown", StringComparison.Ordinal);
+        var reopen = codeBehind.IndexOf("VirtualKey.Enter or VirtualKey.Space", keyDown, StringComparison.Ordinal);
+        var guard = codeBehind.IndexOf("WorkflowTooltipOverlay.Visibility != Visibility.Visible", keyDown, StringComparison.Ordinal);
+        Assert.True(
+            reopen < guard,
+            "The Enter/Space branch must precede the visibility guard, or reopening a closed card is unreachable.");
+    }
+
+    /// <summary>
+    /// The card closes when the run behind it is retired, and does NOT close when a poll rebuilds the
+    /// list — the second half is why this is asserted at all. Closing on Reset made the card blink
+    /// away every few seconds while it was being read, so the handler has to key on Remove.
+    /// </summary>
+    [Fact]
+    public void TheWorkflowHoverCardClosesWithTheRunItShows()
+    {
+        var codeBehind = ProductionSourceFiles.Read(MainViewFile);
+
+        Assert.Contains("ViewModel.SubagentContexts.CollectionChanged += OnSubagentContextsChanged;", codeBehind);
+        Assert.Contains("ViewModel.SubagentContexts.CollectionChanged -= OnSubagentContextsChanged;", codeBehind);
+        Assert.Contains("e.Action != NotifyCollectionChangedAction.Remove", codeBehind);
+
+        // The run id lives on the row, so Tag has to hand over the row and not just its tooltip.
+        Assert.Contains("Tag=\"{x:Bind}\"", WorkflowLabelElement(ReadMainViewXaml()));
+    }
+
+    /// <summary>
+    /// U-21 and U-6 on the row glyph: it is drawn in the brush ChartColorsTests measures against the
+    /// 3:1 floor, and it stays out of the automation tree.
+    /// </summary>
+    [Fact]
+    public void TheSubagentRowGlyphUsesTheContrastCheckedBrushAndIsNotAnnounced()
+    {
+        var glyph = ElementAround(ReadMainViewXaml(), "Text=\"{x:Bind Icon}\"");
+
+        Assert.Contains("Foreground=\"{ThemeResource SecondaryTextBrush}\"", glyph);
+        Assert.Contains("AutomationProperties.AccessibilityView=\"Raw\"", glyph);
+    }
+
+    /// <summary>
+    /// The workflow row's label TextBlock, the element the card hangs off. Anchored on its
+    /// PointerEntered handler rather than on its Text binding: {x:Bind Label} also appears in the
+    /// tooltip line template, and ElementAround refuses an ambiguous marker.
+    /// </summary>
+    private static string WorkflowLabelElement(string mainView) =>
+        ElementAround(mainView, "PointerEntered=\"OnWorkflowRowPointerEntered\"");
+
+    /// <summary>
+    /// The one XAML element carrying <paramref name="marker"/>, from its opening angle bracket to the
+    /// end of its attribute list. Keeps each assertion inside a single element instead of matching an
+    /// attribute that happens to exist elsewhere in the file.
+    /// </summary>
+    private static string ElementAround(string xaml, string marker)
+    {
+        var hit = xaml.IndexOf(marker, StringComparison.Ordinal);
+        Assert.True(hit >= 0, $"MainView.xaml no longer contains {marker}.");
+        Assert.Equal(hit, xaml.LastIndexOf(marker, StringComparison.Ordinal));
+
+        var start = xaml.LastIndexOf('<', hit);
+        var end = xaml.IndexOf('>', hit);
+        Assert.True(start >= 0 && end > start, $"Could not delimit the element carrying {marker}.");
+
+        return xaml[start..end];
+    }
+
+
     /// <summary>Extracts the ApplyPersistedLanguageAsync body so the guard cannot be asserted from elsewhere.</summary>
     private static string SetLanguageMethodBody(string app)
     {
@@ -298,6 +414,17 @@ public class AppHostConventionTests
 
         return count;
     }
+
+    /// <summary>MainView.xaml, read the same way and for the same reason as its SettingsView twin.</summary>
+    private static string ReadMainViewXaml()
+    {
+        var path = Path.Combine(ProductionSourceFiles.Root, MainViewXamlPath);
+
+        Assert.True(File.Exists(path), $"{MainViewXamlPath} not found under {ProductionSourceFiles.Root}.");
+
+        return File.ReadAllText(path);
+    }
+
 
     /// <summary>
     /// The one assertion target that is not C#. ProductionSourceFiles indexes *.cs by file name, so the
