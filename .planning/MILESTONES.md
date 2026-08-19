@@ -1,11 +1,12 @@
 # Milestones
 
-## v1.7 Workflow Subagent Visibility (Code complete 2026-08-17, not yet tagged)
+## v1.7 Workflow Subagent Visibility (SHIPPED 2026-08-19, tag `v1.7.0`)
 
 **Phases completed:** 5 phases (1-3, 3b, 4, 5), 10 commits, no GSD (plan mode / ultracode)
 **Changes:** 22 files, +3,810/-149 lines
-**Tests:** 797 → 887 GREEN (809 after phases 1–3, 818 after 3b, 832 after 4, 874 after 5, 879 after
-the release fixes below, 887 after the keyboard/D-3 pass)
+**Tests:** 797 → **898** GREEN (809 after phases 1–3, 818 after 3b, 832 after 4, 874 after 5, 879
+after the release fixes below, 887 after the keyboard/D-3 pass, 894 after the v1.7 review pass, 898
+after the code-clone remediation below)
 
 **This milestone is a Windows-only extension, not parity.** Upstream ccInfo has no workflow
 display at all — it predates Claude Code's `Workflow` tool. Every code site that touches it
@@ -87,6 +88,71 @@ carries a grepable `Windows-only` marker so a future parity pass does not mistak
 suggestion). The user's call — the app supports no screen reader at all, so one `HelpText` on this
 one row would be an island. That also makes U-6 formally moot; it was taken along because it is a
 single attribute, not because the finding carries.
+
+**Code-clone remediation (2026-08-19)** — 73 of the 86 confirmed findings of
+`.planning/reviews/2026-08-17_code-clone-review.md`, in 8 commits, tests 894 → **898**. Net
+**−877 lines** across 72 files (production +1157/−1003, tests +915/−1946). Ten subagents in three
+waves, partitioned by **file ownership** rather than by topic — the same rule that made the v1.6
+remediation work, and the reason no two agents ever collided.
+
+The review found no high-severity clone: every high claim was downgraded because its failure mode was
+cosmetic, compiler-caught or unreachable. Four divergences were *measured* rather than hypothesised,
+and those are the whole value of the pass:
+
+- **C3** — the tmp-write / commit / discard sequence was hand-copied into five writer bodies and the
+  copies had drifted on a durability invariant: one store wrote without a lock, another without
+  tmp+rename. `Services/AtomicJsonFile.cs` owns it once; the write ordering is now structural rather
+  than conventional, because the helper returns `bool` and a store assigns its snapshot only on `true`.
+- **A2** — the context-window computation existed twice and the copies had diverged on synthetic
+  models. **Behaviour change:** a subagent whose last assistant entry is the `<synthetic>` marker now
+  resolves back to the previous real model and that model's ceiling, instead of reporting the marker,
+  missing pricing and falling back to the 200K default. That is what makes a subagent row agree with
+  the session bar above it.
+- **F7** — MainView re-declared the Segmented palette inline and its light-theme copy said `#DCDCE0`
+  where `AppTheme.xaml` said `#E5E5EA`. Kept `#E5E5EA`: `SessionComboBox` paints from
+  `SegmentedBackgroundBrush` and `ShimmerBaseBrush` shares the literal, and nothing documented the
+  darker value.
+- **E4** — the "labels the localizer cannot reach" pass existed as two drifted copies, so the
+  Settings tab strip had **no accessible names at all**. `Helpers/IconLabel.cs` serves both pages;
+  verified in-app, all five tabs now report their names through UIA.
+
+Two more behaviour changes worth knowing about: **I7** (`SessionNameSanitizer.Strip` now also drops
+C1 controls, U+0080..U+009F — the disagreement the finding reports; bidi codepoints still pass,
+because `char.IsControl` covers Cc and not Cf) and **I1** (the ViewModel's private 2-minute rotation
+tolerance is gone; it reads `UsageNotificationService.RotationClockSkewTolerance`, so the two layers
+can no longer disagree about when a window counts as rotated).
+
+**Three findings were deliberately left undone, each with its reason in the commit that touches the
+file:** C5 (sharing `Save`/`SaveAsync` needs either sync-over-async, which deadlocks the dispatcher
+`SaveAsync` may be blocking, or splitting the version-before-snapshot ordering across two calls), D1
+(the shared seam is more code than it deletes, *and* the finding's fallback of cross-referencing the
+twins in the docs would fail `RedirectSeam_HasNoProductionCaller`), and C4-tail
+(`ClaudeApiService.LoadCacheAsync` would need a `ReadAsync` built for exactly one caller and would
+lose its deliberately narrow catch filter). The 11 findings the review itself classifies as not worth
+fixing were not attempted.
+
+**D2 and D5 were pinned, not deduplicated** — which is what those findings actually ask for. The
+zone boundaries and the theme colour tables genuinely differ between their two encodings; the missing
+guard rail was a cross-theme assertion. `ThresholdBrush` and `AxisLabelBrush` had no assertion at all
+and are not declared in `AppTheme.xaml`, so XAML was not cross-checking them either.
+
+**Three test findings changed what the suite verifies rather than how it is written**, and they were
+the cheapest items in the review: H1 (`BannerStackPolicyTests` re-implemented the production
+banner-priority rule instead of asserting it, so the two could disagree and stay green), G6 (two
+pricing suites asserted a hand-copied private production constant, so renaming the cache file would
+leave the assertion passing vacuously), and H15 (a tooltip test promised a throwing localizer it never
+injected). H6 fixed a live divergence: of the five spellings of the obj/bin filter, the XAML uid
+scanner was the only one without an ordinal-ignore-case comparison.
+
+**How the XAML work was verified**, since the suite compiles XAML but never renders it and a wrong
+`Style TargetType` fails only at runtime: a pixel diff against the pre-change build.
+**SettingsView came out 2 differing pixels of 1.43 M**, and MainView differed only across
+y=822–855 — the statistics tab strip, exactly the F7 colour. Method recorded for reuse in
+`memory/tooling_xaml_pixel_diff_verification.md`.
+
+**One residual gap, stated rather than papered over:** the model badge that A2's resolution feeds is
+covered by a unit test but was never *seen* rendered — the mockdata fixture produces only workflow
+rows, which carry no badge. Its downstream render path is the same one the session badge already uses.
 
 ---
 

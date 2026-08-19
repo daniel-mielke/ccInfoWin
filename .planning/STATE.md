@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.7
 milestone_name: Workflow Subagent Visibility
-status: implemented
+status: shipped
 workflow: ultracode / plan-mode (NOT GSD -- see CLAUDE.md "Workflows")
 roadmap: .planning/milestones/v1.7-ROADMAP.md
-stopped_at: v1.7 code complete, version bumped to 1.7.0, work continues on feat/workflow-tooltip-hover-card (pushed, 13 commits ahead of master). NOT tagged, NOT merged -- v1.6.1 is still the shipped release. Open -- see "v1.7 -- Ergebnis" below for the one deferred verification point (live watcher load).
-last_updated: "2026-08-18T11:00:00.000Z"
-last_activity: 2026-08-18 -- workflow row redesign (no bar, no percentage) plus hover card on feat/workflow-tooltip-hover-card; the Laufzeitbeleg below documents the superseded phase-2 design
+stopped_at: v1.7 SHIPPED 2026-08-19 -- annotated tag v1.7.0 on master, fast-forwarded from feat/workflow-tooltip-hover-card, pushed with the tag. Release build and installer verified. Nothing open in v1.7 except the two carried-forward items named under "Current Position": the live-watcher-load verification point, and the A2 model badge that is unit-tested but never seen rendered.
+last_updated: "2026-08-19T00:00:00.000Z"
+last_activity: 2026-08-19 -- code-clone review remediated (73 of 86 findings, 8 commits, tests 894 -> 898), then merged to master and tagged v1.7.0; the Laufzeitbeleg below documents the superseded phase-2 design
 progress:
   total_phases: 3
   completed_phases: 3
@@ -90,26 +90,40 @@ See: .planning/PROJECT.md (updated 2026-05-08)
 
 ## Current Position
 
-**Milestone: v1.6 — macOS ccInfo v1.15.2 Feature Parity**
-**Roadmap: `.planning/milestones/v1.6-ROADMAP.md` — read this first.**
-Workflow: ultracode / plan mode, **not GSD**. No PLAN.md/SUMMARY.md per phase;
-the roadmap is the single source of truth. Update the phase table below after each phase.
+**Milestone: v1.7 — Workflow Subagent Visibility — SHIPPED 2026-08-19.**
+**Roadmap: `.planning/milestones/v1.7-ROADMAP.md`. Changelog: `.planning/MILESTONES.md`.**
+Workflow: ultracode / plan mode, **not GSD**. No PLAN.md/SUMMARY.md per phase; the roadmap is the
+single source of truth.
 
-Phase: alle 6 (0-5) abgeschlossen — **Code komplett, visuelle UAT durchgeführt**
-Status: implementiert und committet 2026-08-05, UAT 2026-08-06
-Last activity: 2026-08-06 -- UAT U1-U11, U6-Regression gefixt, 434/434 Tests grün
+Phase: alle 5 (1-3, 3b, 4, 5) abgeschlossen, danach drei Review-Runden vollständig abgearbeitet.
+Status: annotiertes Tag **`v1.7.0`** auf `master`, per Fast-Forward von
+`feat/workflow-tooltip-hover-card`, zusammen mit dem Tag gepusht. Release-Build und Installer
+verifiziert, GitHub Release veröffentlicht.
+Tests: **898 grün** (797 zu Beginn des Milestones).
 
-**Nächster Schritt:** v1.6 Ship-Tag — **wartet auf den User.** Er führt am 2026-08-06 ab ca. 10:00
-noch eigene manuelle Tests durch (mehrere Stunden) und will erst danach taggen. Vor dem Tag also
-nachfragen, ob dabei etwas aufgefallen ist; mögliche Funde landen zuerst hier, nicht direkt im Tag.
+**Warum der Tag jetzt gesetzt werden durfte** — beide Release-Blocker des v16/v17-Reviews sind weg:
+das Version-Triple und `README.md` stehen auf 1.7.0 (sonst permanentes, nicht wegklickbares
+Update-Banner, weil `UpdateService` das GitHub-Tag gegen die Assembly-Version vergleicht), und
+`installer/setup.iss` trägt `Flags: checkedonce` (sonst reaktiviert jede Upgrade-Installation
+Autostart und Desktop-Icon für Nutzer, die beides abgeschaltet hatten).
 
-**Dazwischen ist etwas passiert:** ein Full-Repo-Review am 2026-08-06 hat 46 Findings produziert, die
-auf `fix/repo-review-2026-08-06` behoben werden. Der Abschnitt
-**„Review-Remediation 2026-08-06"** unten ist damit Pflichtlektüre vor dem Tag — er listet die
-Verhaltensänderungen und sagt, welche UAT-Prüfpunkte ihre Beweiskraft verloren haben.
+**Reihenfolge dieses Ships, für den nächsten Durchgang:** Vorbedingungen prüfen → Docs → FF-Merge →
+Tag → Release-Build → `ProductVersion` gegen das Tag prüfen → Installer → `git push` mit dem Tag →
+GitHub Release. Der Release-Build muss **nach** dem Tag laufen: `ProductVersion` bettet den
+Commit-Hash ein, und nur so stimmt er mit dem getaggten Commit überein.
 
-Wenn er dabei einen Reset-Toast sieht: das 5-h-Fenster endet regulär am 2026-08-06 um 13:29 lokal,
-ein Toast zu diesem Zeitpunkt ist also echt und kein Rückstand aus der UAT.
+**Zwei Punkte werden in v1.8 übernommen, keiner blockiert v1.7:**
+
+1. **Live-Watcher-Last** — der unter „v1.7 — Ergebnis" aufgeschobene Verifikationspunkt.
+2. **Das A2-Modell-Badge** — die Subagent-Modellauflösung hinter dem `<synthetic>`-Marker ist per
+   Unit-Test gepinnt, aber das gerenderte Badge wurde nie gesehen: das Mockdata-Fixture erzeugt nur
+   Workflow-Rows, und die tragen kein Badge. Der Render-Pfad dahinter ist derselbe, den das
+   Session-Badge schon benutzt.
+
+**Nicht gefixt, bewusst:** die Default-Fenstergröße ist zu klein für den Footer, und der Inhalt ist
+bei jeder Fenstergröße breiter als der Viewport — rechtsbündige Werte (Statistik-Tokens, Settings-
+ComboBoxen) liegen dadurch außerhalb. Vom User als Nicht-Problem eingeordnet. **Das sieht bei einer
+UI-Prüfung wie eine Regression aus und ist keine** — derselbe Beschnitt steht im Vorher-Build.
 
 ## Review-Remediation 2026-08-06 — LIES DAS VOR DEM SHIP-TAG
 
