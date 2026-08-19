@@ -9,8 +9,9 @@ namespace CCInfoWindows.Services;
 /// Persists notification state to %LOCALAPPDATA%\CCInfoWindows\notification-state.json.
 ///
 /// Precedent for a dedicated store rather than AppSettings: UsageHistoryService, SessionNameStore.
-/// Writes are synchronous and lock-protected; the payload is a handful of fields, so the atomic
-/// tmp+rename dance SessionNameStore needs for its larger map would be overhead here.
+/// Writes are synchronous and lock-protected; the payload is a handful of independent flags, so this
+/// is the one store that opts out of <see cref="AtomicJsonFile"/>'s tmp+rename dance
+/// (<c>viaTempFile: false</c>) — a torn file costs at most one re-fired toast, not a lost dataset.
 /// Failures are swallowed the way SettingsService swallows them — losing a notification flag must
 /// never take the dashboard down.
 /// </summary>
@@ -47,32 +48,23 @@ public class NotificationStateStore : INotificationStateStore
         lock (_gate)
         {
             _cached = state;
-            try
-            {
-                Directory.CreateDirectory(_directory);
-                File.WriteAllText(FilePath, JsonSerializer.Serialize(state, JsonOptions));
-            }
-            catch (Exception ex)
-            {
-                AppLog.Write($"{nameof(NotificationStateStore)}.{nameof(Save)}", ex,
-                    "notification state not persisted -- toasts may re-fire after a restart");
-            }
+
+            // viaTempFile: false is the deliberate deviation from the other stores — see the class
+            // remarks. The cache is assigned regardless of the write result: the in-memory value is
+            // authoritative for this process, and a failed write must not re-arm a toast that fired.
+            AtomicJsonFile.Write(
+                FilePath, state, JsonOptions,
+                $"{nameof(NotificationStateStore)}.{nameof(Save)}",
+                "notification state not persisted -- toasts may re-fire after a restart",
+                viaTempFile: false);
         }
     }
 
-    private NotificationState LoadFromDisk()
-    {
-        try
-        {
-            if (!File.Exists(FilePath)) return new NotificationState();
-            var json = File.ReadAllText(FilePath);
-            return JsonSerializer.Deserialize<NotificationState>(json, JsonOptions) ?? new NotificationState();
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write($"{nameof(NotificationStateStore)}.{nameof(LoadFromDisk)}", ex,
-                "notification state unreadable -- every threshold toast is re-armed");
-            return new NotificationState();
-        }
-    }
+    private NotificationState LoadFromDisk() =>
+        AtomicJsonFile.Read<NotificationState>(
+            FilePath,
+            JsonOptions,
+            $"{nameof(NotificationStateStore)}.{nameof(LoadFromDisk)}",
+            "notification state unreadable -- every threshold toast is re-armed")
+        ?? new NotificationState();
 }

@@ -9,9 +9,10 @@ namespace CCInfoWindows.Services;
 /// Reads/writes usage-history.json in %LOCALAPPDATA%\CCInfoWindows\.
 /// Handles missing or corrupt files gracefully by returning empty defaults.
 ///
-/// Writes are atomic: serialize to "&lt;file&gt;.tmp", then File.Move(overwrite) — the same invariant
-/// SessionNameStore uses. File.WriteAllText truncates before writing, so an interruption used to
-/// leave a half-written file that LoadHistory silently turned into an empty chart.
+/// Writes are atomic: serialize to "&lt;file&gt;.tmp", then File.Move(overwrite) — done by
+/// <see cref="AtomicJsonFile"/>, which every store here shares. File.WriteAllText truncates before
+/// writing, so an interruption used to leave a half-written file that LoadHistory silently turned
+/// into an empty chart.
 ///
 /// Threading: SemaphoreSlim serializes the sync and async writers (G-2 — never the lock keyword,
 /// which cannot be held across an await). The async path awaits with ConfigureAwait(false)
@@ -23,7 +24,9 @@ namespace CCInfoWindows.Services;
 public class UsageHistoryService : IUsageHistoryService
 {
     private const string FileName = "usage-history.json";
-    private const string TempFileSuffix = ".tmp";
+
+    /// <summary>Shared by the sync and async writers so both report the same degradation.</summary>
+    private const string WriteFailureMessage = "history save failed";
 
     /// <summary>
     /// Upper bound for the blocking waits in the synchronous members. They run on the UI thread
@@ -39,7 +42,6 @@ public class UsageHistoryService : IUsageHistoryService
 
     private readonly string _historyDirectory;
     private string HistoryFilePath => Path.Combine(_historyDirectory, FileName);
-    private string TempFilePath => Path.Combine(_historyDirectory, FileName + TempFileSuffix);
 
     // D-05: SemaphoreSlim serializes sync and async writes -- never use lock keyword (cannot hold across await)
     private readonly SemaphoreSlim _writeLock = new(1, 1);
@@ -56,25 +58,13 @@ public class UsageHistoryService : IUsageHistoryService
         _historyDirectory = directoryOverride;
     }
 
-    public UsageHistory LoadHistory()
-    {
-        try
-        {
-            if (!File.Exists(HistoryFilePath))
-            {
-                return new UsageHistory();
-            }
-
-            var json = File.ReadAllText(HistoryFilePath);
-            return JsonSerializer.Deserialize<UsageHistory>(json, JsonOptions) ?? new UsageHistory();
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write($"{nameof(UsageHistoryService)}.{nameof(LoadHistory)}", ex,
-                "history unreadable, starting from an empty chart");
-            return new UsageHistory();
-        }
-    }
+    public UsageHistory LoadHistory() =>
+        AtomicJsonFile.Read<UsageHistory>(
+            HistoryFilePath,
+            JsonOptions,
+            $"{nameof(UsageHistoryService)}.{nameof(LoadHistory)}",
+            "history unreadable, starting from an empty chart")
+        ?? new UsageHistory();
 
     public void SaveHistory(UsageHistory history)
     {
@@ -82,14 +72,14 @@ public class UsageHistoryService : IUsageHistoryService
 
         try
         {
-            var json = PrepareWrite(history);
-            File.WriteAllText(TempFilePath, json);
-            CommitWrite(history);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write($"{nameof(UsageHistoryService)}.{nameof(SaveHistory)}", ex, "history save failed");
-            DiscardTempFile();
+            // D-04 / RESEARCH Pitfall 2: the snapshot cache is assigned only after a successful
+            // publish, so a torn or failed write can never be mistaken for what is on disk.
+            if (AtomicJsonFile.Write(
+                    HistoryFilePath, history, JsonOptions,
+                    $"{nameof(UsageHistoryService)}.{nameof(SaveHistory)}", WriteFailureMessage))
+            {
+                _lastSavedSnapshot = history;
+            }
         }
         finally
         {
@@ -102,14 +92,12 @@ public class UsageHistoryService : IUsageHistoryService
         await _writeLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            var json = PrepareWrite(history);
-            await File.WriteAllTextAsync(TempFilePath, json).ConfigureAwait(false);
-            CommitWrite(history);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write($"{nameof(UsageHistoryService)}.{nameof(SaveHistoryAsync)}", ex, "history save failed");
-            DiscardTempFile();
+            var written = await AtomicJsonFile.WriteAsync(
+                HistoryFilePath, history, JsonOptions,
+                $"{nameof(UsageHistoryService)}.{nameof(SaveHistoryAsync)}", WriteFailureMessage)
+                .ConfigureAwait(false);
+
+            if (written) _lastSavedSnapshot = history;
         }
         finally
         {
@@ -125,7 +113,7 @@ public class UsageHistoryService : IUsageHistoryService
         {
             _lastSavedSnapshot = null;                                   // 1. Invalidate cache FIRST (D-13)
             if (File.Exists(HistoryFilePath)) File.Delete(HistoryFilePath);   // 2. Then delete on disk
-            DiscardTempFile();
+            AtomicJsonFile.DiscardTemp(HistoryFilePath, $"{nameof(UsageHistoryService)}.{nameof(ClearHistory)}");
         }
         catch (Exception ex)
         {
@@ -151,34 +139,5 @@ public class UsageHistoryService : IUsageHistoryService
         AppLog.Write($"{nameof(UsageHistoryService)}.{member}",
             "write lock still held after the timeout -- skipping this flush to keep the UI thread free");
         return false;
-    }
-
-    // Shared by both writers so hardening applies to one copy: only the file-write call itself
-    // differs between the sync and async paths.
-    private string PrepareWrite(UsageHistory history)
-    {
-        Directory.CreateDirectory(_historyDirectory);
-        return JsonSerializer.Serialize(history, JsonOptions);
-    }
-
-    // Atomic publish: a reader without the semaphore sees either the previous complete file or
-    // this one, never a truncated prefix.
-    private void CommitWrite(UsageHistory history)
-    {
-        File.Move(TempFilePath, HistoryFilePath, overwrite: true);
-        _lastSavedSnapshot = history;   // AFTER successful write -- RESEARCH Pitfall 2
-    }
-
-    // A failure between the tmp write and the move would otherwise leave the fragment behind.
-    private void DiscardTempFile()
-    {
-        try
-        {
-            if (File.Exists(TempFilePath)) File.Delete(TempFilePath);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write($"{nameof(UsageHistoryService)}.{nameof(DiscardTempFile)}", ex, "stale temp file left behind");
-        }
     }
 }

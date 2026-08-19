@@ -14,15 +14,14 @@ namespace CCInfoWindows.Services;
 /// than at each consumer means a hand-edited value cannot reach the localizer, the poll timer or
 /// AppWindow.MoveAndResize at all. Missing or corrupt files degrade to defaults.
 ///
-/// Durability: writes go to &lt;file&gt;.tmp and are committed with File.Move(overwrite: true), the
-/// pattern SessionNameStore establishes. File.WriteAllText truncates before writing, so an
+/// Durability: writes go to &lt;file&gt;.tmp and are committed with File.Move(overwrite: true) by
+/// <see cref="AtomicJsonFile"/>. File.WriteAllText truncates before writing, so an
 /// interruption would leave a half-written file that LoadSettings turns into defaults — which the
 /// next save then cements, losing language, interval, window geometry and dismissed-update state.
 /// </summary>
 public class SettingsService : ISettingsService
 {
     private const string FileName = "settings.json";
-    private const string TempFileSuffix = ".tmp";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -33,8 +32,6 @@ public class SettingsService : ISettingsService
 
     private string SettingsFilePath => Path.Combine(_directory, FileName);
 
-    private string TempFilePath => Path.Combine(_directory, FileName + TempFileSuffix);
-
     public SettingsService() : this(AppPaths.DataDirectory) { }
 
     public SettingsService(string directoryOverride)
@@ -42,42 +39,19 @@ public class SettingsService : ISettingsService
         _directory = directoryOverride;
     }
 
-    public AppSettings LoadSettings()
-    {
-        try
-        {
-            if (!File.Exists(SettingsFilePath))
-            {
-                return new AppSettings();
-            }
+    public AppSettings LoadSettings() =>
+        // Validate(null) is the defaults instance, so a missing, empty or unreadable file lands on the
+        // same allow-listed result as a hand-edited one.
+        Validate(AtomicJsonFile.Read<AppSettings>(
+            SettingsFilePath,
+            JsonOptions,
+            $"{nameof(SettingsService)}.{nameof(LoadSettings)}",
+            "settings unreadable, falling back to defaults"));
 
-            var json = File.ReadAllText(SettingsFilePath);
-            var persisted = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions);
-            return Validate(persisted);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write($"{nameof(SettingsService)}.{nameof(LoadSettings)}", ex,
-                "settings unreadable, falling back to defaults");
-            return new AppSettings();
-        }
-    }
-
-    public void SaveSettings(AppSettings settings)
-    {
-        try
-        {
-            Directory.CreateDirectory(_directory);
-            var json = JsonSerializer.Serialize(settings, JsonOptions);
-            File.WriteAllText(TempFilePath, json);
-            File.Move(TempFilePath, SettingsFilePath, overwrite: true);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write($"{nameof(SettingsService)}.{nameof(SaveSettings)}", ex, "settings not persisted");
-            DiscardTempFile();
-        }
-    }
+    public void SaveSettings(AppSettings settings) =>
+        AtomicJsonFile.Write(
+            SettingsFilePath, settings, JsonOptions,
+            $"{nameof(SettingsService)}.{nameof(SaveSettings)}", "settings not persisted");
 
     public WindowState? LoadWindowState()
     {
@@ -89,18 +63,6 @@ public class SettingsService : ISettingsService
         var settings = LoadSettings();
         settings.WindowState = state;
         SaveSettings(settings);
-    }
-
-    private void DiscardTempFile()
-    {
-        try
-        {
-            if (File.Exists(TempFilePath)) File.Delete(TempFilePath);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write($"{nameof(SettingsService)}.{nameof(DiscardTempFile)}", ex, "stale temp file left behind");
-        }
     }
 
     /// <summary>

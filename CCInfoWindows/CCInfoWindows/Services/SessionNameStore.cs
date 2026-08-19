@@ -25,7 +25,9 @@ namespace CCInfoWindows.Services;
 public class SessionNameStore : ISessionNameStore
 {
     private const string FileName = "session-names.json";
-    private const string TempFileSuffix = ".tmp";
+
+    /// <summary>Shared by the sync and async writers so both report the same degradation.</summary>
+    private const string WriteFailureMessage = "session names not persisted";
 
     /// <summary>
     /// Upper bound for the blocking wait in Save(). It exists for termination paths that cannot
@@ -42,7 +44,6 @@ public class SessionNameStore : ISessionNameStore
 
     private readonly string _directory;
     private string FilePath => Path.Combine(_directory, FileName);
-    private string TempFilePath => Path.Combine(_directory, FileName + TempFileSuffix);
 
     // G-2: SemaphoreSlim — never use lock keyword (cannot hold across await)
     private readonly SemaphoreSlim _writeLock = new(1, 1);
@@ -71,21 +72,12 @@ public class SessionNameStore : ISessionNameStore
     }
 
     /// <returns>The persisted map, or null when the file is missing or unreadable.</returns>
-    private Dictionary<string, string>? LoadFromDisk()
-    {
-        try
-        {
-            if (!File.Exists(FilePath)) return null;
-            var json = File.ReadAllText(FilePath);
-            return JsonSerializer.Deserialize<Dictionary<string, string>>(json, JsonOptions);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write($"{nameof(SessionNameStore)}.{nameof(LoadFromDisk)}", ex,
-                "session names unreadable, starting without custom names");
-            return null;
-        }
-    }
+    private Dictionary<string, string>? LoadFromDisk() =>
+        AtomicJsonFile.Read<Dictionary<string, string>>(
+            FilePath,
+            JsonOptions,
+            $"{nameof(SessionNameStore)}.{nameof(LoadFromDisk)}",
+            "session names unreadable, starting without custom names");
 
     public string? GetCustomName(string sessionId)
     {
@@ -123,6 +115,11 @@ public class SessionNameStore : ISessionNameStore
         RaiseNameChanged(sessionId);
     }
 
+    // Save and SaveAsync are twins on purpose and must be edited as a pair: the body between the lock
+    // acquire and the release — version before snapshot, roll back only when no newer edit arrived,
+    // raise NameChanged outside the lock — cannot be factored out without either running the async
+    // writer synchronously (deadlocks the dispatcher SaveAsync may be blocking) or splitting the
+    // ordering rule across two calls, which is what it exists to keep together.
     public bool Save()
     {
         if (!_writeLock.Wait(SyncWriteLockTimeout))
@@ -169,65 +166,33 @@ public class SessionNameStore : ISessionNameStore
     private Dictionary<string, string> SnapshotNames() =>
         _names.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
-    // PITFALLS A2-P1: atomic rename — write to .tmp then File.Move(overwrite:true). Sync and async
-    // share PrepareWrite/CommitWrite so the invariant lives in one place; only the file-write call
-    // itself has to differ.
+    // PITFALLS A2-P1: atomic rename — AtomicJsonFile writes to .tmp and publishes with
+    // File.Move(overwrite:true), so the invariant lives in one place for every store. _lastSavedSnapshot
+    // is only assigned on a true return, i.e. after the move: it is both the crash-safety cache and the
+    // rollback target, so a snapshot that never reached disk must never land in it.
     private bool WriteToDisk(Dictionary<string, string> snapshot)
     {
-        try
+        if (!AtomicJsonFile.Write(
+                FilePath, snapshot, JsonOptions,
+                $"{nameof(SessionNameStore)}.{nameof(Save)}", WriteFailureMessage))
         {
-            var json = PrepareWrite(snapshot);
-            File.WriteAllText(TempFilePath, json);
-            CommitWrite(snapshot);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write($"{nameof(SessionNameStore)}.{nameof(Save)}", ex, "session names not persisted");
-            DiscardTempFile();
             return false;
         }
+
+        _lastSavedSnapshot = snapshot;
+        return true;
     }
 
     private async Task<bool> WriteToDiskAsync(Dictionary<string, string> snapshot, CancellationToken ct)
     {
-        try
-        {
-            var json = PrepareWrite(snapshot);
-            await File.WriteAllTextAsync(TempFilePath, json, ct).ConfigureAwait(false);
-            CommitWrite(snapshot);
-            return true;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            AppLog.Write($"{nameof(SessionNameStore)}.{nameof(SaveAsync)}", ex, "session names not persisted");
-            DiscardTempFile();
-            return false;
-        }
-    }
+        var written = await AtomicJsonFile.WriteAsync(
+            FilePath, snapshot, JsonOptions,
+            $"{nameof(SessionNameStore)}.{nameof(SaveAsync)}", WriteFailureMessage, ct).ConfigureAwait(false);
 
-    private string PrepareWrite(Dictionary<string, string> snapshot)
-    {
-        Directory.CreateDirectory(_directory);
-        return JsonSerializer.Serialize(snapshot, JsonOptions);
-    }
+        if (!written) return false;
 
-    private void CommitWrite(Dictionary<string, string> snapshot)
-    {
-        File.Move(TempFilePath, FilePath, overwrite: true);
         _lastSavedSnapshot = snapshot;
-    }
-
-    private void DiscardTempFile()
-    {
-        try
-        {
-            if (File.Exists(TempFilePath)) File.Delete(TempFilePath);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write($"{nameof(SessionNameStore)}.{nameof(DiscardTempFile)}", ex, "stale temp file left behind");
-        }
+        return true;
     }
 
     /// <summary>
