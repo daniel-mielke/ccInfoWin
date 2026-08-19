@@ -396,9 +396,13 @@
     <value>The weekly limit has reset — your full quota is available again.</value>
   </data>
 
-  <!-- Phase 26 RENAME-01: Session rename dialog + pencil button tooltip -->
+  <!-- Phase 26 RENAME-01: Session rename dialog + pencil button tooltip.
+       RenameSessionDialogTitle and MainViewRenameLabel name the SAME action from two surfaces
+       (the dialog's title and the pencil button that opens it) and must read identically. Two
+       keys because the pencil button is labelled in code from a single-segment key while the
+       dialog title is resolved by the dialog; ResourceCoverageTests pins the values equal. -->
   <data name="RenameSessionDialogTitle" xml:space="preserve">
-    <value>Rename Session</value>
+    <value>Rename session</value>
   </data>
   <data name="RenameSessionDialogSaveButton" xml:space="preserve">
     <value>Save</value>
@@ -443,7 +447,12 @@
 
   <!-- Workflow run start time in the row tooltip. Same layout as WeeklyResetDatePattern on purpose
        — the app should not carry two date styles. Date included, not just the time: a run started
-       yesterday would otherwise read as today's. -->
+       yesterday would otherwise read as today's.
+
+       Two keys rather than one because the two call sites read different constants
+       (CountdownFormatter.ResetDatePatternUid, MainViewModel.WorkflowTooltipStartPatternUid);
+       ResourceCoverageTests pins the values equal so a locale fix to one cannot leave the other
+       on the old layout, which is what this comment used to ask for on trust alone. -->
   <data name="WorkflowTooltipStartPattern" xml:space="preserve">
     <value>ddd, MMM d, HH:mm</value>
   </data>
@@ -528,6 +537,8 @@
   <data name="MainViewExportLabel" xml:space="preserve">
     <value>Export chart</value>
   </data>
+  <!-- Same text as RenameSessionDialogTitle, deliberately: this is the button that opens that
+       dialog. Pinned equal by ResourceCoverageTests — reword both or neither. -->
   <data name="MainViewRenameLabel" xml:space="preserve">
     <value>Rename session</value>
   </data>

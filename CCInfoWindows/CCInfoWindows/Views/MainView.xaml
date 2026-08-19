@@ -138,9 +138,7 @@
 
                 <!-- ==================== AKTIVE SITZUNG ==================== -->
                 <TextBlock l:Uids.Uid="SectionHeaderActiveSession"
-                           FontSize="11" FontWeight="SemiBold"
-                           Foreground="{ThemeResource SectionHeaderBrush}"
-                           CharacterSpacing="50" />
+                           Style="{StaticResource SectionHeaderTextStyle}" />
 
                 <!-- ==================== SESSION DROPDOWN + RENAME PENCIL ==================== -->
                 <Grid ColumnSpacing="6">
@@ -166,19 +164,19 @@
                         </ComboBox.ItemTemplate>
                     </ComboBox>
 
-                    <!-- RENAME-01 / D-03: Pencil button opens ContentDialog -->
+                    <!-- RENAME-01 / D-03: Pencil button opens ContentDialog.
+                         Padding and glyph size are deliberately tighter than IconButtonStyle's:
+                         this button lives in a 32px column beside the dropdown, not in the footer. -->
                     <Button x:Name="RenameSessionButton"
                             Grid.Column="1"
+                            Style="{StaticResource IconButtonStyle}"
                             Click="OnRenamePencilClicked"
                             IsEnabled="{x:Bind ViewModel.HasSelectedSession, Mode=OneWay}"
-                            Background="Transparent"
-                            BorderThickness="0"
                             Padding="4"
-                            CornerRadius="6"
                             Width="32" Height="32"
                             VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xE70F;" FontSize="14"
-                                  Foreground="{ThemeResource SecondaryTextBrush}" />
+                        <FontIcon Style="{StaticResource IconGlyphStyle}"
+                                  Glyph="&#xE70F;" FontSize="14" />
                     </Button>
                 </Grid>
 
@@ -198,14 +196,12 @@
                     Visibility="{x:Bind ViewModel.IsUpdatingFromCache, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                 <!-- Divider below Active Session dropdown -->
-                <Border Height="1" Background="{ThemeResource DividerBrush}" />
+                <Border Style="{StaticResource RowDividerStyle}" />
 
                 <!-- ==================== KONTEXTFENSTER ==================== -->
                 <StackPanel Spacing="8">
                     <TextBlock l:Uids.Uid="SectionHeaderContextWindow"
-                               FontSize="11" FontWeight="SemiBold"
-                               Foreground="{ThemeResource SectionHeaderBrush}"
-                               CharacterSpacing="50" />
+                               Style="{StaticResource SectionHeaderTextStyle}" />
 
                     <!-- Main context progress bar -->
                     <ProgressBar Value="{x:Bind ViewModel.ContextPercentage, Mode=OneWay}"
@@ -215,21 +211,16 @@
                                  Style="{StaticResource AppProgressBarStyle}" />
 
                     <!-- Percentage + model badge row -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                    <Grid ColumnDefinitions="Auto,*">
                         <TextBlock Text="{x:Bind ViewModel.ContextPercentageText, Mode=OneWay}"
-                                   FontSize="24" FontWeight="Bold"
-                                   Foreground="{ThemeResource PrimaryTextBrush}" />
+                                   Style="{StaticResource LargePercentageTextStyle}" />
                         <!-- Model badge chip -->
-                        <Border Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                Background="{x:Bind ViewModel.ContextModelBadgeColor, Mode=OneWay}"
-                                CornerRadius="10" MinWidth="40">
+                        <Border Grid.Column="1"
+                                Style="{StaticResource ModelBadgeStyle}"
+                                HorizontalAlignment="Right"
+                                Background="{x:Bind ViewModel.ContextModelBadgeColor, Mode=OneWay}">
                             <TextBlock Text="{x:Bind ViewModel.ContextModelBadge, Mode=OneWay}"
-                                       FontSize="12" FontWeight="SemiBold" Padding="8,2"
-                                       Foreground="White" />
+                                       Style="{StaticResource ModelBadgeTextStyle}" />
                         </Border>
                     </Grid>
 
@@ -294,14 +285,12 @@
 
                                     <!-- Model badge (single subagents only) -->
                                     <Border Grid.Column="1"
+                                            Style="{StaticResource ModelBadgeStyle}"
                                             Background="{x:Bind BadgeColor}"
-                                            CornerRadius="10" MinWidth="40"
                                             HorizontalAlignment="Left"
-                                            VerticalAlignment="Center"
                                             Visibility="{x:Bind IsWorkflow, Converter={StaticResource InvertedBoolToVisibilityConverter}}">
                                         <TextBlock Text="{x:Bind ModelBadge}"
-                                                   FontSize="12" FontWeight="SemiBold" Padding="8,2"
-                                                   Foreground="White" />
+                                                   Style="{StaticResource ModelBadgeTextStyle}" />
                                     </Border>
 
                                     <!-- Run id + agent progress + summed tokens (workflow rows only).
@@ -375,27 +364,19 @@
                 </StackPanel>
 
                 <!-- Divider after Context Window -->
-                <Border Height="1" Background="{ThemeResource DividerBrush}" />
+                <Border Style="{StaticResource RowDividerStyle}" />
 
                 <!-- ==================== 5-STUNDEN-FENSTER ==================== -->
                 <StackPanel Spacing="8">
                     <!-- Section header with export button -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+                    <Grid ColumnDefinitions="*,Auto">
                         <TextBlock
                             l:Uids.Uid="SectionHeaderFiveHour"
-                            FontSize="11"
-                            FontWeight="SemiBold"
-                            Foreground="{ThemeResource SectionHeaderBrush}"
-                            CharacterSpacing="50"
+                            Style="{StaticResource SectionHeaderTextStyle}"
                             VerticalAlignment="Center" />
                         <Button x:Name="ExportChartButton"
                                 Grid.Column="1"
-                                Background="Transparent" BorderThickness="0"
-                                Padding="8" CornerRadius="6"
+                                Style="{StaticResource IconButtonStyle}"
                                 Width="32" Height="32">
                             <Button.Flyout>
                                 <MenuFlyout>
@@ -413,8 +394,7 @@
                                     </MenuFlyoutItem>
                                 </MenuFlyout>
                             </Button.Flyout>
-                            <FontIcon Glyph="&#xE898;" FontSize="16"
-                                      Foreground="{ThemeResource SecondaryTextBrush}" />
+                            <FontIcon Style="{StaticResource IconGlyphStyle}" Glyph="&#xE898;" />
                         </Button>
                     </Grid>
 
@@ -427,34 +407,31 @@
                     </Border>
 
                     <!-- Percentage and countdown row -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                    <Grid ColumnDefinitions="Auto,*">
 
                         <!-- Large percentage -->
                         <TextBlock
                             Text="{x:Bind ViewModel.FiveHourPercentageText, Mode=OneWay}"
-                            FontSize="24"
-                            FontWeight="Bold"
-                            Foreground="{ThemeResource PrimaryTextBrush}" />
+                            Style="{StaticResource LargePercentageTextStyle}" />
 
                         <!-- Countdown stack with absolute-time label (NEXTWIN-01..03 / D-NW-01..04) -->
                         <StackPanel Grid.Column="1" Orientation="Vertical"
                                     HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="2">
                             <!-- Existing horizontal countdown stack (preserved verbatim) -->
-                            <StackPanel Orientation="Horizontal"
-                                        HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="4">
-                                <FontIcon Glyph="&#xE823;" FontSize="13"
-                                          Foreground="{ThemeResource SecondaryTextBrush}" />
+                            <StackPanel Style="{StaticResource CountdownStackStyle}"
+                                        VerticalAlignment="Center">
+                                <FontIcon Style="{StaticResource CountdownIconStyle}" />
                                 <TextBlock
                                     Text="{x:Bind ViewModel.FiveHourCountdown, Mode=OneWay}"
-                                    FontSize="13"
-                                    Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    Style="{StaticResource CountdownTextStyle}" />
                             </StackPanel>
 
-                            <!-- NEXTWIN-01..03 / D-NW-01: absolute reset-time below countdown -->
+                            <!-- NEXTWIN-01..03 / D-NW-01: absolute reset-time below countdown.
+                                 11pt/Secondary rather than the weekly sections' 12pt/Tertiary
+                                 (QuotaResetDateStyle): this line is the next window's START time,
+                                 not a reset date, and it sits under a countdown that already
+                                 carries the 13pt Secondary weight. Left as measured — see the
+                                 review note on the three quota sections. -->
                             <TextBlock
                                 Text="{x:Bind ViewModel.FiveHourNextWindowText, Mode=OneWay}"
                                 Visibility="{x:Bind ViewModel.IsFiveHourNextWindowVisible, Mode=OneWay,
@@ -486,17 +463,14 @@
                 </StackPanel>
 
                 <!-- Divider -->
-                <Border Height="1" Background="{ThemeResource DividerBrush}" />
+                <Border Style="{StaticResource RowDividerStyle}" />
 
                 <!-- ==================== WOCHENLIMIT ==================== -->
                 <StackPanel Spacing="8">
                     <!-- Section header -->
                     <TextBlock
                         l:Uids.Uid="SectionHeaderWeekly"
-                        FontSize="11"
-                        FontWeight="SemiBold"
-                        Foreground="{ThemeResource SectionHeaderBrush}"
-                        CharacterSpacing="50" />
+                        Style="{StaticResource SectionHeaderTextStyle}" />
 
                     <!-- Progress bar -->
                     <ProgressBar
@@ -507,43 +481,33 @@
                         Style="{StaticResource AppProgressBarStyle}" />
 
                     <!-- Percentage and countdown/reset row -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                    <Grid ColumnDefinitions="Auto,*">
 
                         <!-- Large percentage -->
                         <TextBlock
                             Text="{x:Bind ViewModel.WeeklyPercentageText, Mode=OneWay}"
-                            FontSize="24"
-                            FontWeight="Bold"
-                            Foreground="{ThemeResource PrimaryTextBrush}" />
+                            Style="{StaticResource LargePercentageTextStyle}" />
 
                         <!-- Countdown and reset date -->
                         <StackPanel Grid.Column="1" HorizontalAlignment="Right"
                                     VerticalAlignment="Center" Spacing="2">
                             <!-- Countdown row -->
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="4">
-                                <FontIcon Glyph="&#xE823;" FontSize="13"
-                                          Foreground="{ThemeResource SecondaryTextBrush}" />
+                            <StackPanel Style="{StaticResource CountdownStackStyle}">
+                                <FontIcon Style="{StaticResource CountdownIconStyle}" />
                                 <TextBlock
                                     Text="{x:Bind ViewModel.WeeklyCountdown, Mode=OneWay}"
-                                    FontSize="13"
-                                    Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    Style="{StaticResource CountdownTextStyle}" />
                             </StackPanel>
                             <!-- Reset date -->
                             <TextBlock
                                 Text="{x:Bind ViewModel.WeeklyResetDate, Mode=OneWay}"
-                                FontSize="12"
-                                Foreground="{ThemeResource TertiaryTextBrush}"
-                                HorizontalAlignment="Right" />
+                                Style="{StaticResource QuotaResetDateStyle}" />
                         </StackPanel>
                     </Grid>
                 </StackPanel>
 
                 <!-- Divider (only shown when Sonnet data present) -->
-                <Border Height="1" Background="{ThemeResource DividerBrush}"
+                <Border Style="{StaticResource RowDividerStyle}"
                         Visibility="{x:Bind ViewModel.HasSonnetData, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                 <!-- ==================== SONNET WOCHENLIMIT ==================== -->
@@ -552,10 +516,7 @@
                     <!-- Section header -->
                     <TextBlock
                         l:Uids.Uid="SectionHeaderSonnetWeekly"
-                        FontSize="11"
-                        FontWeight="SemiBold"
-                        Foreground="{ThemeResource SectionHeaderBrush}"
-                        CharacterSpacing="50" />
+                        Style="{StaticResource SectionHeaderTextStyle}" />
 
                     <!-- Progress bar -->
                     <ProgressBar
@@ -566,50 +527,38 @@
                         Style="{StaticResource AppProgressBarStyle}" />
 
                     <!-- Percentage and countdown/reset row -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                    <Grid ColumnDefinitions="Auto,*">
 
                         <!-- Large percentage -->
                         <TextBlock
                             Text="{x:Bind ViewModel.SonnetPercentageText, Mode=OneWay}"
-                            FontSize="24"
-                            FontWeight="Bold"
-                            Foreground="{ThemeResource PrimaryTextBrush}" />
+                            Style="{StaticResource LargePercentageTextStyle}" />
 
                         <!-- Countdown and reset date -->
                         <StackPanel Grid.Column="1" HorizontalAlignment="Right"
                                     VerticalAlignment="Center" Spacing="2">
                             <!-- Countdown row -->
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="4">
-                                <FontIcon Glyph="&#xE823;" FontSize="13"
-                                          Foreground="{ThemeResource SecondaryTextBrush}" />
+                            <StackPanel Style="{StaticResource CountdownStackStyle}">
+                                <FontIcon Style="{StaticResource CountdownIconStyle}" />
                                 <TextBlock
                                     Text="{x:Bind ViewModel.SonnetCountdown, Mode=OneWay}"
-                                    FontSize="13"
-                                    Foreground="{ThemeResource SecondaryTextBrush}" />
+                                    Style="{StaticResource CountdownTextStyle}" />
                             </StackPanel>
                             <!-- Reset date -->
                             <TextBlock
                                 Text="{x:Bind ViewModel.SonnetResetDate, Mode=OneWay}"
-                                FontSize="12"
-                                Foreground="{ThemeResource TertiaryTextBrush}"
-                                HorizontalAlignment="Right" />
+                                Style="{StaticResource QuotaResetDateStyle}" />
                         </StackPanel>
                     </Grid>
                 </StackPanel>
 
                 <!-- Divider before STATISTIKEN -->
-                <Border Height="1" Background="{ThemeResource DividerBrush}" />
+                <Border Style="{StaticResource RowDividerStyle}" />
 
                 <!-- ==================== STATISTIKEN ==================== -->
                 <StackPanel Spacing="8">
                     <TextBlock l:Uids.Uid="SectionHeaderStats"
-                               FontSize="11" FontWeight="SemiBold"
-                               Foreground="{ThemeResource SectionHeaderBrush}"
-                               CharacterSpacing="50" />
+                               Style="{StaticResource SectionHeaderTextStyle}" />
 
                     <!-- Tab Bar -->
                     <controls:Segmented
@@ -617,6 +566,24 @@
                         HorizontalAlignment="Stretch"
                         SelectedIndex="{x:Bind ViewModel.SelectedTabIndex, Mode=TwoWay}"
                         SelectionMode="Single">
+                        <!-- Lightweight styling for the toolkit's Segmented control. These four keys
+                             have to live in the control's OWN resource scope: they are the names its
+                             template looks up, and putting them in AppTheme would repaint the
+                             Settings page's tab strip too.
+
+                             SegmentedBackground restates AppTheme's SegmentedBackgroundBrush, which is
+                             the source of truth for this surface — SessionComboBox 450 lines above
+                             paints from it, and the two are meant to match. The light value used to
+                             read #DCDCE0 against AppTheme's #E5E5EA and the two surfaces visibly
+                             disagreed; #E5E5EA (macOS systemGray5, also ShimmerBaseBrush) is the one
+                             that stayed.
+
+                             ponytail: the literal is duplicated on purpose. Aliasing it with
+                             <StaticResource ResourceKey="SegmentedBackgroundBrush" /> from inside a
+                             theme dictionary resolves against whichever theme is active when THAT
+                             dictionary is realized, and the target lives in a different dictionary's
+                             ThemeDictionaries — so the light entry can silently cache the dark brush.
+                             Ceiling: keep this in sync with AppTheme by hand. -->
                         <controls:Segmented.Resources>
                             <ResourceDictionary>
                                 <ResourceDictionary.ThemeDictionaries>
@@ -627,7 +594,7 @@
                                         <SolidColorBrush x:Key="SegmentedPillBackground" Color="Transparent" />
                                     </ResourceDictionary>
                                     <ResourceDictionary x:Key="Light">
-                                        <SolidColorBrush x:Key="SegmentedBackground" Color="#DCDCE0" />
+                                        <SolidColorBrush x:Key="SegmentedBackground" Color="#E5E5EA" />
                                         <SolidColorBrush x:Key="SegmentedItemBackgroundSelected" Color="#B8D0F5" />
                                         <SolidColorBrush x:Key="SegmentedItemForegroundSelected" Color="#1C1C1E" />
                                         <SolidColorBrush x:Key="SegmentedPillBackground" Color="Transparent" />
@@ -641,130 +608,128 @@
                         <controls:SegmentedItem l:Uids.Uid="TabMonth" FontSize="12" />
                     </controls:Segmented>
 
-                    <!-- Statistics Data Table -->
-                    <Grid RowSpacing="4">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
+                    <!-- Statistics Data Table.
+
+                         Seven rows of label / value / shimmer placeholder. The value and the
+                         placeholder are two views of ONE flag: the value binds through
+                         MainView.InvertBool(IsAggregating), the placeholder through
+                         BoolToVisibilityConverter on the same property, so exactly one of them is
+                         on screen. That pairing is the part that must not drift row to row —
+                         geometry and typography now come from StatsRow*/StatsShimmerStyle, so a
+                         row carries only its Grid.Row, its uid, its binding and the weight it
+                         deliberately differs by.
+
+                         Still hand-built rather than an ItemsRepeater over a ViewModel
+                         collection: the seven values are seven separate [ObservableProperty]
+                         members and each shimmer Border is reached by x:Name from the code-behind's
+                         pulse storyboard. Ceiling: making this data-driven is a ViewModel change,
+                         not a markup one. -->
+                    <Grid RowSpacing="4"
+                          ColumnDefinitions="Auto,*"
+                          RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
 
                         <!-- Row 0: Modelle -->
-                        <TextBlock l:Uids.Uid="StatsModels" Grid.Row="0" Grid.Column="0" FontSize="13"
-                                   Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
+                        <TextBlock l:Uids.Uid="StatsModels" Grid.Row="0" Grid.Column="0"
+                                   Style="{StaticResource StatsRowLabelStyle}" />
                         <TextBlock Grid.Row="0" Grid.Column="1"
                                    Text="{x:Bind ViewModel.StatisticsModels, Mode=OneWay}"
-                                   FontSize="13" HorizontalAlignment="Right"
-                                   Foreground="{ThemeResource PrimaryTextBrush}"
+                                   Style="{StaticResource StatsRowValueStyle}"
+                                   FontWeight="Normal"
                                    TextTrimming="CharacterEllipsis" MaxLines="1"
                                    Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
                         <Border x:Name="ModelsShimmer"
-                                Grid.Row="0" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
-                                HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
+                                Grid.Row="0" Grid.Column="1"
+                                Style="{StaticResource StatsShimmerStyle}"
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                         <!-- Divider between Models and Input -->
-                        <Border Grid.Row="1" Grid.ColumnSpan="2" Height="1" Margin="0,2,0,2"
-                                Background="{ThemeResource DividerBrush}" />
+                        <Border Grid.Row="1" Grid.ColumnSpan="2"
+                                Style="{StaticResource RowDividerStyle}" Margin="0,2,0,2" />
 
                         <!-- Row 2: Eingabe -->
-                        <TextBlock l:Uids.Uid="StatsInput" Grid.Row="2" Grid.Column="0" FontSize="13"
-                                   Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
+                        <TextBlock l:Uids.Uid="StatsInput" Grid.Row="2" Grid.Column="0"
+                                   Style="{StaticResource StatsRowLabelStyle}" />
                         <TextBlock Grid.Row="2" Grid.Column="1"
                                    Text="{x:Bind ViewModel.StatisticsInput, Mode=OneWay}"
-                                   FontSize="13" FontWeight="Medium" HorizontalAlignment="Right"
-                                   Foreground="{ThemeResource PrimaryTextBrush}"
+                                   Style="{StaticResource StatsRowValueStyle}"
                                    Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
                         <Border x:Name="InputShimmer"
-                                Grid.Row="2" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
-                                HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
+                                Grid.Row="2" Grid.Column="1"
+                                Style="{StaticResource StatsShimmerStyle}"
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                         <!-- Row 3: Ausgabe -->
-                        <TextBlock l:Uids.Uid="StatsOutput" Grid.Row="3" Grid.Column="0" FontSize="13"
-                                   Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
+                        <TextBlock l:Uids.Uid="StatsOutput" Grid.Row="3" Grid.Column="0"
+                                   Style="{StaticResource StatsRowLabelStyle}" />
                         <TextBlock Grid.Row="3" Grid.Column="1"
                                    Text="{x:Bind ViewModel.StatisticsOutput, Mode=OneWay}"
-                                   FontSize="13" FontWeight="Medium" HorizontalAlignment="Right"
-                                   Foreground="{ThemeResource PrimaryTextBrush}"
+                                   Style="{StaticResource StatsRowValueStyle}"
                                    Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
                         <Border x:Name="OutputShimmer"
-                                Grid.Row="3" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
-                                HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
+                                Grid.Row="3" Grid.Column="1"
+                                Style="{StaticResource StatsShimmerStyle}"
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                         <!-- Row 4: Cache-Schreiben -->
-                        <TextBlock l:Uids.Uid="StatsCacheWrite" Grid.Row="4" Grid.Column="0" FontSize="13"
-                                   Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
+                        <TextBlock l:Uids.Uid="StatsCacheWrite" Grid.Row="4" Grid.Column="0"
+                                   Style="{StaticResource StatsRowLabelStyle}" />
                         <TextBlock Grid.Row="4" Grid.Column="1"
                                    Text="{x:Bind ViewModel.StatisticsCacheCreation, Mode=OneWay}"
-                                   FontSize="13" FontWeight="Medium" HorizontalAlignment="Right"
-                                   Foreground="{ThemeResource PrimaryTextBrush}"
+                                   Style="{StaticResource StatsRowValueStyle}"
                                    Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
                         <Border x:Name="CacheWriteShimmer"
-                                Grid.Row="4" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
-                                HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
+                                Grid.Row="4" Grid.Column="1"
+                                Style="{StaticResource StatsShimmerStyle}"
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                         <!-- Row 5: Cache-Lesen -->
-                        <TextBlock l:Uids.Uid="StatsCacheRead" Grid.Row="5" Grid.Column="0" FontSize="13"
-                                   Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
+                        <TextBlock l:Uids.Uid="StatsCacheRead" Grid.Row="5" Grid.Column="0"
+                                   Style="{StaticResource StatsRowLabelStyle}" />
                         <TextBlock Grid.Row="5" Grid.Column="1"
                                    Text="{x:Bind ViewModel.StatisticsCacheRead, Mode=OneWay}"
-                                   FontSize="13" FontWeight="Medium" HorizontalAlignment="Right"
-                                   Foreground="{ThemeResource PrimaryTextBrush}"
+                                   Style="{StaticResource StatsRowValueStyle}"
                                    Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
                         <Border x:Name="CacheReadShimmer"
-                                Grid.Row="5" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
-                                HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
+                                Grid.Row="5" Grid.Column="1"
+                                Style="{StaticResource StatsShimmerStyle}"
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                         <!-- Row 6: Divider -->
-                        <Border Grid.Row="6" Grid.ColumnSpan="2" Height="1" Margin="0,4,0,4"
-                                Background="{ThemeResource DividerBrush}" />
+                        <Border Grid.Row="6" Grid.ColumnSpan="2"
+                                Style="{StaticResource RowDividerStyle}" Margin="0,4,0,4" />
 
-                        <!-- Row 7: Gesamt (bold) -->
-                        <TextBlock l:Uids.Uid="StatsTotal" Grid.Row="7" Grid.Column="0" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
+                        <!-- Row 7: Gesamt — label and value both SemiBold -->
+                        <TextBlock l:Uids.Uid="StatsTotal" Grid.Row="7" Grid.Column="0"
+                                   Style="{StaticResource StatsRowLabelStyle}"
+                                   FontWeight="SemiBold" />
                         <TextBlock Grid.Row="7" Grid.Column="1"
                                    Text="{x:Bind ViewModel.StatisticsTotal, Mode=OneWay}"
-                                   FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right"
-                                   Foreground="{ThemeResource PrimaryTextBrush}"
-                                   Margin="0,0,0,0"
+                                   Style="{StaticResource StatsRowValueStyle}"
+                                   FontWeight="SemiBold"
                                    Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
                         <Border x:Name="TotalShimmer"
-                                Grid.Row="7" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
-                                HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
+                                Grid.Row="7" Grid.Column="1"
+                                Style="{StaticResource StatsShimmerStyle}"
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
-                        <!-- Row 8: Kosten (bold) -->
-                        <TextBlock l:Uids.Uid="StatsCost" Grid.Row="8" Grid.Column="0" FontSize="13" FontWeight="Normal"
-                                   Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,12,0" />
+                        <!-- Row 8: Kosten — value bold, label deliberately not -->
+                        <TextBlock l:Uids.Uid="StatsCost" Grid.Row="8" Grid.Column="0"
+                                   Style="{StaticResource StatsRowLabelStyle}" />
                         <TextBlock Grid.Row="8" Grid.Column="1"
                                    Text="{x:Bind ViewModel.StatisticsCost, Mode=OneWay}"
-                                   FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right"
-                                   Foreground="{ThemeResource PrimaryTextBrush}"
+                                   Style="{StaticResource StatsRowValueStyle}"
+                                   FontWeight="SemiBold"
                                    Visibility="{x:Bind local:MainView.InvertBool(ViewModel.IsAggregating), Mode=OneWay}" />
                         <Border x:Name="CostShimmer"
-                                Grid.Row="8" Grid.Column="1" Height="13" Width="60" CornerRadius="4"
-                                HorizontalAlignment="Right" Background="{ThemeResource ShimmerBaseBrush}"
+                                Grid.Row="8" Grid.Column="1"
+                                Style="{StaticResource StatsShimmerStyle}"
                                 Visibility="{x:Bind ViewModel.IsAggregating, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                     </Grid>
                 </StackPanel>
 
                 <!-- Divider above footer -->
-                <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="0,4,0,0" />
+                <Border Style="{StaticResource RowDividerStyle}" Margin="0,4,0,0" />
 
                 <!-- Footer toolbar -->
                 <StackPanel Orientation="Horizontal"
@@ -774,12 +739,12 @@
                     <!-- Refresh button with spinning icon -->
                     <Grid>
                         <Button x:Name="FooterRefreshButton"
+                                Style="{StaticResource IconButtonStyle}"
                                 Command="{x:Bind ViewModel.RefreshCommand}"
-                                IsEnabled="{x:Bind ViewModel.CanRefresh, Mode=OneWay}"
-                                Background="Transparent" BorderThickness="0"
-                                Padding="8" CornerRadius="6">
-                            <FontIcon x:Name="RefreshIcon" Glyph="&#xE895;" FontSize="16"
-                                      Foreground="{ThemeResource SecondaryTextBrush}"
+                                IsEnabled="{x:Bind ViewModel.CanRefresh, Mode=OneWay}">
+                            <FontIcon x:Name="RefreshIcon"
+                                      Style="{StaticResource IconGlyphStyle}"
+                                      Glyph="&#xE895;"
                                       RenderTransformOrigin="0.5,0.5">
                                 <FontIcon.RenderTransform>
                                     <RotateTransform x:Name="RefreshIconTransform" Angle="0" />
@@ -798,20 +763,16 @@
 
                     <!-- Settings button -->
                     <Button x:Name="FooterSettingsButton"
-                            Command="{x:Bind ViewModel.OpenSettingsCommand}"
-                            Background="Transparent" BorderThickness="0"
-                            Padding="8" CornerRadius="6">
-                        <FontIcon Glyph="&#xE713;" FontSize="16"
-                                  Foreground="{ThemeResource SecondaryTextBrush}" />
+                            Style="{StaticResource IconButtonStyle}"
+                            Command="{x:Bind ViewModel.OpenSettingsCommand}">
+                        <FontIcon Style="{StaticResource IconGlyphStyle}" Glyph="&#xE713;" />
                     </Button>
 
                     <!-- Quit button -->
                     <Button x:Name="FooterQuitButton"
-                            Command="{x:Bind ViewModel.ExitAppCommand}"
-                            Background="Transparent" BorderThickness="0"
-                            Padding="8" CornerRadius="6">
-                        <FontIcon Glyph="&#xE7E8;" FontSize="16"
-                                  Foreground="{ThemeResource SecondaryTextBrush}" />
+                            Style="{StaticResource IconButtonStyle}"
+                            Command="{x:Bind ViewModel.ExitAppCommand}">
+                        <FontIcon Style="{StaticResource IconGlyphStyle}" Glyph="&#xE7E8;" />
                     </Button>
                 </StackPanel>
 

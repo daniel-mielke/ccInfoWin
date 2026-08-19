@@ -25,6 +25,10 @@
             <!-- The skeleton pulse fades the placeholder's opacity, so no second (highlight) brush is needed. -->
             <SolidColorBrush x:Key="ShimmerBaseBrush" Color="#38383A" />
             <SolidColorBrush x:Key="BurnRateWarningBrush" Color="#FF453A" />
+            <!-- Text and glyphs painted ON a saturated badge (model chip, Settings tab badges).
+                 White in both themes, because the badge supplies its own dark background — the
+                 point of naming it is that a contrast fix has one place to happen. -->
+            <SolidColorBrush x:Key="BadgeForegroundBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="SettingsBadgeGreenBrush"  Color="#30D158" />
             <SolidColorBrush x:Key="SettingsBadgeBlueBrush"   Color="#0A84FF" />
             <SolidColorBrush x:Key="SettingsBadgeRedBrush"    Color="#FF453A" />
@@ -52,6 +56,7 @@
             <SolidColorBrush x:Key="SegmentedActiveBackgroundBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="ShimmerBaseBrush" Color="#E5E5EA" />
             <SolidColorBrush x:Key="BurnRateWarningBrush" Color="#FF3B30" />
+            <SolidColorBrush x:Key="BadgeForegroundBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="SettingsBadgeGreenBrush"  Color="#34C759" />
             <SolidColorBrush x:Key="SettingsBadgeBlueBrush"   Color="#007AFF" />
             <SolidColorBrush x:Key="SettingsBadgeRedBrush"    Color="#FF3B30" />
@@ -71,6 +76,191 @@
         <Setter Property="Height" Value="6" />
         <Setter Property="MinHeight" Value="6" />
         <Setter Property="CornerRadius" Value="3" />
+    </Style>
+
+    <!-- ==========================================================================
+         Shared element styles.
+
+         Each of these was a hand-repeated attribute set at 2 to 13 call sites in
+         MainView.xaml and SettingsView.xaml. The call sites now carry only what
+         genuinely differs: a Grid.Row, a uid, a binding, or a deliberate override.
+         A locally set attribute still outranks a Setter, so an override needs
+         nothing but the attribute itself — that is how the few rows that really do
+         differ (a bolder total, a narrower pencil button) keep differing.
+
+         Every Style here is keyed. None is implicit: an implicit style reaches every
+         instance of its TargetType in scope, including the ones inside control
+         templates and DataTemplates that were never meant to change.
+         ========================================================================== -->
+
+    <!-- All-caps section header: the 11pt / SemiBold / 50-tracking macOS-parity rule,
+         previously written out twelve times across the two pages. -->
+    <Style x:Key="SectionHeaderTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{ThemeResource SectionHeaderBrush}" />
+        <Setter Property="CharacterSpacing" Value="50" />
+    </Style>
+
+    <!-- Horizontal hairline between two rows of a list or card. 21 copies of the same
+         one-line Border, in three different Margin spellings. -->
+    <Style x:Key="RowDividerStyle" TargetType="Border">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Background" Value="{ThemeResource DividerBrush}" />
+    </Style>
+
+    <!-- The same hairline inset to the Settings card's 12px gutter. -->
+    <Style x:Key="SettingsRowDividerStyle" TargetType="Border" BasedOn="{StaticResource RowDividerStyle}">
+        <Setter Property="Margin" Value="12,4" />
+    </Style>
+
+    <!-- One Settings row: fixed 40px height, 12px horizontal gutter. Height and Padding
+         are a single visual rule; twelve copies of it made a longer localized label a
+         twelve-site edit. ColumnDefinitions stays at the call site — it is a read-only
+         collection property and cannot be set from a Setter. -->
+    <Style x:Key="SettingsRowGridStyle" TargetType="Grid">
+        <Setter Property="Height" Value="40" />
+        <Setter Property="Padding" Value="12,0" />
+    </Style>
+
+    <Style x:Key="SettingsRowLabelStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{ThemeResource PrimaryTextBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- The read-only value on the right-hand side of a Settings row. -->
+    <Style x:Key="SettingsRowValueStyle" TargetType="TextBlock" BasedOn="{StaticResource SettingsRowLabelStyle}">
+        <Setter Property="HorizontalAlignment" Value="Right" />
+    </Style>
+
+    <!-- The card every Settings tab panel puts its rows in. -->
+    <Style x:Key="SettingsCardStyle" TargetType="Border">
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+    </Style>
+
+    <!-- Coloured 30x30 chip behind a Settings tab's glyph. Only the Background differs
+         per tab, and it stays at the call site. -->
+    <Style x:Key="SettingsTabBadgeStyle" TargetType="Border">
+        <Setter Property="Width" Value="30" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="CornerRadius" Value="6" />
+    </Style>
+
+    <!-- Chrome-less icon-only button (footer, header, back, reload).
+         BasedOn is load-bearing, not decoration: Button gets its ControlTemplate from
+         DefaultButtonStyle, and an explicit Style replaces the implicit one, so a Style
+         without BasedOn leaves the button with no template and nothing to render.
+
+         ponytail: the hover/pressed fill still comes from the WinUI template's
+         ButtonBackgroundPointerOver, which is why AppTheme's FooterHoverBrush is
+         referenced by nothing. Ceiling: pointing the hover state at it means copying
+         the whole ControlTemplate (VisualStateManager lives inside the template, not
+         in the Style), which is a far bigger change than the four attributes this
+         Style removes. -->
+    <Style x:Key="IconButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="CornerRadius" Value="6" />
+    </Style>
+
+    <!-- The glyph inside an icon-only button. -->
+    <Style x:Key="IconGlyphStyle" TargetType="FontIcon">
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="Foreground" Value="{ThemeResource SecondaryTextBrush}" />
+    </Style>
+
+    <!-- The glyph inside a Settings tab badge: same size, but it sits on the coloured
+         chip rather than on the page. -->
+    <Style x:Key="SettingsTabBadgeGlyphStyle" TargetType="FontIcon" BasedOn="{StaticResource IconGlyphStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource BadgeForegroundBrush}" />
+    </Style>
+
+    <!-- Model-name pill. Built twice in the context section — once from the session's
+         model, once per subagent row — and the two are read side by side. Background and
+         HorizontalAlignment differ per site and stay at the call site. -->
+    <Style x:Key="ModelBadgeStyle" TargetType="Border">
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="MinWidth" Value="40" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="ModelBadgeTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Padding" Value="8,2" />
+        <Setter Property="Foreground" Value="{ThemeResource BadgeForegroundBrush}" />
+    </Style>
+
+    <!-- ===== Quota sections (context, 5-hour, weekly, Sonnet weekly) =====
+         The three quota sections are the same widget for three quotas and users compare
+         them at a glance, so the typography is shared rather than repeated. The remaining
+         difference is which ViewModel properties each one binds. -->
+
+    <!-- The one big number a section is read for. Four sites: context, 5-hour, weekly,
+         Sonnet weekly. -->
+    <Style x:Key="LargePercentageTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="24" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{ThemeResource PrimaryTextBrush}" />
+    </Style>
+
+    <Style x:Key="CountdownStackStyle" TargetType="StackPanel">
+        <Setter Property="Orientation" Value="Horizontal" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+        <Setter Property="Spacing" Value="4" />
+    </Style>
+
+    <!-- Clock glyph in front of a countdown. The Glyph is part of the style because all
+         three countdowns are the same clock; a fourth one should not get to pick. -->
+    <Style x:Key="CountdownIconStyle" TargetType="FontIcon">
+        <Setter Property="Glyph" Value="&#xE823;" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{ThemeResource SecondaryTextBrush}" />
+    </Style>
+
+    <Style x:Key="CountdownTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{ThemeResource SecondaryTextBrush}" />
+    </Style>
+
+    <!-- Absolute reset date under a countdown (weekly and Sonnet weekly). -->
+    <Style x:Key="QuotaResetDateStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{ThemeResource TertiaryTextBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+    </Style>
+
+    <!-- ===== Statistics table =====
+         Seven label / value / shimmer-placeholder triplets, one per statistic. The value
+         and the placeholder are mutually exclusive on the same IsAggregating flag, so
+         their geometry has to agree row for row. -->
+
+    <Style x:Key="StatsRowLabelStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{ThemeResource SecondaryTextBrush}" />
+        <Setter Property="Margin" Value="0,0,12,0" />
+    </Style>
+
+    <!-- Medium is the weight four of the seven rows use; the totals row overrides to
+         SemiBold and the model list to Normal, both at the call site. -->
+    <Style x:Key="StatsRowValueStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+        <Setter Property="Foreground" Value="{ThemeResource PrimaryTextBrush}" />
+    </Style>
+
+    <!-- Skeleton placeholder shown while a statistic is being aggregated. The Opacity
+         pulse is animated per instance in MainView's code-behind. -->
+    <Style x:Key="StatsShimmerStyle" TargetType="Border">
+        <Setter Property="Height" Value="13" />
+        <Setter Property="Width" Value="60" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+        <Setter Property="Background" Value="{ThemeResource ShimmerBaseBrush}" />
     </Style>
 
 </ResourceDictionary>

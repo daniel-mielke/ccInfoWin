@@ -55,11 +55,9 @@
                 VerticalAlignment="Top"
                 Margin="8">
             <Button l:Uids.Uid="LoginReloadButton"
+                    Style="{StaticResource IconButtonStyle}"
                     Click="OnReloadLoginClicked"
-                    Background="Transparent"
-                    BorderThickness="0"
                     Padding="0"
-                    CornerRadius="6"
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch">
                 <FontIcon Glyph="&#xE72C;"

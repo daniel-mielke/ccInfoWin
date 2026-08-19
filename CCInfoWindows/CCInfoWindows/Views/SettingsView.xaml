@@ -41,15 +41,16 @@
         <!-- Row 0: Header — back button + title -->
         <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,16">
             <Button l:Uids.Uid="SettingsBackButton"
+                    Style="{StaticResource IconButtonStyle}"
                     Command="{x:Bind ViewModel.GoBackCommand}"
-                    Background="Transparent" BorderThickness="0" Padding="4">
-                <FontIcon Glyph="&#xE72B;" FontSize="16"
+                    Padding="4">
+                <FontIcon Style="{StaticResource IconGlyphStyle}"
+                          Glyph="&#xE72B;"
                           Foreground="{ThemeResource PrimaryTextBrush}" />
             </Button>
             <TextBlock l:Uids.Uid="SettingsHeader"
-                       FontSize="11" FontWeight="SemiBold"
-                       Foreground="{ThemeResource SectionHeaderBrush}"
-                       VerticalAlignment="Center" CharacterSpacing="50" />
+                       Style="{StaticResource SectionHeaderTextStyle}"
+                       VerticalAlignment="Center" />
         </StackPanel>
 
         <!-- Row 1: page-level failure surface — language switch and session-name persistence report
@@ -73,9 +74,9 @@
             <!-- General tab (green badge) -->
             <controls:SegmentedItem x:Name="TabGeneral">
                 <controls:SegmentedItem.Content>
-                    <Border Width="30" Height="30" CornerRadius="6"
+                    <Border Style="{StaticResource SettingsTabBadgeStyle}"
                             Background="{ThemeResource SettingsBadgeGreenBrush}">
-                        <FontIcon Glyph="&#xE713;" FontSize="16" Foreground="White" />
+                        <FontIcon Style="{StaticResource SettingsTabBadgeGlyphStyle}" Glyph="&#xE713;" />
                     </Border>
                 </controls:SegmentedItem.Content>
             </controls:SegmentedItem>
@@ -83,9 +84,9 @@
             <!-- Updates tab (blue badge) -->
             <controls:SegmentedItem x:Name="TabUpdates">
                 <controls:SegmentedItem.Content>
-                    <Border Width="30" Height="30" CornerRadius="6"
+                    <Border Style="{StaticResource SettingsTabBadgeStyle}"
                             Background="{ThemeResource SettingsBadgeBlueBrush}">
-                        <FontIcon Glyph="&#xE895;" FontSize="16" Foreground="White" />
+                        <FontIcon Style="{StaticResource SettingsTabBadgeGlyphStyle}" Glyph="&#xE895;" />
                     </Border>
                 </controls:SegmentedItem.Content>
             </controls:SegmentedItem>
@@ -93,9 +94,9 @@
             <!-- Account tab (red badge) -->
             <controls:SegmentedItem x:Name="TabAccount">
                 <controls:SegmentedItem.Content>
-                    <Border Width="30" Height="30" CornerRadius="6"
+                    <Border Style="{StaticResource SettingsTabBadgeStyle}"
                             Background="{ThemeResource SettingsBadgeRedBrush}">
-                        <FontIcon Glyph="&#xE77B;" FontSize="16" Foreground="White" />
+                        <FontIcon Style="{StaticResource SettingsTabBadgeGlyphStyle}" Glyph="&#xE77B;" />
                     </Border>
                 </controls:SegmentedItem.Content>
             </controls:SegmentedItem>
@@ -103,9 +104,9 @@
             <!-- Sessions tab (purple badge) — Phase 26 / RENAME-02 -->
             <controls:SegmentedItem x:Name="TabSessions">
                 <controls:SegmentedItem.Content>
-                    <Border Width="30" Height="30" CornerRadius="6"
+                    <Border Style="{StaticResource SettingsTabBadgeStyle}"
                             Background="{ThemeResource SettingsBadgePurpleBrush}">
-                        <FontIcon Glyph="&#xE70F;" FontSize="16" Foreground="White" />
+                        <FontIcon Style="{StaticResource SettingsTabBadgeGlyphStyle}" Glyph="&#xE70F;" />
                     </Border>
                 </controls:SegmentedItem.Content>
             </controls:SegmentedItem>
@@ -113,9 +114,9 @@
             <!-- About tab (orange badge) -->
             <controls:SegmentedItem x:Name="TabAbout">
                 <controls:SegmentedItem.Content>
-                    <Border Width="30" Height="30" CornerRadius="6"
+                    <Border Style="{StaticResource SettingsTabBadgeStyle}"
                             Background="{ThemeResource SettingsBadgeOrangeBrush}">
-                        <FontIcon Glyph="&#xE946;" FontSize="16" Foreground="White" />
+                        <FontIcon Style="{StaticResource SettingsTabBadgeGlyphStyle}" Glyph="&#xE946;" />
                     </Border>
                 </controls:SegmentedItem.Content>
             </controls:SegmentedItem>
@@ -131,23 +132,16 @@
                             Visibility="{x:Bind ViewModel.IsGeneralTabVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
 
                     <TextBlock l:Uids.Uid="SettingsGeneralHeader"
-                               FontSize="11" FontWeight="SemiBold"
-                               Foreground="{ThemeResource SectionHeaderBrush}"
-                               CharacterSpacing="50" Margin="0,0,0,8" />
+                               Style="{StaticResource SectionHeaderTextStyle}"
+                               Margin="0,0,0,8" />
 
-                    <Border CornerRadius="8"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
 
                             <!-- Row 1: Autostart -->
-                            <Grid Height="40" Padding="12,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Grid Style="{StaticResource SettingsRowGridStyle}" ColumnDefinitions="*,Auto">
                                 <TextBlock l:Uids.Uid="SettingsAutostartLabel"
-                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                                           VerticalAlignment="Center" />
+                                           Style="{StaticResource SettingsRowLabelStyle}" />
                                 <ToggleSwitch Grid.Column="1"
                                              l:Uids.Uid="AutostartToggle"
                                              IsOn="{x:Bind ViewModel.IsAutostart, Mode=TwoWay}"
@@ -155,17 +149,12 @@
                                              VerticalAlignment="Center" />
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
+                            <Border Style="{StaticResource SettingsRowDividerStyle}" />
 
                             <!-- Row 2: Refresh Interval -->
-                            <Grid Height="40" Padding="12,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Grid Style="{StaticResource SettingsRowGridStyle}" ColumnDefinitions="*,Auto">
                                 <TextBlock l:Uids.Uid="SettingsRefreshInterval"
-                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                                           VerticalAlignment="Center" />
+                                           Style="{StaticResource SettingsRowLabelStyle}" />
                                 <ComboBox Grid.Column="1"
                                           l:Uids.Uid="RefreshIntervalComboBox"
                                           ItemsSource="{x:Bind ViewModel.RefreshOptions}"
@@ -174,17 +163,12 @@
                                           VerticalAlignment="Center" />
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
+                            <Border Style="{StaticResource SettingsRowDividerStyle}" />
 
                             <!-- Row 3: Session Timeout -->
-                            <Grid Height="40" Padding="12,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Grid Style="{StaticResource SettingsRowGridStyle}" ColumnDefinitions="*,Auto">
                                 <TextBlock l:Uids.Uid="SettingsSessionTimeout"
-                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                                           VerticalAlignment="Center" />
+                                           Style="{StaticResource SettingsRowLabelStyle}" />
                                 <ComboBox Grid.Column="1"
                                           x:Name="SessionTimeoutComboBox"
                                           l:Uids.Uid="SessionTimeoutComboBox"
@@ -194,17 +178,12 @@
                                           VerticalAlignment="Center" />
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
+                            <Border Style="{StaticResource SettingsRowDividerStyle}" />
 
                             <!-- Row 3.5: Session Visibility Window (DROPDOWN-04 / D-03) -->
-                            <Grid Height="40" Padding="12,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Grid Style="{StaticResource SettingsRowGridStyle}" ColumnDefinitions="*,Auto">
                                 <TextBlock l:Uids.Uid="SettingsSessionVisibilityWindow"
-                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                                           VerticalAlignment="Center" />
+                                           Style="{StaticResource SettingsRowLabelStyle}" />
                                 <ComboBox Grid.Column="1"
                                           x:Name="VisibilityWindowComboBox"
                                           l:Uids.Uid="VisibilityWindowComboBox"
@@ -215,17 +194,12 @@
                                           MinWidth="120" />
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
+                            <Border Style="{StaticResource SettingsRowDividerStyle}" />
 
                             <!-- Row 4: Dark Mode -->
-                            <Grid Height="40" Padding="12,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Grid Style="{StaticResource SettingsRowGridStyle}" ColumnDefinitions="*,Auto">
                                 <TextBlock l:Uids.Uid="SettingsDarkMode"
-                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                                           VerticalAlignment="Center" />
+                                           Style="{StaticResource SettingsRowLabelStyle}" />
                                 <ToggleSwitch Grid.Column="1"
                                              l:Uids.Uid="DarkModeToggle"
                                              IsOn="{x:Bind ViewModel.IsDarkMode, Mode=TwoWay}"
@@ -233,17 +207,12 @@
                                              VerticalAlignment="Center" />
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
+                            <Border Style="{StaticResource SettingsRowDividerStyle}" />
 
                             <!-- Row 5: Language -->
-                            <Grid Height="40" Padding="12,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Grid Style="{StaticResource SettingsRowGridStyle}" ColumnDefinitions="*,Auto">
                                 <TextBlock l:Uids.Uid="SettingsLanguageLabel"
-                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                                           VerticalAlignment="Center" />
+                                           Style="{StaticResource SettingsRowLabelStyle}" />
                                 <ComboBox Grid.Column="1"
                                           l:Uids.Uid="LanguageComboBox"
                                           Width="120"
@@ -254,17 +223,12 @@
                                 </ComboBox>
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
+                            <Border Style="{StaticResource SettingsRowDividerStyle}" />
 
                             <!-- Row 6: Reset Window Size -->
-                            <Grid Height="40" Padding="12,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Grid Style="{StaticResource SettingsRowGridStyle}" ColumnDefinitions="*,Auto">
                                 <TextBlock l:Uids.Uid="SettingsResetWindowSizeLabel"
-                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                                           VerticalAlignment="Center" />
+                                           Style="{StaticResource SettingsRowLabelStyle}" />
                                 <Button Grid.Column="1"
                                         l:Uids.Uid="SettingsResetWindowSizeButton"
                                         Command="{x:Bind ViewModel.ResetWindowSizeCommand}"
@@ -280,64 +244,41 @@
                             Visibility="{x:Bind ViewModel.IsUpdatesTabVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
 
                     <TextBlock l:Uids.Uid="SettingsUpdatesHeader"
-                               FontSize="11" FontWeight="SemiBold"
-                               Foreground="{ThemeResource SectionHeaderBrush}"
-                               CharacterSpacing="50" Margin="0,0,0,8" />
+                               Style="{StaticResource SectionHeaderTextStyle}"
+                               Margin="0,0,0,8" />
 
-                    <Border CornerRadius="8"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
 
                             <!-- Row 1: App Version -->
-                            <Grid Height="40" Padding="12,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Grid Style="{StaticResource SettingsRowGridStyle}" ColumnDefinitions="*,Auto">
                                 <TextBlock l:Uids.Uid="SettingsAppVersion"
-                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                                           VerticalAlignment="Center" />
+                                           Style="{StaticResource SettingsRowLabelStyle}" />
                                 <TextBlock Grid.Column="1"
                                            Text="{x:Bind ViewModel.AppVersionText}"
-                                           FontSize="13" HorizontalAlignment="Right"
-                                           Foreground="{ThemeResource PrimaryTextBrush}"
-                                           VerticalAlignment="Center" />
+                                           Style="{StaticResource SettingsRowValueStyle}" />
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
+                            <Border Style="{StaticResource SettingsRowDividerStyle}" />
 
                             <!-- Row 2: Pricing Source -->
-                            <Grid Height="40" Padding="12,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Grid Style="{StaticResource SettingsRowGridStyle}" ColumnDefinitions="*,Auto">
                                 <TextBlock l:Uids.Uid="SettingsPricingSourceLabel"
-                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                                           VerticalAlignment="Center" />
+                                           Style="{StaticResource SettingsRowLabelStyle}" />
                                 <TextBlock Grid.Column="1"
                                            Text="{x:Bind ViewModel.PricingSourceText}"
-                                           FontSize="13" HorizontalAlignment="Right"
-                                           Foreground="{ThemeResource PrimaryTextBrush}"
-                                           VerticalAlignment="Center" />
+                                           Style="{StaticResource SettingsRowValueStyle}" />
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
+                            <Border Style="{StaticResource SettingsRowDividerStyle}" />
 
                             <!-- Row 3: Last Pricing Fetch -->
-                            <Grid Height="40" Padding="12,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Grid Style="{StaticResource SettingsRowGridStyle}" ColumnDefinitions="*,Auto">
                                 <TextBlock l:Uids.Uid="SettingsLastFetchLabel"
-                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                                           VerticalAlignment="Center" />
+                                           Style="{StaticResource SettingsRowLabelStyle}" />
                                 <TextBlock Grid.Column="1"
                                            Text="{x:Bind ViewModel.LastFetchRelativeTime, Mode=OneWay}"
-                                           FontSize="13" HorizontalAlignment="Right"
-                                           Foreground="{ThemeResource PrimaryTextBrush}"
-                                           VerticalAlignment="Center" />
+                                           Style="{StaticResource SettingsRowValueStyle}" />
                             </Grid>
 
                         </StackPanel>
@@ -349,23 +290,16 @@
                             Visibility="{x:Bind ViewModel.IsAccountTabVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
 
                     <TextBlock l:Uids.Uid="SettingsAccountHeader"
-                               FontSize="11" FontWeight="SemiBold"
-                               Foreground="{ThemeResource SectionHeaderBrush}"
-                               CharacterSpacing="50" Margin="0,0,0,8" />
+                               Style="{StaticResource SectionHeaderTextStyle}"
+                               Margin="0,0,0,8" />
 
-                    <Border CornerRadius="8"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
 
                             <!-- Row 1: Token Status -->
-                            <Grid Height="40" Padding="12,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Grid Style="{StaticResource SettingsRowGridStyle}" ColumnDefinitions="*,Auto">
                                 <TextBlock l:Uids.Uid="SettingsTokenStatus"
-                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                                           VerticalAlignment="Center" />
+                                           Style="{StaticResource SettingsRowLabelStyle}" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock l:Uids.Uid="SettingsTokenValid"
                                                FontSize="13" Foreground="{ThemeResource ProgressGreenBrush}"
@@ -376,7 +310,7 @@
                                 </StackPanel>
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
+                            <Border Style="{StaticResource SettingsRowDividerStyle}" />
 
                             <!-- Row 2: Logout Button -->
                             <Button Command="{x:Bind ViewModel.LogoutCommand}"
@@ -390,7 +324,7 @@
                                 </StackPanel>
                             </Button>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
+                            <Border Style="{StaticResource SettingsRowDividerStyle}" />
 
                             <!-- ORGID-01 / D-OG-02: Re-detect organization button -->
                             <Button x:Name="RedetectOrgButton"
@@ -412,9 +346,8 @@
                             Visibility="{x:Bind ViewModel.IsSessionsTabVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
 
                     <TextBlock l:Uids.Uid="SettingsSessionsHeader"
-                               FontSize="11" FontWeight="SemiBold"
-                               Foreground="{ThemeResource SectionHeaderBrush}"
-                               CharacterSpacing="50" Margin="0,0,0,8" />
+                               Style="{StaticResource SectionHeaderTextStyle}"
+                               Margin="0,0,0,8" />
 
                     <!-- Empty-state placeholder -->
                     <TextBlock l:Uids.Uid="SettingsSessionsNoSessions"
@@ -424,8 +357,7 @@
                                Margin="0,12,0,0"
                                Visibility="{x:Bind ViewModel.SessionRenameItems.Count, Mode=OneWay, Converter={StaticResource ZeroToVisibilityConverter}}" />
 
-                    <Border CornerRadius="8"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <Border Style="{StaticResource SettingsCardStyle}">
                         <ItemsControl ItemsSource="{x:Bind ViewModel.SessionRenameItems, Mode=OneWay}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SessionRenameItem">
@@ -498,44 +430,35 @@
                             Visibility="{x:Bind ViewModel.IsAboutTabVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
 
                     <TextBlock l:Uids.Uid="SettingsAboutHeader"
-                               FontSize="11" FontWeight="SemiBold"
-                               Foreground="{ThemeResource SectionHeaderBrush}"
-                               CharacterSpacing="50" Margin="0,0,0,8" />
+                               Style="{StaticResource SectionHeaderTextStyle}"
+                               Margin="0,0,0,8" />
 
-                    <Border CornerRadius="8"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
 
                             <!-- Row 1: App Name -->
-                            <Grid Height="40" Padding="12,0">
+                            <Grid Style="{StaticResource SettingsRowGridStyle}">
                                 <TextBlock l:Uids.Uid="SettingsAboutAppName"
                                            FontSize="15" FontWeight="SemiBold"
                                            Foreground="{ThemeResource PrimaryTextBrush}"
                                            VerticalAlignment="Center" />
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
+                            <Border Style="{StaticResource SettingsRowDividerStyle}" />
 
                             <!-- Row 2: Version -->
-                            <Grid Height="40" Padding="12,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Grid Style="{StaticResource SettingsRowGridStyle}" ColumnDefinitions="*,Auto">
                                 <TextBlock l:Uids.Uid="SettingsVersion"
-                                           FontSize="13" Foreground="{ThemeResource PrimaryTextBrush}"
-                                           VerticalAlignment="Center" />
+                                           Style="{StaticResource SettingsRowLabelStyle}" />
                                 <TextBlock Grid.Column="1"
                                            Text="{x:Bind ViewModel.AppVersionText}"
-                                           FontSize="13" HorizontalAlignment="Right"
-                                           Foreground="{ThemeResource PrimaryTextBrush}"
-                                           VerticalAlignment="Center" />
+                                           Style="{StaticResource SettingsRowValueStyle}" />
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
+                            <Border Style="{StaticResource SettingsRowDividerStyle}" />
 
                             <!-- Row 3: GitHub Link -->
-                            <Grid Height="40" Padding="12,0">
+                            <Grid Style="{StaticResource SettingsRowGridStyle}">
                                 <HyperlinkButton NavigateUri="https://github.com/stefanlange/ccInfo"
                                                  HorizontalAlignment="Left"
                                                  VerticalAlignment="Center"
@@ -544,9 +467,10 @@
                                 </HyperlinkButton>
                             </Grid>
 
-                            <Border Height="1" Background="{ThemeResource DividerBrush}" Margin="12,4" />
+                            <Border Style="{StaticResource SettingsRowDividerStyle}" />
 
-                            <!-- Row 4: Credits -->
+                            <!-- Row 4: Credits — deliberately NOT SettingsRowGridStyle: the text wraps,
+                                 so this row needs MinHeight where every other row has a fixed 40. -->
                             <Grid MinHeight="40" Padding="12,8">
                                 <TextBlock l:Uids.Uid="SettingsAboutCredits"
                                            FontSize="12" Foreground="{ThemeResource SecondaryTextBrush}"
