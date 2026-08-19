@@ -95,14 +95,8 @@ public record SubagentContextData
     /// </summary>
     public IReadOnlyList<WorkflowPhase> RunPhases { get; init; } = [];
 
-    public double Utilization
-    {
-        get
-        {
-            var effective = ModelContextLimits.GetEffectiveMaxTokens(MaxTokens);
-            return effective > 0 ? Math.Clamp((double)TotalTokens / effective, 0.0, 1.0) : 0.0;
-        }
-    }
+    /// <inheritdoc cref="ContextWindowData.Utilization"/>
+    public double Utilization => ContextWindowData.ComputeUtilization(TotalTokens, MaxTokens);
 }
 
 /// <summary>
@@ -125,12 +119,25 @@ public record ContextWindowData
     public bool ShouldWarnAutocompact { get; init; }
     public IReadOnlyList<SubagentContextData> Subagents { get; init; } = [];
 
-    public double Utilization
+    /// <summary>
+    /// Fraction of the effective context window in use, clamped to 0…1.
+    /// </summary>
+    public double Utilization => ComputeUtilization(TotalTokens, MaxTokens);
+
+    /// <summary>
+    /// The number every context bar in the dashboard renders — for the session row and for its
+    /// subagent rows alike, which is why it is stated once (review finding C7) instead of once per
+    /// record. The two copies sat in one file and rendered directly above each other, so a clamp or
+    /// buffer change made in one of them put the two bars on different scales.
+    ///
+    /// The substantive rule, the autocompact buffer, lives in
+    /// <see cref="ModelContextLimits.GetEffectiveMaxTokens"/>; what is shared here is the guard
+    /// against a degenerate ceiling plus the clamp — presentation, which is why it stays on the
+    /// records that render it.
+    /// </summary>
+    internal static double ComputeUtilization(long totalTokens, long maxTokens)
     {
-        get
-        {
-            var effective = ModelContextLimits.GetEffectiveMaxTokens(MaxTokens);
-            return effective > 0 ? Math.Clamp((double)TotalTokens / effective, 0.0, 1.0) : 0.0;
-        }
+        var effective = ModelContextLimits.GetEffectiveMaxTokens(maxTokens);
+        return effective > 0 ? Math.Clamp((double)totalTokens / effective, 0.0, 1.0) : 0.0;
     }
 }

@@ -663,10 +663,8 @@ public sealed class JsonlService : IJsonlService, IDisposable
                 // Cache positions are only useful for live file-watcher incremental updates.
                 var slice = ReadFileSlice(file, knownPosition: null, forceFullRead: true);
 
-                if (ApplyFileSlice(data, file, slice, scannedPositions))
+                if (IngestFileSlice(data, file, slice, File.GetLastWriteTimeUtc(file), scannedPositions))
                     LogMissingCwdSurrogate(projectDirName);
-
-                AdvanceNewestSessionPointer(data, file, File.GetLastWriteTimeUtc(file));
             }
         }
 
@@ -781,6 +779,30 @@ public sealed class JsonlService : IJsonlService, IDisposable
     }
 
     /// <summary>
+    /// The per-file ingest step shared by the cold-start scan and the watcher (review finding A3):
+    /// apply the parsed slice, then advance the project's newest-session pointer. Each caller keeps
+    /// its own lock placement and its own <see cref="GetOrCreateProjectData"/> ordering — only the
+    /// pair of mutations is single-sourced, so a third ingest step added here cannot land on the cold
+    /// start and miss live watcher updates.
+    /// </summary>
+    /// <returns>
+    /// True when the project still has no cwd — see <see cref="ApplyFileSlice"/>. Reporting it rather
+    /// than logging it keeps <see cref="LogMissingCwdSurrogate"/> outside the caller's lock, because
+    /// AppLog opens a file per entry.
+    /// </returns>
+    private static bool IngestFileSlice(
+        ProjectData data,
+        string filePath,
+        FileSlice slice,
+        DateTime modTimeUtc,
+        Dictionary<string, FilePositionMarker> positions)
+    {
+        var cwdUnresolved = ApplyFileSlice(data, filePath, slice, positions);
+        AdvanceNewestSessionPointer(data, filePath, modTimeUtc);
+        return cwdUnresolved;
+    }
+
+    /// <summary>
     /// DROPDOWN-02 diagnostic: when no entry in a file carries a cwd field, log the surrogate that
     /// GetDisplayName will derive from the encoded project directory name. Cwd intentionally stays
     /// empty so the DROPDOWN-03 filter (IsNullOrEmpty path) keeps the session visible; DisplayName is
@@ -863,11 +885,25 @@ public sealed class JsonlService : IJsonlService, IDisposable
             data.ModelName = modelName;
     }
 
-    private static bool IsRelevantAssistantEntry(JsonlEntry entry) =>
-        string.Equals(entry.Type, "assistant", StringComparison.OrdinalIgnoreCase)
-        && !entry.IsSidechain;
+    /// <summary>
+    /// The entry-type half of the assistant classification, on its own because a subagent transcript
+    /// needs it without the sidechain half — its every entry carries isSidechain=true by design. One
+    /// place holds the type literal (review finding A1).
+    /// </summary>
+    private static bool IsAssistantEntry(JsonlEntry entry) =>
+        string.Equals(entry.Type, "assistant", StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsSyntheticModel(string? modelName) =>
+    private static bool IsRelevantAssistantEntry(JsonlEntry entry) =>
+        IsAssistantEntry(entry) && !entry.IsSidechain;
+
+    /// <summary>
+    /// True for Claude Code's synthetic-assistant marker, which names no real model: the pricing
+    /// lookup misses it and the context ceiling falls back to the default, so every consumer has to
+    /// skip it. Internal rather than private because the statistics model row filters the same two
+    /// literals and must not learn a third one separately (review finding I2). That display filter
+    /// keeps its own "unknown" clause — a placeholder, not a marker Claude Code ever writes.
+    /// </summary>
+    internal static bool IsSyntheticModel(string? modelName) =>
         string.Equals(modelName, "<synthetic>", StringComparison.OrdinalIgnoreCase)
         || string.Equals(modelName, "synthetic", StringComparison.OrdinalIgnoreCase);
 
@@ -1041,30 +1077,26 @@ public sealed class JsonlService : IJsonlService, IDisposable
                 || snapshot.MtimeTicks != mtimeTicks
                 || snapshot.Length != length)
             {
-                var lines = ReadTailLines(file);
-                // Subagent files have isSidechain=true on all entries by design —
-                // do not apply the sidechain filter here.
-                var entries = ParseJsonlEntries(lines)
-                    .Where(e => string.Equals(e.Type, "assistant", StringComparison.OrdinalIgnoreCase))
-                    .ToList();
+                // includeSidechain: subagent files have isSidechain=true on all entries by design, so
+                // the session view's sidechain filter must not apply here.
+                var state = ReadContextState(file, includeSidechain: true);
 
-                // Guard preserved: fresh mtime but no assistant entries yet
+                // Guard preserved: null means fresh mtime but no assistant entries yet
                 // (agent just started — only user / tool-result lines). Without an
                 // assistant entry we have no model + token data to display. Not cached: the file is
                 // mid-write, so the stamp would miss on the next pass regardless.
                 // A workflow run therefore stays invisible until one of its agents emits an assistant
                 // entry — a deliberate trade against D-1: the gap is seconds wide, and a synthetic
                 // zero-token context would flow into the run's aggregation.
-                if (entries.Count == 0)
+                if (state is null)
                     return;
 
-                var lastEntry = entries[^1];
                 snapshot = new AgentSnapshot(
                     mtimeTicks,
                     length,
                     ExtractAgentId(file),
-                    ComputeContextTokens(lastEntry),
-                    lastEntry.Message?.Model);
+                    state.Value.TotalTokens,
+                    state.Value.ModelName);
 
                 AgentSnapshotCache[file] = snapshot;
             }
@@ -1244,12 +1276,11 @@ public sealed class JsonlService : IJsonlService, IDisposable
 
     private ContextWindowData BuildContextWindow(string sessionFile)
     {
-        var entry = ReadLastAssistantEntryFromFile(sessionFile);
-        if (entry is null)
+        var state = ReadContextState(sessionFile, includeSidechain: false);
+        if (state is null)
             return ContextWindowData.Empty;
 
-        var totalTokens = ComputeContextTokens(entry);
-        var modelName = ResolveModelName(sessionFile, entry);
+        var (totalTokens, modelName) = state.Value;
         var maxTokens = ModelContextLimits.GetMaxContextTokens(
             modelName, _pricingService.GetPrice, observedTokens: totalTokens);
         var subagentFiles = FindSubagentFilesForSession(sessionFile);
@@ -1309,23 +1340,62 @@ public sealed class JsonlService : IJsonlService, IDisposable
         data.NewestSessionModTime = default;
     }
 
-    private static JsonlEntry? ReadLastAssistantEntryFromFile(string filePath)
+    /// <summary>
+    /// Tail-read, parse and keep the assistant entries of one transcript — the front half of every
+    /// context read, written once (review finding A1) so the entry-classification rule cannot drift
+    /// between the session bar and the subagent rows.
+    /// <paramref name="includeSidechain"/> false is the session view, where a sidechain line belongs
+    /// to a subagent rather than to the session; true is a subagent transcript, whose every entry
+    /// carries isSidechain=true by design.
+    /// </summary>
+    private static List<JsonlEntry> ReadAssistantEntries(string filePath, bool includeSidechain)
     {
-        var lines = ReadTailLines(filePath);
-        return ParseJsonlEntries(lines)
-            .Where(IsRelevantAssistantEntry)
-            .LastOrDefault();
+        var entries = ParseJsonlEntries(ReadTailLines(filePath));
+        return (includeSidechain
+                ? entries.Where(IsAssistantEntry)
+                : entries.Where(IsRelevantAssistantEntry))
+            .ToList();
     }
 
-    private static string? ResolveModelName(string filePath, JsonlEntry lastEntry)
+    /// <summary>
+    /// The context-window state of one transcript: the token total of its last assistant entry plus
+    /// the model that entry ran on, with synthetic markers resolved back to the last real model name.
+    /// Null when the file carries no assistant entry yet — the caller decides whether that is an empty
+    /// bar or a row to skip.
+    ///
+    /// Shared by the session bar and the subagent rows on purpose (review finding A2). The two had
+    /// diverged: the subagent path read <c>Message.Model</c> raw, so an agent whose last assistant
+    /// entry is <c>&lt;synthetic&gt;</c> missed the pricing lookup and got its percentage computed
+    /// against the default ceiling instead of its model's — on a row rendered directly below the
+    /// session bar that does resolve the marker.
+    ///
+    /// The ceiling itself is deliberately NOT part of this: the subagent path memoizes the token total
+    /// per file but has to recompute MaxTokens every pass, because the price list fills in
+    /// asynchronously — see <see cref="AgentSnapshot"/>.
+    /// </summary>
+    private static (long TotalTokens, string? ModelName)? ReadContextState(string filePath, bool includeSidechain)
+    {
+        var entries = ReadAssistantEntries(filePath, includeSidechain);
+        if (entries.Count == 0)
+            return null;
+
+        var lastEntry = entries[^1];
+        return (ComputeContextTokens(lastEntry), ResolveModelName(entries, lastEntry));
+    }
+
+    /// <summary>
+    /// The model of the last assistant entry, walking back past Claude Code's synthetic marker to the
+    /// last entry that names a real model. Takes the already-read entries rather than the path: the
+    /// caller holds them, and re-reading the same file for the synthetic case was the only reason this
+    /// ever touched the disk a second time.
+    /// </summary>
+    private static string? ResolveModelName(List<JsonlEntry> assistantEntries, JsonlEntry lastEntry)
     {
         var candidate = lastEntry.Message?.Model;
         if (!IsSyntheticModel(candidate))
             return candidate;
 
-        var lines = ReadTailLines(filePath);
-        return ParseJsonlEntries(lines)
-            .Where(IsRelevantAssistantEntry)
+        return assistantEntries
             .Select(e => e.Message?.Model)
             .LastOrDefault(m => !IsSyntheticModel(m));
     }
@@ -1704,8 +1774,7 @@ public sealed class JsonlService : IJsonlService, IDisposable
         lock (_sessionsLock)
         {
             var data = GetOrCreateProjectData(_projectData, projectDirName);
-            cwdUnresolved = ApplyFileSlice(data, filePath, slice, _filePositions);
-            AdvanceNewestSessionPointer(data, filePath, modTimeUtc);
+            cwdUnresolved = IngestFileSlice(data, filePath, slice, modTimeUtc, _filePositions);
         }
 
         if (cwdUnresolved)
