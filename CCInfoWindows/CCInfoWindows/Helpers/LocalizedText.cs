@@ -22,6 +22,16 @@ internal static class LocalizedText
         => ResolveOrNull(uid, logSource) ?? fallback;
 
     /// <summary>
+    /// The same rule minus the echoed-uid clause, for callers whose tests read the echo to prove WHICH
+    /// key a label reached for (SettingsViewModel's captions; see HeadlessLocalizerContractTests).
+    /// The clause it drops is unreachable in the shipped app anyway — App awaits the localizer build
+    /// before the first window exists — while the guarded lookup it keeps is the half that matters:
+    /// these callers are property getters, so an escaping exception lands inside binding evaluation.
+    /// </summary>
+    internal static string ResolveKeepingEcho(string uid, string fallback, string logSource)
+        => ResolveOrNull(LocalizerLookup, uid, logSource, rejectEcho: false) ?? fallback;
+
+    /// <summary>
     /// Localized text, or null for callers that derive their own substitute rather than carrying a
     /// literal one — a date pattern rebuilt from the culture, say.
     /// </summary>
@@ -35,15 +45,16 @@ internal static class LocalizedText
     internal static string Resolve(Func<string, string> lookup, string uid, string fallback, string logSource)
         => ResolveOrNull(lookup, uid, logSource) ?? fallback;
 
-    internal static string? ResolveOrNull(Func<string, string> lookup, string uid, string logSource)
+    internal static string? ResolveOrNull(
+        Func<string, string> lookup, string uid, string logSource, bool rejectEcho = true)
     {
         try
         {
             var text = lookup(uid);
 
-            return string.IsNullOrWhiteSpace(text) || string.Equals(text, uid, StringComparison.Ordinal)
-                ? null
-                : text;
+            if (string.IsNullOrWhiteSpace(text)) return null;
+
+            return rejectEcho && string.Equals(text, uid, StringComparison.Ordinal) ? null : text;
         }
         catch (Exception ex)
         {

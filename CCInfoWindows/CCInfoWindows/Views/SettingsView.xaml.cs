@@ -16,6 +16,8 @@ namespace CCInfoWindows.Views;
 /// </summary>
 public sealed partial class SettingsView : Page
 {
+    private const string TabLabelLogSource = "SettingsView.ApplyTabTooltips";
+
     public SettingsViewModel ViewModel { get; }
 
     public SettingsView()
@@ -155,14 +157,19 @@ public sealed partial class SettingsView : Page
         ApplyTabTooltips();
     }
 
+    /// <summary>
+    /// The tab strip renders a glyph badge per tab and no text, so <see cref="IconLabel"/> supplies
+    /// both the tooltip and the accessible name from one key. Before this shared call the tabs got a
+    /// tooltip only — an unguarded localizer read with no fallback, which painted an empty tooltip
+    /// on a missing key and announced nothing at all to a screen reader.
+    /// </summary>
     private void ApplyTabTooltips()
     {
-        var localizer = Localizer.Get();
-        ToolTipService.SetToolTip(TabGeneral, localizer.GetLocalizedString("SettingsTabGeneral"));
-        ToolTipService.SetToolTip(TabUpdates, localizer.GetLocalizedString("SettingsTabUpdates"));
-        ToolTipService.SetToolTip(TabAccount, localizer.GetLocalizedString("SettingsTabAccount"));
-        ToolTipService.SetToolTip(TabSessions, localizer.GetLocalizedString("SettingsTabSessions"));  // Phase 26
-        ToolTipService.SetToolTip(TabAbout, localizer.GetLocalizedString("SettingsTabAbout"));
+        IconLabel.Apply(TabGeneral, "SettingsTabGeneral", "General", TabLabelLogSource);
+        IconLabel.Apply(TabUpdates, "SettingsTabUpdates", "Updates", TabLabelLogSource);
+        IconLabel.Apply(TabAccount, "SettingsTabAccount", "Account", TabLabelLogSource);
+        IconLabel.Apply(TabSessions, "SettingsTabSessions", "Sessions", TabLabelLogSource);  // Phase 26
+        IconLabel.Apply(TabAbout, "SettingsTabAbout", "About", TabLabelLogSource);
     }
 
     private void OnLanguageApplied(object? sender, EventArgs e) => ApplyCodeDrivenLabels();

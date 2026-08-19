@@ -9,7 +9,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
@@ -150,15 +149,16 @@ public sealed partial class MainView : Page
     }
 
     /// <summary>
-    /// Names the icon-only buttons, which carry a glyph and no text of their own.
-    ///
-    /// Applied here rather than through <c>l:Uids.Uid</c>: WinUI3Localizer never applies the
-    /// "Control.[using:Namespace]Class.Property" attached-property form of a resw key, so those
-    /// entries resolved in the resource test yet left every one of these buttons with no tooltip and
-    /// an empty accessible name. SettingsView reached the same conclusion for its tab strip.
+    /// Names the icon-only buttons, which carry a glyph and no text of their own. The rule itself
+    /// lives in <see cref="IconLabel"/>, shared with SettingsView's tab strip — the two
+    /// hand-written copies had drifted, and only this one set an accessible name.
     ///
     /// Runs before the bootstrap: a dashboard that failed to load still needs a reachable
     /// Settings button.
+    ///
+    /// No language-switch re-apply hook, unlike SettingsView: MainView carries no
+    /// NavigationCacheMode, so the only place a language can change — the Settings page — has
+    /// replaced this page by the time the switch happens, and OnLoaded runs again on the way back.
     /// </summary>
     private void ApplyIconButtonLabels()
     {
@@ -170,15 +170,11 @@ public sealed partial class MainView : Page
     }
 
     /// <summary>
-    /// The glyph is the button's whole content, so one string serves as both the tooltip and the
-    /// name a screen reader announces.
+    /// Kept as a named local step rather than inlining <see cref="IconLabel.Apply"/> at the five call
+    /// sites: FooterLocalizationTests pins each (button, key) pair by this call's source text.
     /// </summary>
-    private static void SetIconButtonLabel(DependencyObject button, string uid, string fallback)
-    {
-        var label = LocalizedText.Resolve(uid, fallback, IconButtonLabelLogSource);
-        ToolTipService.SetToolTip(button, label);
-        AutomationProperties.SetName(button, label);
-    }
+    private static void SetIconButtonLabel(DependencyObject button, string uid, string fallback) =>
+        IconLabel.Apply(button, uid, fallback, IconButtonLabelLogSource);
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -319,20 +315,16 @@ public sealed partial class MainView : Page
     /// </summary>
     private async Task<bool> InitializeBridgeAsync(IWebViewBridge bridge, CancellationToken cancellationToken)
     {
-        var udfPath = AppPaths.WebView2UserDataFolder;
-        Directory.CreateDirectory(udfPath);
-
         // Idempotent: on a re-login OnLoaded runs again on the same MainView instance, so
         // CoreWebView2 already exists and is already on claude.ai. Re-navigating would leave
         // us awaiting a NavigationCompleted that never fires.
         var alreadyLive = ApiBridgeWebView.CoreWebView2 is not null;
         if (!alreadyLive)
         {
-            var env = await CoreWebView2Environment.CreateWithOptionsAsync(
-                browserExecutableFolder: null,
-                userDataFolder: udfPath,
-                options: null);
-            await ApiBridgeWebView.EnsureCoreWebView2Async(env);
+            // Shared with LoginViewModel: same user data folder, same options, and now the same
+            // delete-and-retry recovery — a corrupted profile used to heal on the login path and
+            // fail forever on a cold start with a saved token.
+            await WebView2Bootstrap.EnsureAsync(ApiBridgeWebView, BridgeLogSource);
 
             if (!await NavigateBridgeToClaudeAsync(cancellationToken))
             {

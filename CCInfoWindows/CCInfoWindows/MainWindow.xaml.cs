@@ -53,7 +53,11 @@ public sealed partial class MainWindow : Window, IRecipient<ThemeChangedMessage>
     {
         if (Content is FrameworkElement fe)
         {
-            fe.RequestedTheme = message.Value == "light"
+            // The constant, not the literal: SettingsViewModel persists and reads
+            // AppSettings.LightColorMode, so a bare "light" here silently falls through to Dark the
+            // day that value is renamed or recased. App.ApplyPersistedTheme carries the same rule and
+            // still spells it out as a literal.
+            fe.RequestedTheme = message.Value == AppSettings.LightColorMode
                 ? ElementTheme.Light
                 : ElementTheme.Dark;
         }

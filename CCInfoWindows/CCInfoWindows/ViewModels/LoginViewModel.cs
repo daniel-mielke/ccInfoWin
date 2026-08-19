@@ -19,6 +19,13 @@ public partial class LoginViewModel : ObservableObject
     private const string LoginPath = "/login";
     private const int LoginUnclaimed = 0;
     private const int LoginClaimed = 1;
+    private const string InitializeLogSource = "LoginViewModel.InitializeWebView";
+
+    /// <summary>
+    /// Generic per CLAUDE.md, with the exception behind it going to app.log only. Still an English
+    /// literal: the resw pair does not exist yet, and a uid with no entry resolves to this text anyway.
+    /// </summary>
+    private const string LoginFailedMessage = "Login processing failed.";
 
     /// <summary>Paths of the pre-authentication flow — reaching one of these is not a login.</summary>
     private static readonly string[] LoginFlowPaths = [LoginPath, "/signup", "/oauth", "/auth"];
@@ -44,11 +51,6 @@ public partial class LoginViewModel : ObservableObject
 
     public bool HasErrorMessage => !string.IsNullOrEmpty(ErrorMessage);
 
-    /// <summary>
-    /// User Data Folder path for WebView2 isolation (%LOCALAPPDATA%\CCInfoWindows\WebView2).
-    /// </summary>
-    public static string UserDataFolderPath => AppPaths.WebView2UserDataFolder;
-
     public LoginViewModel(
         ICredentialService credentialService,
         INavigationService navigationService,
@@ -70,33 +72,18 @@ public partial class LoginViewModel : ObservableObject
         IsLoading = true;
         ErrorMessage = null;
 
-        var udfPath = UserDataFolderPath;
-
         try
         {
-            await InitializeCoreWebView2(webView, udfPath);
+            // Shared with MainView's hidden bridge WebView2, delete-and-retry recovery included: both
+            // hosts bring up an environment over the very same user data folder.
+            await WebView2Bootstrap.EnsureAsync(webView, InitializeLogSource);
         }
-        catch (Exception firstAttemptEx)
+        catch (Exception ex)
         {
-            AppLog.Write("LoginViewModel.InitializeWebView", firstAttemptEx, "retrying with a fresh UDF");
-
-            // Retry once after deleting corrupted UDF (Pitfall 1 from research)
-            try
-            {
-                if (Directory.Exists(udfPath))
-                {
-                    Directory.Delete(udfPath, recursive: true);
-                }
-
-                await InitializeCoreWebView2(webView, udfPath);
-            }
-            catch (Exception retryEx)
-            {
-                ErrorMessage = "WebView2 initialization failed. Please restart the application.";
-                AppLog.Write("LoginViewModel.InitializeWebView", retryEx, "UDF recreation failed");
-                IsLoading = false;
-                return;
-            }
+            ErrorMessage = "WebView2 initialization failed. Please restart the application.";
+            AppLog.Write(InitializeLogSource, ex, "UDF recreation failed");
+            IsLoading = false;
+            return;
         }
 
         // Clear session cookies (e.g., after logout) while preserving UDF cache/service workers.
@@ -123,33 +110,11 @@ public partial class LoginViewModel : ObservableObject
         // overlay (bound to IsLoading) Visible — preventing AUTH-07 flash of cached chat URL.
     }
 
-    private async void HandleSourceChanged(CoreWebView2 sender, CoreWebView2SourceChangedEventArgs args)
-    {
-        try
-        {
-            if (IsLoginClaimed) return;
-            await TryExtractSessionCookieAsync(sender, sender.Source ?? "");
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = "Login processing failed.";
-            AppLog.Write("LoginViewModel.HandleSourceChanged", ex);
-        }
-    }
+    private async void HandleSourceChanged(CoreWebView2 sender, CoreWebView2SourceChangedEventArgs args) =>
+        await RunNavigationSignalAsync(nameof(HandleSourceChanged), () => ExtractFromCurrentUrlAsync(sender));
 
-    private async void HandleHistoryChanged(CoreWebView2 sender, object args)
-    {
-        try
-        {
-            if (IsLoginClaimed) return;
-            await TryExtractSessionCookieAsync(sender, sender.Source ?? "");
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = "Login processing failed.";
-            AppLog.Write("LoginViewModel.HandleHistoryChanged", ex);
-        }
-    }
+    private async void HandleHistoryChanged(CoreWebView2 sender, object args) =>
+        await RunNavigationSignalAsync(nameof(HandleHistoryChanged), () => ExtractFromCurrentUrlAsync(sender));
 
     /// <summary>
     /// Handles full page navigation completion.
@@ -158,28 +123,51 @@ public partial class LoginViewModel : ObservableObject
     /// itself has loaded successfully. Single source of truth, no second visibility flag.
     /// args.IsSuccess guards against offline/error completions (Pitfall 4).
     /// </summary>
-    public async void HandleNavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
+    public async void HandleNavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args) =>
+        await RunNavigationSignalAsync(
+            nameof(HandleNavigationCompleted), () => CompleteNavigationAsync(sender, args));
+
+    /// <summary>
+    /// The tail all three WebView2 navigation signals share: the one-shot claim guard and the single
+    /// catch that reports a failed login tail. Which of the three events arrives first is up to
+    /// WebView2, so a retry, a localized message or a claim release added to one handler only would
+    /// reach the user nondeterministically.
+    /// </summary>
+    private async Task RunNavigationSignalAsync(string handlerName, Func<Task> handle)
     {
         try
         {
-            if (IsLoginClaimed || sender.CoreWebView2 is null) return;
-
-            var source = sender.CoreWebView2.Source ?? string.Empty;
-
-            // D-08: reveal the WebView2 (and hide the loading overlay) only when the login URL
-            // has finished loading successfully — prevents AUTH-07 flash of any cached chat URL.
-            if (args.IsSuccess && IsLoginPageUrl(source))
-            {
-                IsLoading = false;
-            }
-
-            await TryExtractSessionCookieAsync(sender.CoreWebView2, source);
+            if (IsLoginClaimed) return;
+            await handle();
         }
         catch (Exception ex)
         {
-            ErrorMessage = "Login processing failed.";
-            AppLog.Write("LoginViewModel.HandleNavigationCompleted", ex);
+            ErrorMessage = LoginFailedMessage;
+            AppLog.Write($"{nameof(LoginViewModel)}.{handlerName}", ex);
         }
+    }
+
+    /// <summary>SPA navigation: the CoreWebView2 is the sender, and its Source is already current.</summary>
+    private Task ExtractFromCurrentUrlAsync(CoreWebView2 core) =>
+        TryExtractSessionCookieAsync(core, core.Source ?? "");
+
+    /// <summary>
+    /// The full-page-load signal, which additionally owns the moment the login page becomes visible.
+    /// </summary>
+    private async Task CompleteNavigationAsync(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
+    {
+        if (sender.CoreWebView2 is null) return;
+
+        var source = sender.CoreWebView2.Source ?? string.Empty;
+
+        // D-08: reveal the WebView2 (and hide the loading overlay) only when the login URL
+        // has finished loading successfully — prevents AUTH-07 flash of any cached chat URL.
+        if (args.IsSuccess && IsLoginPageUrl(source))
+        {
+            IsLoading = false;
+        }
+
+        await TryExtractSessionCookieAsync(sender.CoreWebView2, source);
     }
 
     /// <summary>
@@ -275,15 +263,4 @@ public partial class LoginViewModel : ObservableObject
     internal static bool IsLoginPageUrl(string url) =>
         ClaudeAiUrlPolicy.TryGetAllowedUri(url, out var uri) &&
         uri.AbsolutePath.StartsWith(LoginPath, StringComparison.OrdinalIgnoreCase);
-
-    private static async Task InitializeCoreWebView2(WebView2 webView, string udfPath)
-    {
-        Directory.CreateDirectory(udfPath);
-
-        var env = await CoreWebView2Environment.CreateWithOptionsAsync(
-            browserExecutableFolder: null,
-            userDataFolder: udfPath,
-            options: null);
-        await webView.EnsureCoreWebView2Async(env);
-    }
 }

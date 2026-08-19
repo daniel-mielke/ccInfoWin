@@ -1,5 +1,6 @@
-using System.Net.Http;
+﻿using System.Net.Http;
 using CCInfoWindows.Helpers;
+using CCInfoWindows.Models;
 using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
 using CCInfoWindows.ViewModels;
@@ -200,7 +201,7 @@ public partial class App : Application
 
         if (_window?.Content is FrameworkElement fe)
         {
-            fe.RequestedTheme = settings.ColorMode == "light"
+            fe.RequestedTheme = settings.ColorMode == AppSettings.LightColorMode
                 ? ElementTheme.Light
                 : ElementTheme.Dark;
         }

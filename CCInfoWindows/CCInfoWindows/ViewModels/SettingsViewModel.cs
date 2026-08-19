@@ -202,22 +202,21 @@ public partial class SettingsViewModel : ObservableObject
         _ => Localize("PricingSourceUnknown", "Unknown")
     };
 
+    private const string LocalizeLogSource = "SettingsViewModel.Localize";
+
     /// <summary>
-    /// Reads a resw value through the localizer, falling back to the given en-US literal. The
-    /// fallback only ever renders when the key is missing from both dictionaries — WinUI3Localizer
-    /// returns an empty string in that case, and an empty label is worse than an untranslated one.
+    /// Reads a resw value through the localizer, falling back to the given en-US literal.
     ///
-    /// Deliberately NOT routed through Helpers/LocalizedText: that shared rule also rejects an echoed
-    /// uid, and the echo is what SettingsViewModelTests and SettingsViewModelTimerTests use to assert
-    /// WHICH key a label reached for (see HeadlessLocalizerContractTests). Converting this without
-    /// converting those assertions in the same commit turns them from "the right key" into "some
-    /// non-blank string" — see the cross-file request filed with the 2026-08-06 finding-30 wave.
+    /// The rule itself now lives in Helpers/LocalizedText, which is what stops this file from growing a
+    /// second answer to "is this dictionary answer usable?". Only the echoed-uid clause is opted out
+    /// of: the echo is what SettingsViewModelTests and SettingsViewModelTimerTests read to assert WHICH
+    /// key a label reached for (see HeadlessLocalizerContractTests), and it cannot reach a shipped
+    /// caption — App awaits the localizer build before the first window is constructed. What the
+    /// shared rule contributes here is the guarded lookup: the callers below are property getters, so a
+    /// throwing Localizer.Get() used to escape into binding evaluation.
     /// </summary>
-    private static string Localize(string uid, string enUsFallback)
-    {
-        var localized = Localizer.Get().GetLocalizedString(uid);
-        return string.IsNullOrWhiteSpace(localized) ? enUsFallback : localized;
-    }
+    private static string Localize(string uid, string enUsFallback) =>
+        LocalizedText.ResolveKeepingEcho(uid, enUsFallback, LocalizeLogSource);
 
     /// <summary>Opens the page-level error InfoBar with a localized, non-technical message.</summary>
     private void ShowError(string uid, string enUsFallback)
@@ -248,34 +247,30 @@ public partial class SettingsViewModel : ObservableObject
         {
             var lastFetch = _pricingService.LastFetch;
             if (!lastFetch.HasValue)
-                return Localizer.Get().GetLocalizedString("LastFetchNever");
+                return Localize("LastFetchNever", "Never");
 
             var elapsed = DateTimeOffset.Now - lastFetch.Value;
             if (elapsed.TotalSeconds < 30)
-                return Localizer.Get().GetLocalizedString("LastFetchJustNow");
+                return Localize("LastFetchJustNow", "just now");
 
             if (elapsed.TotalMinutes < 60)
-            {
-                var minutes = (int)Math.Max(0, elapsed.TotalMinutes);
-                return string.Format(
-                    Localizer.Get().GetLocalizedString("LastFetchMinutesAgo"),
-                    minutes);
-            }
+                return Ago("LastFetchMinutesAgo", "{0} minutes ago", elapsed.TotalMinutes);
 
             if (elapsed.TotalHours < 24)
-            {
-                var hours = (int)Math.Max(0, elapsed.TotalHours);
-                return string.Format(
-                    Localizer.Get().GetLocalizedString("LastFetchHoursAgo"),
-                    hours);
-            }
+                return Ago("LastFetchHoursAgo", "{0} hours ago", elapsed.TotalHours);
 
-            var days = (int)Math.Max(0, elapsed.TotalDays);
-            return string.Format(
-                Localizer.Get().GetLocalizedString("LastFetchDaysAgo"),
-                days);
+            return Ago("LastFetchDaysAgo", "{0} days ago", elapsed.TotalDays);
         }
     }
+
+    /// <summary>
+    /// One counted band of the relative-time label. The clamp is what keeps a clock correction from
+    /// rendering a negative count, and having it in one place is what keeps plural handling or a format
+    /// provider from ever being applied to the minutes band alone — a bug that would only show at
+    /// one age.
+    /// </summary>
+    private static string Ago(string uid, string enUsFallback, double elapsedUnits) =>
+        string.Format(Localize(uid, enUsFallback), (int)Math.Max(0, elapsedUnits));
 
     // ─────────────────────────────────────────────────────────────────────────────
     // Phase 26 / RENAME-02: Sessions tab — snapshot collection + commands
@@ -352,15 +347,15 @@ public partial class SettingsViewModel : ObservableObject
         var sanitized = SessionNameSanitizer.Strip(item.CustomName).Trim();
         if (string.IsNullOrEmpty(sanitized))
         {
-            _sessionNameStore.ClearCustomName(item.SessionId);
-            item.CustomName = string.Empty;
+            // The same gesture as the X button, so it runs the same command rather than a second copy
+            // of it: an emptied box and a click must not be able to drift apart.
+            await ClearSessionCustomName(item);
+            return;
         }
-        else
-        {
-            _sessionNameStore.SetCustomName(item.SessionId, sanitized);
-            // Reflect sanitized value back to the bound TextBox (e.g. control chars stripped):
-            item.CustomName = sanitized;
-        }
+
+        _sessionNameStore.SetCustomName(item.SessionId, sanitized);
+        // Reflect sanitized value back to the bound TextBox (e.g. control chars stripped):
+        item.CustomName = sanitized;
 
         await PersistSessionNamesAsync(item);
     }
@@ -499,19 +494,27 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedVisibilityWindowIndex));
     }
 
-    partial void OnSelectedRefreshOptionChanged(RefreshOption value)
+    /// <summary>
+    /// The read-modify-write every settings change callback performs. The [ObservableProperty] callback
+    /// shape is framework-imposed, so the load/mutate/save around it is the only part that can be
+    /// shared.
+    ///
+    /// ponytail: last write wins. Two callbacks firing before the first save completes can still drop
+    /// each other's field, and a failed SaveSettings is not surfaced — both predate this helper and
+    /// hold identically with one copy or five.
+    /// </summary>
+    private void UpdateSettings(Action<AppSettings> mutate)
     {
         var settings = _settingsService.LoadSettings();
-        settings.RefreshIntervalSeconds = value.Seconds;
+        mutate(settings);
         _settingsService.SaveSettings(settings);
     }
 
-    partial void OnSelectedThresholdIndexChanged(int value)
-    {
-        var settings = _settingsService.LoadSettings();
-        settings.SessionActivityThresholdMinutes = MapThresholdIndexToMinutes(value);
-        _settingsService.SaveSettings(settings);
-    }
+    partial void OnSelectedRefreshOptionChanged(RefreshOption value) =>
+        UpdateSettings(settings => settings.RefreshIntervalSeconds = value.Seconds);
+
+    partial void OnSelectedThresholdIndexChanged(int value) =>
+        UpdateSettings(settings => settings.SessionActivityThresholdMinutes = MapThresholdIndexToMinutes(value));
 
     partial void OnIsAutostartChanged(bool value)
     {
@@ -557,9 +560,7 @@ public partial class SettingsViewModel : ObservableObject
             // resolve, so a globalization failure is not reported to the user as a failed switch.
             UiCulture.Apply(languageCode, $"{nameof(SettingsViewModel)}.{nameof(ApplyLanguageAsync)}");
 
-            var settings = _settingsService.LoadSettings();
-            settings.Language = languageCode;
-            _settingsService.SaveSettings(settings);
+            UpdateSettings(settings => settings.Language = languageCode);
 
             _appliedLanguageIndex = languageIndex;
             ClearError();
@@ -616,12 +617,8 @@ public partial class SettingsViewModel : ObservableObject
         return index >= 0 ? index : DefaultThresholdIndex;
     }
 
-    partial void OnSelectedVisibilityWindowIndexChanged(int value)
-    {
-        var settings = _settingsService.LoadSettings();
-        settings.SessionVisibilityWindowDays = MapIndexToVisibilityDays(value);
-        _settingsService.SaveSettings(settings);
-    }
+    partial void OnSelectedVisibilityWindowIndexChanged(int value) =>
+        UpdateSettings(settings => settings.SessionVisibilityWindowDays = MapIndexToVisibilityDays(value));
 
     private static int MapIndexToVisibilityDays(int index) =>
         (index >= 0 && index < AppSettings.SupportedSessionVisibilityWindowDays.Length)
@@ -637,9 +634,7 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnIsDarkModeChanged(bool value)
     {
         var colorMode = value ? AppSettings.DarkColorMode : AppSettings.LightColorMode;
-        var settings = _settingsService.LoadSettings();
-        settings.ColorMode = colorMode;
-        _settingsService.SaveSettings(settings);
+        UpdateSettings(settings => settings.ColorMode = colorMode);
         WeakReferenceMessenger.Default.Send(new ThemeChangedMessage(colorMode));
     }
 
