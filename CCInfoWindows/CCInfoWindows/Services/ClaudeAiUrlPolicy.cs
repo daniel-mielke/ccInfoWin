@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using CCInfoWindows.Helpers;
 
 namespace CCInfoWindows.Services;
 
@@ -20,17 +21,8 @@ internal static class ClaudeAiUrlPolicy
     /// the allowed host. Callers that need the path use the parsed instance instead of
     /// re-parsing the string.
     /// </summary>
-    internal static bool TryGetAllowedUri(string? url, [NotNullWhen(true)] out Uri? allowed)
-    {
-        allowed = null;
-
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed)) return false;
-        if (parsed.Scheme != Uri.UriSchemeHttps) return false;
-        if (!string.Equals(parsed.Host, AllowedHost, StringComparison.OrdinalIgnoreCase)) return false;
-
-        allowed = parsed;
-        return true;
-    }
+    internal static bool TryGetAllowedUri(string? url, [NotNullWhen(true)] out Uri? allowed) =>
+        UrlPolicy.TryGetHttpsUriOn(AllowedHost, url, out allowed);
 
     internal static bool IsAllowed(string? url) => TryGetAllowedUri(url, out _);
 }

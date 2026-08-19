@@ -85,8 +85,7 @@ public class ClaudeApiService : IClaudeApiService
             }
             catch (SessionExpiredException ex)
             {
-                AppLog.Write("ClaudeApiService.FetchUsage", ex, "session expired — requesting re-login");
-                WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
+                ReportSessionExpired("ClaudeApiService.FetchUsage", ex);
                 return null;
             }
             catch (HttpFetchException ex) when (ex.StatusCode is 403 or 404 && !orgIdReresolved)
@@ -190,8 +189,7 @@ public class ClaudeApiService : IClaudeApiService
         }
         catch (SessionExpiredException ex)
         {
-            AppLog.Write("ClaudeApiService.ListAvailableOrganizations", ex, "session expired — requesting re-login");
-            WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
+            ReportSessionExpired("ClaudeApiService.ListAvailableOrganizations", ex);
             return Array.Empty<OrganizationInfo>();
         }
         catch (Exception ex)
@@ -258,6 +256,18 @@ public class ClaudeApiService : IClaudeApiService
         {
             AppLog.Write("ClaudeApiService.ClearCache", ex, "cached usage file could not be deleted");
         }
+    }
+
+    /// <summary>
+    /// The whole 401-to-re-login protocol of this service: record the expiry under the calling
+    /// endpoint's tag, then ask the app to re-authenticate. Every catch of
+    /// <see cref="SessionExpiredException"/> here must route through this method — a copy that logs
+    /// but drops the message leaves that endpoint on stale data with no login prompt.
+    /// </summary>
+    private static void ReportSessionExpired(string source, Exception ex)
+    {
+        AppLog.Write(source, ex, "session expired — requesting re-login");
+        WeakReferenceMessenger.Default.Send(new AuthStateChangedMessage(false));
     }
 
     private static string BuildUsageUrl(string orgId) =>

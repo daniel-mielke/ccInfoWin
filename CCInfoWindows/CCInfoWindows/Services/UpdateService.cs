@@ -71,13 +71,12 @@ public class UpdateService : IUpdateService
     }
 
     /// <summary>
-    /// Allow-list for the URL handed to the browser. The host is compared after parsing rather
-    /// than by prefix, so a lookalike authority cannot be launched from a spoofed API response.
+    /// Allow-list for the URL handed to the browser: a spoofed html_url in the API response must
+    /// not be able to launch a lookalike authority. The rule itself lives in
+    /// <see cref="UrlPolicy.TryGetHttpsUriOn"/>, shared with the claude.ai egress allow-list.
     /// </summary>
     public static bool IsReleasePageUrl(string? url) =>
-        Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
-        uri.Scheme == Uri.UriSchemeHttps &&
-        string.Equals(uri.Host, ReleasePageHost, StringComparison.OrdinalIgnoreCase);
+        UrlPolicy.TryGetHttpsUriOn(ReleasePageHost, url, out _);
 
     public void StartPeriodicCheck()
     {
