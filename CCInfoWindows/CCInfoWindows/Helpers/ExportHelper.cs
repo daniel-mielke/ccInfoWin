@@ -257,7 +257,7 @@ public static class ExportHelper
         // Row 1 left: large percentage
         using var percentFormat = new CanvasTextFormat
         {
-            FontFamily = "Segoe UI Variable",
+            FontFamily = ChartDrawing.ChartFontFamily,
             FontSize = ExportConstants.PercentageFontSize,
             FontWeight = Microsoft.UI.Text.FontWeights.Bold,
             HorizontalAlignment = CanvasHorizontalAlignment.Left,
@@ -266,43 +266,22 @@ public static class ExportHelper
         session.DrawText(percentageText, leftX, currentY, percentageColor, percentFormat);
 
         // Row 1 right: reset-in caption
-        using var resetLabelFormat = new CanvasTextFormat
-        {
-            FontFamily = "Segoe UI Variable",
-            FontSize = ExportConstants.ResetInLabelFontSize,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            HorizontalAlignment = CanvasHorizontalAlignment.Right,
-            VerticalAlignment = CanvasVerticalAlignment.Top,
-            WordWrapping = CanvasWordWrapping.NoWrap
-        };
+        using var resetLabelFormat = CreateCaptionFormat(
+            ExportConstants.ResetInLabelFontSize, CanvasHorizontalAlignment.Right);
         var resetInCaption = LocalizedText.Resolve(
             localize, ExportConstants.ResetInLabelUid, ExportConstants.ResetInFallback, LogSource);
         session.DrawText(resetInCaption, rightX, currentY, ExportConstants.LabelColor, resetLabelFormat);
 
         // Row 2 right: countdown value in white
         var countdownTop = currentY + ExportConstants.ResetInLabelFontSize + ExportConstants.CountdownTopOffset;
-        using var countdownFormat = new CanvasTextFormat
-        {
-            FontFamily = "Segoe UI Variable",
-            FontSize = ExportConstants.CountdownFontSize,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            HorizontalAlignment = CanvasHorizontalAlignment.Right,
-            VerticalAlignment = CanvasVerticalAlignment.Top,
-            WordWrapping = CanvasWordWrapping.NoWrap
-        };
+        using var countdownFormat = CreateCaptionFormat(
+            ExportConstants.CountdownFontSize, CanvasHorizontalAlignment.Right);
         session.DrawText(countdownText, rightX, countdownTop, ExportConstants.PrimaryTextColor, countdownFormat);
 
         // Row 3 left: section label in accent blue, below the percentage number
         var sectionLabelTop = currentY + ExportConstants.PercentageFontSize + ExportConstants.SectionLabelGap;
-        using var sectionLabelFormat = new CanvasTextFormat
-        {
-            FontFamily = "Segoe UI Variable",
-            FontSize = ExportConstants.SectionLabelFontSize,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            HorizontalAlignment = CanvasHorizontalAlignment.Left,
-            VerticalAlignment = CanvasVerticalAlignment.Top,
-            WordWrapping = CanvasWordWrapping.NoWrap
-        };
+        using var sectionLabelFormat = CreateCaptionFormat(
+            ExportConstants.SectionLabelFontSize, CanvasHorizontalAlignment.Left);
         var sectionCaption = LocalizedText.Resolve(
             localize, ExportConstants.SectionLabelUid, ExportConstants.SectionLabelFallback, LogSource);
         session.DrawText(sectionCaption, leftX, sectionLabelTop, ExportConstants.SectionLabelColor, sectionLabelFormat);
@@ -310,6 +289,28 @@ public static class ExportHelper
         var chartAreaTop = sectionLabelTop + ExportConstants.SectionLabelFontSize + ExportConstants.ChartTopMargin;
         return chartAreaTop;
     }
+
+    /// <summary>
+    /// The three header captions — reset-in, countdown, section label — differ only in size and
+    /// horizontal alignment. What makes them one family of captions (the chart font, SemiBold, top
+    /// alignment, no wrapping) is written once here, so a caption-wide change is one edit.
+    ///
+    /// The percentage and the watermark stay hand-built on purpose: their weight, vertical alignment
+    /// and wrapping all differ, and folding them in would need three more parameters than it saves.
+    /// Callers own the returned format and must dispose it.
+    /// </summary>
+    private static CanvasTextFormat CreateCaptionFormat(
+        float fontSize,
+        CanvasHorizontalAlignment horizontalAlignment) =>
+        new()
+        {
+            FontFamily = ChartDrawing.ChartFontFamily,
+            FontSize = fontSize,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            HorizontalAlignment = horizontalAlignment,
+            VerticalAlignment = CanvasVerticalAlignment.Top,
+            WordWrapping = CanvasWordWrapping.NoWrap
+        };
 
     private static void DrawChartArea(
         CanvasDrawingSession session,
@@ -344,7 +345,7 @@ public static class ExportHelper
     {
         using var format = new CanvasTextFormat
         {
-            FontFamily = "Segoe UI Variable",
+            FontFamily = ChartDrawing.ChartFontFamily,
             FontSize = ExportConstants.WatermarkFontSize,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
             HorizontalAlignment = CanvasHorizontalAlignment.Right,

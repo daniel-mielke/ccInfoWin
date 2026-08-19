@@ -182,6 +182,8 @@ public static partial class AppLog
 
     // Control characters are folded to spaces so one entry stays one line: a message carrying a newline could
     // otherwise forge a second timestamped entry, and an escape sequence could hijack a terminal tailing the file.
+    // The character SET comes from SessionNameSanitizer.IsUnsafeControl, shared with the other surfaces that take
+    // outside text, so hardening it cannot leave this sink behind. Only the folding policy is local.
     private static string ToSingleLine(string value)
     {
         if (value.Length == 0) return value;
@@ -189,7 +191,7 @@ public static partial class AppLog
         var builder = new StringBuilder(value.Length);
         foreach (var character in value)
         {
-            builder.Append(char.IsControl(character) ? ' ' : character);
+            builder.Append(SessionNameSanitizer.IsUnsafeControl(character) ? ' ' : character);
         }
 
         return builder.ToString();

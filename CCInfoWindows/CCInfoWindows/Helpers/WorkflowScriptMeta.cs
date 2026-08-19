@@ -271,6 +271,9 @@ public static partial class WorkflowScriptMeta
     ///
     /// The cap never splits a surrogate pair: cutting between the two halves of an astral character
     /// leaves a lone surrogate that renders as a replacement box.
+    ///
+    /// Which characters count as control characters is <see cref="SessionNameSanitizer.IsUnsafeControl"/>,
+    /// shared with the log sink and the session-name box; only the folding policy and the cap are local.
     /// </summary>
     internal static string? Sanitize(string? value, int maxLength)
     {
@@ -278,7 +281,7 @@ public static partial class WorkflowScriptMeta
             return null;
 
         var cleaned = WhitespaceRunPattern().Replace(
-            string.Concat(value.Select(c => char.IsControl(c) ? ' ' : c)), " ").Trim();
+            string.Concat(value.Select(c => SessionNameSanitizer.IsUnsafeControl(c) ? ' ' : c)), " ").Trim();
 
         if (cleaned.Length == 0)
             return null;

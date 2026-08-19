@@ -14,8 +14,13 @@ public static class BurnRateCalculator
     private const double MaxUtilization = 100.0;
     private const double NearZeroThreshold = 1e-10;
 
-    /// <summary>Upper bound for a usable ETA — one 5-hour window has already elapsed by then.</summary>
-    private const double MaxSecondsToLimit = 5 * 60 * 60;
+    /// <summary>
+    /// Upper bound for a usable ETA — one whole rate-limit window has already elapsed by then. A
+    /// derived bound, not the window length itself: it is defined as "one window" only because
+    /// nothing beyond the current window is worth warning about, so it tracks
+    /// <see cref="RateLimitWindow.DurationSeconds"/> rather than restating it.
+    /// </summary>
+    private const double MaxSecondsToLimit = RateLimitWindow.DurationSeconds;
 
     /// <summary>
     /// Steepest utilization change treated as real, in percentage points per second.

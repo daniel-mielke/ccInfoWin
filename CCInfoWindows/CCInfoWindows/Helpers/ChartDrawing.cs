@@ -34,6 +34,13 @@ public static class ChartDrawing
     /// </summary>
     private const byte GlowWhiteCoreAlpha = 235;
 
+    /// <summary>
+    /// Font for every label the chart family draws — live canvas and PNG export alike. One const
+    /// because export/live parity is an explicit goal of this pair (see ExportConstants.ChartAreaHeight)
+    /// and the family used to be spelled out at seven construction sites across two files.
+    /// </summary>
+    public const string ChartFontFamily = "Segoe UI Variable";
+
     /// <summary>Breathing room between the percentage label and the gridline it belongs to.</summary>
     public const float AxisLabelGutter = 4f;
 
@@ -52,7 +59,7 @@ public static class ChartDrawing
     /// <summary>Percentage labels: right-aligned in the left gutter, centred on their gridline.</summary>
     private static readonly CanvasTextFormat AxisLabelFormat = new()
     {
-        FontFamily = "Segoe UI Variable",
+        FontFamily = ChartFontFamily,
         FontSize = 10f,
         HorizontalAlignment = CanvasHorizontalAlignment.Right,
         VerticalAlignment = CanvasVerticalAlignment.Center
@@ -61,7 +68,7 @@ public static class ChartDrawing
     /// <summary>Hour ticks: centred on their tick position, which removes the old 5h edge hack.</summary>
     private static readonly CanvasTextFormat HourLabelFormat = new()
     {
-        FontFamily = "Segoe UI Variable",
+        FontFamily = ChartFontFamily,
         FontSize = 10f,
         HorizontalAlignment = CanvasHorizontalAlignment.Center,
         VerticalAlignment = CanvasVerticalAlignment.Top

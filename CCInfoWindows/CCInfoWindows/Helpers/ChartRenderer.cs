@@ -21,7 +21,9 @@ public static class ChartRenderer
 
     public const float TopMargin = 10f;
     public const float BottomMargin = 16f;
-    public const double WindowDurationSeconds = 5 * 60 * 60;
+
+    /// <summary>Horizontal extent of the plot in time: one whole rate-limit window.</summary>
+    public const double WindowDurationSeconds = RateLimitWindow.DurationSeconds;
 
     /// <summary>
     /// Padding reserved inside the plot area on all four sides so the glow indicator is never
