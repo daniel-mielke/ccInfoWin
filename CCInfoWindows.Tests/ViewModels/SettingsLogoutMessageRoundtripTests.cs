@@ -1,4 +1,3 @@
-using CCInfoWindows.Models;
 using CCInfoWindows.Services.Interfaces;
 using CCInfoWindows.ViewModels;
 using CCInfoWindows.Views;
@@ -44,17 +43,9 @@ public class SettingsLogoutDirectCallTests
 
     private static (SettingsViewModel vm, List<string> calls, Mock<INavigationService> navMock) BuildSut()
     {
-        var settingsService = new Mock<ISettingsService>();
-        settingsService.Setup(s => s.LoadSettings()).Returns(new AppSettings());
         var navMock = new Mock<INavigationService>();
-        var pricingService = new Mock<IPricingService>();
 
-        var sessionNameStore = new Mock<ISessionNameStore>();
-        var jsonlService = new Mock<IJsonlService>();
-        jsonlService.Setup(s => s.Sessions).Returns(Array.Empty<SessionInfo>());
-        var dispatcherQueue = new Mock<IDispatcherQueue>();
-
-        // One shared recorder across four mocks — Moq's MockSequence cannot span mocks, and the suite
+        // One shared recorder across five mocks — Moq's MockSequence cannot span mocks, and the suite
         // has no other ordering harness.
         var calls = new List<string>();
 
@@ -73,18 +64,13 @@ public class SettingsLogoutDirectCallTests
         var usageNotifications = new Mock<IUsageNotificationService>();
         usageNotifications.Setup(u => u.CancelAll()).Callback(() => calls.Add(CancelAllCall));
 
-        var vm = new SettingsViewModel(
-            settingsService.Object,
-            credentialMock.Object,
-            navMock.Object,
-            pricingService.Object,
-            historyMock.Object,
-            sessionNameStore.Object,
-            jsonlService.Object,
-            dispatcherQueue.Object,
-            apiMock.Object,   // ORGID-01
-            usageNotifications.Object,
-            bridgeMock.Object);   // Finding 18
+        var vm = SettingsViewModelFactory.Create(
+            credentialService: credentialMock,
+            navigationService: navMock,
+            historyService: historyMock,
+            apiService: apiMock,
+            usageNotificationService: usageNotifications,
+            bridge: bridgeMock);
 
         return (vm, calls, navMock);
     }

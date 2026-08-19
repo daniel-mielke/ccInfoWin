@@ -4,53 +4,23 @@ namespace CCInfoWindows.Tests.Helpers;
 
 public class BurnRateFormatterTests
 {
-    [Fact]
-    public void ParseTime_MinutesOnly_ReturnsMinutesOnly()
+    [Theory]
+    [InlineData(1, 0, 1, (int)TimeFormat.MinutesOnly)]
+    [InlineData(33, 0, 33, (int)TimeFormat.MinutesOnly)]
+    [InlineData(59, 0, 59, (int)TimeFormat.MinutesOnly)]   // last minute below the hours branch
+    [InlineData(60, 1, 0, (int)TimeFormat.HoursOnly)]      // first minute inside it
+    [InlineData(61, 1, 1, (int)TimeFormat.HoursMinutes)]
+    [InlineData(93, 1, 33, (int)TimeFormat.HoursMinutes)]
+    [InlineData(120, 2, 0, (int)TimeFormat.HoursOnly)]
+    public void ParseTime_SplitsMinutesIntoTheDisplayedFormat(
+        int totalMinutes, int expectedHours, int expectedMinutes, int expectedFormat)
     {
-        var (hours, minutes, format) = BurnRateFormatter.ParseTime(33);
+        var (hours, minutes, format) = BurnRateFormatter.ParseTime(totalMinutes);
 
-        Assert.Equal(0, hours);
-        Assert.Equal(33, minutes);
-        Assert.Equal(TimeFormat.MinutesOnly, format);
-    }
-
-    [Fact]
-    public void ParseTime_HoursAndMinutes_ReturnsHoursMinutes()
-    {
-        var (hours, minutes, format) = BurnRateFormatter.ParseTime(93);
-
-        Assert.Equal(1, hours);
-        Assert.Equal(33, minutes);
-        Assert.Equal(TimeFormat.HoursMinutes, format);
-    }
-
-    [Fact]
-    public void ParseTime_ExactHours_ReturnsHoursOnly()
-    {
-        var (hours, minutes, format) = BurnRateFormatter.ParseTime(120);
-
-        Assert.Equal(2, hours);
-        Assert.Equal(0, minutes);
-        Assert.Equal(TimeFormat.HoursOnly, format);
-    }
-
-    [Fact]
-    public void ParseTime_OneMinute_ReturnsMinutesOnly()
-    {
-        var (hours, minutes, format) = BurnRateFormatter.ParseTime(1);
-
-        Assert.Equal(0, hours);
-        Assert.Equal(1, minutes);
-        Assert.Equal(TimeFormat.MinutesOnly, format);
-    }
-
-    [Fact]
-    public void ParseTime_SixtyMinutes_ReturnsHoursOnly()
-    {
-        var (hours, minutes, format) = BurnRateFormatter.ParseTime(60);
-
-        Assert.Equal(1, hours);
-        Assert.Equal(0, minutes);
-        Assert.Equal(TimeFormat.HoursOnly, format);
+        Assert.Equal(expectedHours, hours);
+        Assert.Equal(expectedMinutes, minutes);
+        // TimeFormat is internal, so the row carries its int value: a public [Theory] parameter
+        // cannot be less accessible than the method (CS0051).
+        Assert.Equal((TimeFormat)expectedFormat, format);
     }
 }

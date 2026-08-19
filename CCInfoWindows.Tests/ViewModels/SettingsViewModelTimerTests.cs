@@ -46,45 +46,7 @@ public class SettingsViewModelTimerTests
 
     private static SettingsViewModel CreateSut(Mock<IPricingService>? pricingMock = null)
     {
-        var settingsService = new Mock<ISettingsService>();
-        settingsService.Setup(s => s.LoadSettings()).Returns(new AppSettings());
-
-        var credentialService = new Mock<ICredentialService>();
-        credentialService.Setup(s => s.HasValidToken()).Returns(true);
-
-        var navigationService = new Mock<INavigationService>();
-
-        var pricing = pricingMock ?? new Mock<IPricingService>();
-        if (pricingMock == null)
-        {
-            pricing.Setup(s => s.Source).Returns(PricingSource.Unknown);
-            pricing.Setup(s => s.LastFetch).Returns((DateTimeOffset?)null);
-        }
-
-        var historyService = new Mock<IUsageHistoryService>();
-
-        var sessionNameStore = new Mock<ISessionNameStore>();
-        sessionNameStore.Setup(s => s.GetKnownSessionIds()).Returns(Array.Empty<string>());
-        var jsonlService = new Mock<IJsonlService>();
-        jsonlService.Setup(s => s.Sessions).Returns(Array.Empty<SessionInfo>());
-        var dispatcherQueue = new Mock<IDispatcherQueue>();
-
-        var apiService = new Mock<IClaudeApiService>();
-        var usageNotifications = new Mock<IUsageNotificationService>();
-        var bridge = new Mock<IWebViewBridge>();
-
-        var sut = new SettingsViewModel(
-            settingsService.Object,
-            credentialService.Object,
-            navigationService.Object,
-            pricing.Object,
-            historyService.Object,
-            sessionNameStore.Object,
-            jsonlService.Object,
-            dispatcherQueue.Object,
-            apiService.Object,   // ORGID-01
-            usageNotifications.Object,
-            bridge.Object);      // finding 18: logout unbinds the API bridge
+        var sut = SettingsViewModelFactory.Create(pricingService: pricingMock);
 
         // Inject fake timer factory to avoid WinRT COM context requirement in tests.
         sut.TimerFactory = () => new FakeDispatcherTimer();

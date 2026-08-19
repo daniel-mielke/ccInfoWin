@@ -107,7 +107,7 @@ public class MessengerCollectionConventionTests
 
         var files = Directory
             .EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
-            .Where(path => !IsBuildOutput(path))
+            .Where(path => !SourceTree.IsBuildOutput(path))
             .Select(path => new TestSourceFile(Path.GetFileName(path), File.ReadAllText(path)))
             .ToList();
 
@@ -117,11 +117,6 @@ public class MessengerCollectionConventionTests
 
         return files;
     }
-
-    // obj\ and bin\ hold source-generator output and copies of the very files being scanned.
-    private static bool IsBuildOutput(string path) =>
-        path.Contains(@"\obj\", StringComparison.OrdinalIgnoreCase)
-        || path.Contains(@"\bin\", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Walks up from the test output directory to the test project's source root — the compiled assembly

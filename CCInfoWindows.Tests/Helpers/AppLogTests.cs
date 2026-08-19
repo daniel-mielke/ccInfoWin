@@ -137,11 +137,7 @@ public class AppLogTests : IDisposable
     {
         // internal + InternalsVisibleTo makes the seam visible to the tests, but it does not stop the app
         // assembly from calling it. Only a source scan can.
-        var callers = ProductionSourceFiles.All()
-            .Where(file => !string.Equals(file.Name, AppLogFileName, StringComparison.OrdinalIgnoreCase))
-            .Where(file => file.Text.Contains(RedirectMemberName, StringComparison.Ordinal))
-            .Select(file => file.Name)
-            .ToList();
+        var callers = ProductionSourceFiles.FilesContaining(RedirectMemberName, AppLogFileName).ToList();
 
         Assert.True(
             callers.Count == 0,

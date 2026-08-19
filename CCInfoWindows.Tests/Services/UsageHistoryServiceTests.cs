@@ -1,5 +1,6 @@
-using CCInfoWindows.Models;
+﻿using CCInfoWindows.Models;
 using CCInfoWindows.Services;
+using CCInfoWindows.Tests.TestSupport;
 using CCInfoWindows.ViewModels;
 
 namespace CCInfoWindows.Tests.Services;
@@ -16,31 +17,12 @@ public sealed class UsageHistoryServiceTests : IDisposable
     /// </summary>
     private const int PointsLargeEnoughToYield = 20_000;
 
-    private static readonly TimeSpan PendingWriteTimeout = TimeSpan.FromSeconds(10);
-
-    private readonly string _tempDirectory;
+    private readonly TempDirectory _temp = new("ccinfo-history-");
     private readonly UsageHistoryService _sut;
 
     public UsageHistoryServiceTests()
     {
-        _tempDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-        _sut = new UsageHistoryService(_tempDirectory);
-    }
-
-    /// <summary>
-    /// Models the WinUI dispatcher: a captured continuation is Posted to a queue that only the
-    /// owning thread drains. This one is never drained — that is the point, because the thread that
-    /// would drain it is the one blocked inside the synchronous writer.
-    /// </summary>
-    private sealed class RecordingPumpContext : SynchronizationContext
-    {
-        private int _postCount;
-
-        public int PostCount => Volatile.Read(ref _postCount);
-
-        public override void Post(SendOrPostCallback d, object? state) => Interlocked.Increment(ref _postCount);
-
-        public override void Send(SendOrPostCallback d, object? state) => d(state);
+        _sut = new UsageHistoryService(_temp.Path);
     }
 
     [Fact]
@@ -56,8 +38,8 @@ public sealed class UsageHistoryServiceTests : IDisposable
     [Fact]
     public void LoadHistory_WhenFileContainsCorruptJson_ReturnsEmptyDefaults()
     {
-        Directory.CreateDirectory(_tempDirectory);
-        File.WriteAllText(Path.Combine(_tempDirectory, "usage-history.json"), "{ not valid json !!!");
+        Directory.CreateDirectory(_temp.Path);
+        File.WriteAllText(Path.Combine(_temp.Path, "usage-history.json"), "{ not valid json !!!");
 
         var result = _sut.LoadHistory();
 
@@ -113,11 +95,16 @@ public sealed class UsageHistoryServiceTests : IDisposable
     [Fact]
     public void SaveHistory_CreatesDirectoryIfNotExists()
     {
-        Assert.False(Directory.Exists(_tempDirectory));
+        // The fixture root exists from construction, so the missing directory has to be one level
+        // below it. Its content is deleted with the root, so nothing extra to tear down.
+        var missingDirectory = Path.Combine(_temp.Path, "not-created-yet");
+        var sut = new UsageHistoryService(missingDirectory);
 
-        _sut.SaveHistory(new UsageHistory());
+        Assert.False(Directory.Exists(missingDirectory));
 
-        Assert.True(Directory.Exists(_tempDirectory));
+        sut.SaveHistory(new UsageHistory());
+
+        Assert.True(Directory.Exists(missingDirectory));
     }
 
     [Fact]
@@ -174,36 +161,31 @@ public sealed class UsageHistoryServiceTests : IDisposable
     [Fact]
     public async Task SaveSync_VS_SaveAsync_ProducesByteIdenticalJson()
     {
-        var dirSync = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-        var dirAsync = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-        try
-        {
-            var sutSync = new UsageHistoryService(dirSync);
-            var sutAsync = new UsageHistoryService(dirAsync);
+        // Both writers get their own directory under the fixture root, so the fixture teardown
+        // reclaims them and this test needs no try/finally of its own.
+        var dirSync = Path.Combine(_temp.Path, "sync");
+        var dirAsync = Path.Combine(_temp.Path, "async");
 
-            var history = new UsageHistory
+        var sutSync = new UsageHistoryService(dirSync);
+        var sutAsync = new UsageHistoryService(dirAsync);
+
+        var history = new UsageHistory
+        {
+            ResetsAt = DateTimeOffset.Parse("2026-05-06T18:00:00Z"),
+            Points =
             {
-                ResetsAt = DateTimeOffset.Parse("2026-05-06T18:00:00Z"),
-                Points =
-                {
-                    new UsageHistoryPoint { Timestamp = DateTimeOffset.Parse("2026-05-06T13:00:00Z"), Utilization = 0.42 },
-                    new UsageHistoryPoint { Timestamp = DateTimeOffset.Parse("2026-05-06T13:05:00Z"), Utilization = 0.43 }
-                }
-            };
+                new UsageHistoryPoint { Timestamp = DateTimeOffset.Parse("2026-05-06T13:00:00Z"), Utilization = 0.42 },
+                new UsageHistoryPoint { Timestamp = DateTimeOffset.Parse("2026-05-06T13:05:00Z"), Utilization = 0.43 }
+            }
+        };
 
-            sutSync.SaveHistory(history);
-            await sutAsync.SaveHistoryAsync(history);
+        sutSync.SaveHistory(history);
+        await sutAsync.SaveHistoryAsync(history);
 
-            var bytesSync  = File.ReadAllBytes(Path.Combine(dirSync, "usage-history.json"));
-            var bytesAsync = File.ReadAllBytes(Path.Combine(dirAsync, "usage-history.json"));
+        var bytesSync  = File.ReadAllBytes(Path.Combine(dirSync, "usage-history.json"));
+        var bytesAsync = File.ReadAllBytes(Path.Combine(dirAsync, "usage-history.json"));
 
-            Assert.Equal(bytesSync, bytesAsync);
-        }
-        finally
-        {
-            if (Directory.Exists(dirSync))  Directory.Delete(dirSync, recursive: true);
-            if (Directory.Exists(dirAsync)) Directory.Delete(dirAsync, recursive: true);
-        }
+        Assert.Equal(bytesSync, bytesAsync);
     }
 
     [Fact]
@@ -245,7 +227,7 @@ public sealed class UsageHistoryServiceTests : IDisposable
 
         await Task.WhenAll(syncTask, asyncTask);
 
-        var content = File.ReadAllText(Path.Combine(_tempDirectory, "usage-history.json"));
+        var content = File.ReadAllText(Path.Combine(_temp.Path, "usage-history.json"));
         // File ends in EITHER h1's JSON OR h2's JSON -- never partial / interleaved
         var matchesH1 = content.Contains("2026-05-06T10:00:00");
         var matchesH2 = content.Contains("2026-05-06T20:00:00");
@@ -255,23 +237,17 @@ public sealed class UsageHistoryServiceTests : IDisposable
     [Fact]
     public void WriteFails_DoesNotUpdateSnapshot()
     {
-        // Force Directory.CreateDirectory to fail by pointing service at a path
-        // where the parent already exists as a FILE (not a directory).
-        var blockingFile = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        // Force Directory.CreateDirectory to fail by pointing the service at a path whose parent
+        // already exists as a FILE. It lives under the fixture root, so the fixture teardown removes
+        // it and this test needs no try/finally of its own.
+        var blockingFile = Path.Combine(_temp.Path, "blocker");
         File.WriteAllText(blockingFile, "blocker");
-        try
-        {
-            var failingSubdir = Path.Combine(blockingFile, "history");
-            var failSut = new UsageHistoryService(failingSubdir);
 
-            failSut.SaveHistory(new UsageHistory { ResetsAt = DateTimeOffset.UtcNow });
+        var failSut = new UsageHistoryService(Path.Combine(blockingFile, "history"));
 
-            Assert.Null(failSut.PeekLastSnapshot());
-        }
-        finally
-        {
-            File.Delete(blockingFile);
-        }
+        failSut.SaveHistory(new UsageHistory { ResetsAt = DateTimeOffset.UtcNow });
+
+        Assert.Null(failSut.PeekLastSnapshot());
     }
 
     [Fact]
@@ -314,34 +290,17 @@ public sealed class UsageHistoryServiceTests : IDisposable
     [Fact]
     public void SaveHistoryAsync_WhileTheUiThreadBlocksInSaveHistory_CompletesWithoutTheDispatcher()
     {
-        var pump = new RecordingPumpContext();
-        var previous = SynchronizationContext.Current;
-        SynchronizationContext.SetSynchronizationContext(pump);
-        try
-        {
-            var pending = _sut.SaveHistoryAsync(BuildHistory(PointsLargeEnoughToYield));
-            var closingSnapshot = new UsageHistory { ResetsAt = DateTimeOffset.Parse("2026-05-06T23:00:00Z") };
+        var closingSnapshot = new UsageHistory { ResetsAt = DateTimeOffset.Parse("2026-05-06T23:00:00Z") };
 
-            // Models MainWindow.OnClosing: the thread that owns the dispatcher blocks in the
-            // synchronous writer. Without ConfigureAwait(false) the _writeLock.Release()
-            // continuation is queued to a pump nobody can drain and this never returns.
-            _sut.SaveHistory(closingSnapshot);
+        // Models MainWindow.OnClosing: the thread that owns the dispatcher blocks in the synchronous
+        // writer. Without ConfigureAwait(false) the _writeLock.Release() continuation is queued to a
+        // pump nobody can drain and this never returns. The scaffold lives in TestPump, so this
+        // service and the session-name store cannot drift apart on the rule they both assert.
+        TestPump.AssertAsyncWriteSurvivesABlockingWrite(
+            () => _sut.SaveHistoryAsync(BuildHistory(PointsLargeEnoughToYield)),
+            () => _sut.SaveHistory(closingSnapshot));
 
-            // xUnit1031 (no blocking task operations) cannot be honoured here: this test method must stay
-            // synchronous. It installs a SynchronizationContext that is deliberately never drained, so awaiting
-            // while that context is current would hang the test itself, and awaiting with ConfigureAwait(false)
-            // would resume the finally block on a pooled thread -- leaving the undrainable pump installed on the
-            // xUnit worker thread for whatever test runs there next. A bounded Wait is the only correct join.
-#pragma warning disable xUnit1031
-            Assert.True(pending.Wait(PendingWriteTimeout), "the async write never completed");
-#pragma warning restore xUnit1031
-            Assert.Equal(0, pump.PostCount);
-            Assert.Same(closingSnapshot, _sut.PeekLastSnapshot());
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(previous);
-        }
+        Assert.Same(closingSnapshot, _sut.PeekLastSnapshot());
     }
 
     // --- Finding 35: atomic publish (tmp + File.Move) ---
@@ -351,8 +310,8 @@ public sealed class UsageHistoryServiceTests : IDisposable
     {
         _sut.SaveHistory(BuildHistory(pointCount: 3));
 
-        Assert.True(File.Exists(Path.Combine(_tempDirectory, HistoryFileName)));
-        Assert.False(File.Exists(Path.Combine(_tempDirectory, TempFileName)));
+        Assert.True(File.Exists(Path.Combine(_temp.Path, HistoryFileName)));
+        Assert.False(File.Exists(Path.Combine(_temp.Path, TempFileName)));
     }
 
     [Fact]
@@ -360,8 +319,8 @@ public sealed class UsageHistoryServiceTests : IDisposable
     {
         await _sut.SaveHistoryAsync(BuildHistory(pointCount: 3));
 
-        Assert.True(File.Exists(Path.Combine(_tempDirectory, HistoryFileName)));
-        Assert.False(File.Exists(Path.Combine(_tempDirectory, TempFileName)));
+        Assert.True(File.Exists(Path.Combine(_temp.Path, HistoryFileName)));
+        Assert.False(File.Exists(Path.Combine(_temp.Path, TempFileName)));
     }
 
     [Fact]
@@ -372,14 +331,14 @@ public sealed class UsageHistoryServiceTests : IDisposable
 
         // A locked destination fails the File.Move, which is exactly the window where the old
         // truncate-in-place write would have left a half-written file behind.
-        using (File.Open(Path.Combine(_tempDirectory, HistoryFileName), FileMode.Open, FileAccess.Read, FileShare.None))
+        using (File.Open(Path.Combine(_temp.Path, HistoryFileName), FileMode.Open, FileAccess.Read, FileShare.None))
         {
             _sut.SaveHistory(new UsageHistory { ResetsAt = DateTimeOffset.Parse("2026-05-06T20:00:00Z") });
         }
 
         Assert.Equal(persisted.ResetsAt, _sut.LoadHistory().ResetsAt);
         Assert.Same(persisted, _sut.PeekLastSnapshot());
-        Assert.False(File.Exists(Path.Combine(_tempDirectory, TempFileName)));
+        Assert.False(File.Exists(Path.Combine(_temp.Path, TempFileName)));
     }
 
     private static UsageHistory BuildHistory(int pointCount)
@@ -398,15 +357,5 @@ public sealed class UsageHistoryServiceTests : IDisposable
         };
     }
 
-    public void Dispose()
-    {
-        try
-        {
-            if (Directory.Exists(_tempDirectory))
-            {
-                Directory.Delete(_tempDirectory, recursive: true);
-            }
-        }
-        catch (IOException) { /* another handle still open on a temp file; the OS reclaims it */ }
-    }
+    public void Dispose() => _temp.Dispose();
 }

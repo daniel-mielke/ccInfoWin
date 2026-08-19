@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using System.Xml.Linq;
 using CCInfoWindows.Helpers;
 using Windows.UI;
@@ -29,38 +30,26 @@ public class ChartColorsTests
         Assert.Equal(101, lookup.Length);
     }
 
-    // --- Dark theme exact stop tests ---
+    // --- Exact anchor stops, both themes ---
+    //
+    // expected comes from GetColor rather than a hand-typed hex triple: ProgressBrushes_MatchAppThemeXaml
+    // already pins GetColor against the XAML palette, so a colour change stays a one-place edit.
 
-    [Fact]
-    public void BuildColorLookup_Index0Dark_ReturnsGreen()
+    [Theory]
+    [InlineData(true, 0, "ProgressGreenBrush")]
+    [InlineData(true, 50, "ProgressYellowBrush")]
+    [InlineData(true, 75, "ProgressOrangeBrush")]
+    [InlineData(true, 90, "ProgressRedBrush")]
+    [InlineData(false, 0, "ProgressGreenBrush")]
+    [InlineData(false, 50, "ProgressYellowBrush")]
+    [InlineData(false, 75, "ProgressOrangeBrush")]
+    [InlineData(false, 90, "ProgressRedBrush")]
+    public void BuildColorLookup_AtAnAnchorIndex_ReturnsThatStopUnblended(
+        bool isDark, int index, string brushKey)
     {
-        var lookup = ChartColors.BuildColorLookup(isDark: true);
-        var expected = Color.FromArgb(255, 0x30, 0xD1, 0x58);
-        Assert.Equal(expected, lookup[0]);
-    }
+        var lookup = ChartColors.BuildColorLookup(isDark);
 
-    [Fact]
-    public void BuildColorLookup_Index50Dark_ReturnsYellow()
-    {
-        var lookup = ChartColors.BuildColorLookup(isDark: true);
-        var expected = Color.FromArgb(255, 0xFF, 0xD6, 0x0A);
-        Assert.Equal(expected, lookup[50]);
-    }
-
-    [Fact]
-    public void BuildColorLookup_Index75Dark_ReturnsOrange()
-    {
-        var lookup = ChartColors.BuildColorLookup(isDark: true);
-        var expected = Color.FromArgb(255, 0xFF, 0x9F, 0x0A);
-        Assert.Equal(expected, lookup[75]);
-    }
-
-    [Fact]
-    public void BuildColorLookup_Index90Dark_ReturnsRed()
-    {
-        var lookup = ChartColors.BuildColorLookup(isDark: true);
-        var expected = Color.FromArgb(255, 0xFF, 0x45, 0x3A);
-        Assert.Equal(expected, lookup[90]);
+        Assert.Equal(ChartColors.GetColor(brushKey, isDark), lookup[index]);
     }
 
     [Fact]
@@ -76,8 +65,8 @@ public class ChartColorsTests
     public void BuildColorLookup_Index25Dark_IsThirtyPercentTowardsYellow_EasedRamp()
     {
         var lookup = ChartColors.BuildColorLookup(isDark: true);
-        var green = Color.FromArgb(255, 0x30, 0xD1, 0x58);
-        var yellow = Color.FromArgb(255, 0xFF, 0xD6, 0x0A);
+        var green = ChartColors.GetColor("ProgressGreenBrush", isDark: true);
+        var yellow = ChartColors.GetColor("ProgressYellowBrush", isDark: true);
 
         // Eased ramp: 0.25 is now an explicit anchor at 30% of the green-to-yellow blend, not
         // the 50% a plain 0.00/0.50 interpolation produced. The low end departs from green
@@ -98,8 +87,8 @@ public class ChartColorsTests
         // Property form of the same idea: every index between the green anchor and the yellow
         // anchor must be at most as far toward yellow as plain linear interpolation was.
         var lookup = ChartColors.BuildColorLookup(isDark: true);
-        var green = Color.FromArgb(255, 0x30, 0xD1, 0x58);
-        var yellow = Color.FromArgb(255, 0xFF, 0xD6, 0x0A);
+        var green = ChartColors.GetColor("ProgressGreenBrush", isDark: true);
+        var yellow = ChartColors.GetColor("ProgressYellowBrush", isDark: true);
 
         for (var i = 1; i < 50; i++)
         {
@@ -108,24 +97,6 @@ public class ChartColorsTests
             Assert.True(lookup[i].R <= linearR + 1,
                 $"index {i}: eased R {lookup[i].R} should not exceed linear {linearR:F1}");
         }
-    }
-
-    // --- Light theme stop tests ---
-
-    [Fact]
-    public void BuildColorLookup_Index0Light_ReturnsGreenLight()
-    {
-        var lookup = ChartColors.BuildColorLookup(isDark: false);
-        var expected = Color.FromArgb(255, 0x34, 0xC7, 0x59);
-        Assert.Equal(expected, lookup[0]);
-    }
-
-    [Fact]
-    public void BuildColorLookup_Index90Light_ReturnsRedLight()
-    {
-        var lookup = ChartColors.BuildColorLookup(isDark: false);
-        var expected = Color.FromArgb(255, 0xFF, 0x3B, 0x30);
-        Assert.Equal(expected, lookup[90]);
     }
 
     // --- Theme difference test ---
@@ -186,6 +157,94 @@ public class ChartColorsTests
         {
             Assert.Equal(ChartColors.GetColor(expectedKey, isDark), ChartColors.GetZoneColor(utilization, isDark));
         }
+    }
+
+    // --- D2: the zone boundaries are encoded twice, on purpose. This is the seam that has to hold ---
+
+    /// <summary>
+    /// 0.50 / 0.75 / 0.90 live in two structurally different places: ColorThresholds holds them as
+    /// consts feeding a discrete brush-key switch (glow dot, progress bars, export header) and
+    /// BuildColorLookup holds them as gradient anchor positions (the chart line and fill). That split
+    /// is deliberate — the gradient carries a fifth, eased 0.25 stop with no discrete counterpart — so
+    /// this pins the two encodings against each other instead of merging them. Move a boundary in one
+    /// place only and the same frame paints two answers: the curve's hue turns at the new position
+    /// while the dot at its tip, the bars and the PNG header stay in the old zone.
+    /// </summary>
+    [Theory]
+    [InlineData(0.50, "ProgressYellowBrush")]
+    [InlineData(0.75, "ProgressOrangeBrush")]
+    [InlineData(0.90, "ProgressRedBrush")]
+    public void TheZoneBoundaries_LandOnTheSameFractionInBothEncodings(double boundary, string brushKey)
+    {
+        var index = (int)Math.Round(boundary * 100);
+
+        foreach (var isDark in new[] { true, false })
+        {
+            var anchor = ChartColors.GetColor(brushKey, isDark);
+
+            // Discrete classifier: the zone starts exactly at the boundary, not one step either side.
+            Assert.Equal(anchor, ChartColors.GetZoneColor(boundary, isDark));
+            Assert.NotEqual(anchor, ChartColors.GetZoneColor(boundary - 0.01, isDark));
+
+            // Continuous gradient: the same fraction is an exact anchor stop, so it is unblended.
+            Assert.Equal(anchor, ChartColors.BuildColorLookup(isDark)[index]);
+        }
+    }
+
+    // --- D5: the two theme halves of the colour table are hand-maintained parallel lists ---
+
+    /// <summary>
+    /// A brush key added to one theme block only is otherwise silent: GetColor's TryGetValue swallows
+    /// the miss and the element renders grey in exactly one theme, with no exception and no log line.
+    /// ProgressBrushes_MatchAppThemeXaml cannot catch it — it iterates a fixed key list, and
+    /// ThresholdBrush and AxisLabelBrush are not declared in AppTheme.xaml at all, so the XAML is not
+    /// a cross-check for them either. Reading the table itself is what makes the omission loud.
+    /// </summary>
+    [Fact]
+    public void TheColorTable_DeclaresEveryBrushKeyForBothThemes()
+    {
+        var keys = ColorTableKeys();
+        var dark = KeysForTheme(keys, isDark: true);
+        var light = KeysForTheme(keys, isDark: false);
+
+        Assert.Equal(dark, light);
+    }
+
+    /// <summary>
+    /// The two chart-chrome keys named explicitly, because they are the pair with no other coverage:
+    /// no XAML declaration to mirror and no progress-bar test iterating over them.
+    /// </summary>
+    [Theory]
+    [InlineData("ThresholdBrush")]
+    [InlineData("AxisLabelBrush")]
+    public void TheChartChromeBrushes_AreDeclaredForBothThemes(string brushKey)
+    {
+        var keys = ColorTableKeys();
+
+        Assert.Contains((brushKey, true), keys);
+        Assert.Contains((brushKey, false), keys);
+    }
+
+    // ponytail: the table is private and the alternative was restructuring production into
+    // Dictionary<string, (Color Dark, Color Light)>, which is a bigger change than the bug it
+    // prevents. Ceiling: renaming the ColorTable field breaks these two tests, loudly.
+    private static (string BrushKey, bool IsDark)[] ColorTableKeys()
+    {
+        var field = typeof(ChartColors).GetField(
+            "ColorTable", BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(field);
+
+        var table = (Dictionary<(string BrushKey, bool IsDark), Color>)field!.GetValue(null)!;
+
+        return [.. table.Keys];
+    }
+
+    private static string[] KeysForTheme((string BrushKey, bool IsDark)[] keys, bool isDark)
+    {
+        return [.. keys.Where(k => k.IsDark == isDark)
+            .Select(k => k.BrushKey)
+            .OrderBy(k => k, StringComparer.Ordinal)];
     }
 
     // --- U-21: the subagent row glyph is a graphical object, so WCAG 1.4.11 applies ---

@@ -135,11 +135,7 @@ public class RegistryHelperTests : IDisposable
         // app assembly from calling it. Only a source scan can.
         var seamName = nameof(RegistryHelper.TryRedirectToKeyPath);
 
-        var callers = ProductionSourceFiles.All()
-            .Where(file => !string.Equals(file.Name, RegistryHelperFileName, StringComparison.OrdinalIgnoreCase))
-            .Where(file => file.Text.Contains(seamName, StringComparison.Ordinal))
-            .Select(file => file.Name)
-            .ToList();
+        var callers = ProductionSourceFiles.FilesContaining(seamName, RegistryHelperFileName).ToList();
 
         Assert.True(
             callers.Count == 0,

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using CCInfoWindows.Helpers;
+using CCInfoWindows.Tests.Convention;
 using CCInfoWindows.Tests.Helpers;
 using CCInfoWindows.ViewModels;
 
@@ -30,9 +31,6 @@ namespace CCInfoWindows.Tests.Localization;
 /// </summary>
 public class ResourceCoverageTests
 {
-    private const string EnUsRelativePath = "Strings/en-US/Resources.resw";
-    private const string DeDeRelativePath = "Strings/de-DE/Resources.resw";
-
     /// <summary>
     /// Keys that C# code or XAML looks up by name. A missing one is a silent empty string
     /// at runtime, so presence is asserted explicitly rather than left to key-set symmetry.
@@ -130,14 +128,30 @@ public class ResourceCoverageTests
         MainViewModel.WorkflowTooltipStartPatternUid,
     ];
 
+    /// <summary>
+    /// Key pairs that hold the same text on purpose, one per surface, because their call sites cannot
+    /// share a key: each is read through a different constant or applied by a different mechanism.
+    /// Nothing but a comment used to say they must not diverge, and the English pair had already
+    /// drifted: the dialog title read "Rename Session" against the pencil button's "Rename session".
+    ///
+    /// A deliberate reword changes both values, or deletes the pair from this list and says why.
+    /// </summary>
+    private static readonly (string First, string Second, string Why)[] KeyPairsThatMustMatch =
+    [
+        ("RenameSessionDialogTitle", "MainViewRenameLabel",
+            "the pencil button and the dialog it opens name the same action"),
+        (CountdownFormatter.ResetDatePatternUid, MainViewModel.WorkflowTooltipStartPatternUid,
+            "the app must not carry two date styles"),
+    ];
+
     private static readonly Regex PlaceholderPattern = new(@"\{(\d+)\}", RegexOptions.Compiled);
 
     [Fact]
     public void RequiredKeys_ExistInBothLocales_WithNonEmptyValues()
     {
-        foreach (var (locale, path) in Locales())
+        foreach (var (locale, path) in ReswFiles.Locales())
         {
-            var keyToValue = LoadResw(path);
+            var keyToValue = ReswFiles.Load(path);
             foreach (var key in RequiredKeys)
             {
                 Assert.True(keyToValue.ContainsKey(key), $"{locale} Resources.resw is missing key '{key}'.");
@@ -149,8 +163,8 @@ public class ResourceCoverageTests
     [Fact]
     public void EnUs_And_DeDe_ExposeIdenticalKeySets()
     {
-        var enKeys = LoadResw(EnUsRelativePath).Keys.ToHashSet();
-        var deKeys = LoadResw(DeDeRelativePath).Keys.ToHashSet();
+        var enKeys = ReswFiles.Load(ReswFiles.EnUsRelativePath).Keys.ToHashSet();
+        var deKeys = ReswFiles.Load(ReswFiles.DeDeRelativePath).Keys.ToHashSet();
 
         var missingInDe = enKeys.Except(deKeys).OrderBy(k => k).ToList();
         var missingInEn = deKeys.Except(enKeys).OrderBy(k => k).ToList();
@@ -164,9 +178,9 @@ public class ResourceCoverageTests
     [Fact]
     public void AllValues_AreNonEmpty()
     {
-        foreach (var (locale, path) in Locales())
+        foreach (var (locale, path) in ReswFiles.Locales())
         {
-            var empty = LoadResw(path)
+            var empty = ReswFiles.Load(path)
                 .Where(kv => string.IsNullOrWhiteSpace(kv.Value))
                 .Select(kv => kv.Key)
                 .OrderBy(k => k)
@@ -180,8 +194,8 @@ public class ResourceCoverageTests
     public void PlaceholderArity_MatchesAcrossLocales()
     {
         // A translation that drops or invents a {0} makes string.Format throw or render wrong.
-        var en = LoadResw(EnUsRelativePath);
-        var de = LoadResw(DeDeRelativePath);
+        var en = ReswFiles.Load(ReswFiles.EnUsRelativePath);
+        var de = ReswFiles.Load(ReswFiles.DeDeRelativePath);
 
         var mismatches = new List<string>();
         foreach (var (key, enValue) in en)
@@ -205,9 +219,9 @@ public class ResourceCoverageTests
     {
         // D-05: single {0} placeholder — Phase 22's string.Format substitutes the threshold integer.
         // D-07: no \n in the resw value — Phase 22 owns the multi-line composition (path + "\n" + threshold).
-        foreach (var (locale, path) in Locales())
+        foreach (var (locale, path) in ReswFiles.Locales())
         {
-            var template = LoadResw(path)["InactiveSessionTooltip"];
+            var template = ReswFiles.Load(path)["InactiveSessionTooltip"];
 
             Assert.Contains("{0}", template);
             Assert.DoesNotContain("{1}", template);
@@ -220,8 +234,8 @@ public class ResourceCoverageTests
     {
         // D-02 guard: re-authoring LoginReloadButton.* would produce duplicate <data> entries
         // and silent runtime resource lookup failures.
-        AssertNoDuplicates(EnUsRelativePath, "en-US");
-        AssertNoDuplicates(DeDeRelativePath, "de-DE");
+        AssertNoDuplicates(ReswFiles.EnUsRelativePath, "en-US");
+        AssertNoDuplicates(ReswFiles.DeDeRelativePath, "de-DE");
     }
 
     [Fact]
@@ -242,8 +256,7 @@ public class ResourceCoverageTests
         // Filter out MSBuild-generated copies in obj/ and bin/ — they are stale snapshots.
         var xamlFiles = Directory
             .EnumerateFiles(ProductionSourceFiles.Root, "*.xaml", SearchOption.AllDirectories)
-            .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                     && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"));
+            .Where(path => !SourceTree.IsBuildOutput(path));
 
         var uidPattern = new Regex(@"l:Uids\.Uid\s*=\s*""([^""]+)""", RegexOptions.Compiled);
 
@@ -313,9 +326,9 @@ public class ResourceCoverageTests
         // through a variable (ToastRequest.TitleKey/BodyKey, MainViewModel's formatKey) never appear
         // as a literal in source, so only the resw side can be checked. Regression guard for
         // "Settings.Sessions.ClearButton.[using:...]", which parsed as Uid "Settings".
-        foreach (var (locale, path) in Locales())
+        foreach (var (locale, path) in ReswFiles.Locales())
         {
-            var unresolvable = LoadResw(path).Keys
+            var unresolvable = ReswFiles.Load(path).Keys
                 .Where(name => !IsLocalizerResolvable(name))
                 .OrderBy(k => k)
                 .ToList();
@@ -331,9 +344,9 @@ public class ResourceCoverageTests
     {
         var reference = new DateTime(2026, 2, 27, 10, 0, 0, DateTimeKind.Unspecified);
 
-        foreach (var (locale, path) in Locales())
+        foreach (var (locale, path) in ReswFiles.Locales())
         {
-            var keyToValue = LoadResw(path);
+            var keyToValue = ReswFiles.Load(path);
             var culture = new CultureInfo(locale);
 
             foreach (var key in DatePatternKeys)
@@ -350,6 +363,31 @@ public class ResourceCoverageTests
     }
 
     [Fact]
+    public void KeyPairsSharingOneWording_HoldTheSameValueInEveryLocale()
+    {
+        var mismatches = new List<string>();
+
+        foreach (var (locale, path) in ReswFiles.Locales())
+        {
+            var keyToValue = ReswFiles.Load(path);
+
+            foreach (var (first, second, why) in KeyPairsThatMustMatch)
+            {
+                Assert.True(keyToValue.ContainsKey(first), $"{locale} Resources.resw is missing key '{first}'.");
+                Assert.True(keyToValue.ContainsKey(second), $"{locale} Resources.resw is missing key '{second}'.");
+
+                if (!string.Equals(keyToValue[first], keyToValue[second], StringComparison.Ordinal))
+                {
+                    mismatches.Add(
+                        $"{locale}: '{first}' = \"{keyToValue[first]}\" but '{second}' = \"{keyToValue[second]}\" — {why}.");
+                }
+            }
+        }
+
+        Assert.True(mismatches.Count == 0, string.Join(Environment.NewLine, mismatches));
+    }
+
+    [Fact]
     public void WeeklyResetDatePattern_OrdersItsFieldsPerLocale()
     {
         // Finding 21: CountdownFormatter hardcoded new CultureInfo("de-DE") plus "ddd dd.MM., HH:mm",
@@ -357,8 +395,8 @@ public class ResourceCoverageTests
         var reference = new DateTime(2026, 2, 27, 10, 0, 0, DateTimeKind.Unspecified);
         var key = CountdownFormatter.ResetDatePatternUid;
 
-        var en = reference.ToString(LoadResw(EnUsRelativePath)[key], new CultureInfo("en-US"));
-        var de = reference.ToString(LoadResw(DeDeRelativePath)[key], new CultureInfo("de-DE"));
+        var en = reference.ToString(ReswFiles.Load(ReswFiles.EnUsRelativePath)[key], new CultureInfo("en-US"));
+        var de = reference.ToString(ReswFiles.Load(ReswFiles.DeDeRelativePath)[key], new CultureInfo("de-DE"));
 
         Assert.DoesNotContain("27.02.", en);
         Assert.Contains("Feb", en);
@@ -375,8 +413,8 @@ public class ResourceCoverageTests
         var reference = new DateTime(2026, 2, 27, 10, 0, 0, DateTimeKind.Unspecified);
         var key = MainViewModel.NextWindowPatternUid;
 
-        var en = reference.ToString(LoadResw(EnUsRelativePath)[key], new CultureInfo("en-US"));
-        var de = reference.ToString(LoadResw(DeDeRelativePath)[key], new CultureInfo("de-DE"));
+        var en = reference.ToString(ReswFiles.Load(ReswFiles.EnUsRelativePath)[key], new CultureInfo("en-US"));
+        var de = reference.ToString(ReswFiles.Load(ReswFiles.DeDeRelativePath)[key], new CultureInfo("de-DE"));
 
         Assert.DoesNotContain("27.2.", en);
         Assert.DoesNotContain("27.02.", en);
@@ -399,40 +437,12 @@ public class ResourceCoverageTests
             || !dependencyPropertyPath.Contains('.');
     }
 
-    private static IEnumerable<(string Locale, string Path)> Locales()
-    {
-        yield return ("en-US", EnUsRelativePath);
-        yield return ("de-DE", DeDeRelativePath);
-    }
-
     private static HashSet<int> PlaceholderIndices(string value) =>
         PlaceholderPattern.Matches(value).Select(m => int.Parse(m.Groups[1].Value)).ToHashSet();
 
-    private static Dictionary<string, string> LoadResw(string relativePath)
-    {
-        var fullPath = Path.Combine(AppContext.BaseDirectory, relativePath);
-        Assert.True(File.Exists(fullPath), $"Resw file not found at: {fullPath}");
-
-        var doc = XDocument.Load(fullPath);
-        var dataElements = doc.Root?.Elements("data") ?? Enumerable.Empty<XElement>();
-
-        var result = new Dictionary<string, string>();
-        foreach (var data in dataElements)
-        {
-            var name = data.Attribute("name")?.Value;
-            var value = data.Element("value")?.Value;
-            if (name != null && value != null)
-            {
-                result[name] = value;
-            }
-        }
-
-        return result;
-    }
-
     private static void AssertNoDuplicates(string relativePath, string locale)
     {
-        var fullPath = Path.Combine(AppContext.BaseDirectory, relativePath);
+        var fullPath = ReswFiles.FullPath(relativePath);
         var doc = XDocument.Load(fullPath);
         var names = doc.Root?.Elements("data")
             .Select(d => d.Attribute("name")?.Value)

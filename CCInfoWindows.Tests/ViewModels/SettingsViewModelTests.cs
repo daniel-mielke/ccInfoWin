@@ -24,19 +24,6 @@ public class SettingsViewModelTests
     /// <summary>resw key behind the manual entry of the refresh-interval dropdown.</summary>
     private const string ManualRefreshLabelUid = "RefreshIntervalManual";
 
-    /// <summary>
-    /// A store double with the two members every Sessions-tab code path needs. Moq has no fallback
-    /// value for IReadOnlyCollection&lt;string&gt;, so an unconfigured GetKnownSessionIds would return
-    /// null and the orphan enumeration would throw before reaching the assertion.
-    /// </summary>
-    private static Mock<ISessionNameStore> CreateSessionNameStore()
-    {
-        var store = new Mock<ISessionNameStore>();
-        store.Setup(s => s.GetKnownSessionIds()).Returns(Array.Empty<string>());
-        store.Setup(s => s.SaveAsync(default)).ReturnsAsync(true);
-        return store;
-    }
-
     private static SettingsViewModel CreateViewModel(
         bool hasValidToken = true,
         Mock<ISessionNameStore>? sessionNameStore = null,
@@ -44,46 +31,13 @@ public class SettingsViewModelTests
         Mock<IDispatcherQueue>? dispatcherQueue = null,
         Mock<ISettingsService>? settingsServiceMock = null,
         Mock<IClaudeApiService>? apiServiceMock = null)
-    {
-        var settingsService = settingsServiceMock ?? new Mock<ISettingsService>();
-        if (settingsServiceMock == null)
-            settingsService.Setup(s => s.LoadSettings()).Returns(new AppSettings());
-
-        var credentialService = new Mock<ICredentialService>();
-        credentialService.Setup(s => s.HasValidToken()).Returns(hasValidToken);
-
-        var navigationService = new Mock<INavigationService>();
-
-        var pricingService = new Mock<IPricingService>();
-        pricingService.Setup(s => s.Source).Returns(PricingSource.Unknown);
-        pricingService.Setup(s => s.LastFetch).Returns((DateTimeOffset?)null);
-
-        var historyService = new Mock<IUsageHistoryService>();
-
-        var store = sessionNameStore ?? CreateSessionNameStore();
-        var jsonl = jsonlService ?? new Mock<IJsonlService>();
-        // Only set up default Sessions if no custom mock was provided — prevents overwriting caller's setup.
-        if (jsonlService == null)
-            jsonl.Setup(s => s.Sessions).Returns(Array.Empty<SessionInfo>());
-        var dispatcher = dispatcherQueue ?? new Mock<IDispatcherQueue>();
-
-        var apiService = apiServiceMock ?? new Mock<IClaudeApiService>();
-        var usageNotifications = new Mock<IUsageNotificationService>();
-        var bridge = new Mock<IWebViewBridge>();
-
-        return new SettingsViewModel(
-            settingsService.Object,
-            credentialService.Object,
-            navigationService.Object,
-            pricingService.Object,
-            historyService.Object,
-            store.Object,
-            jsonl.Object,
-            dispatcher.Object,
-            apiService.Object,   // ORGID-01
-            usageNotifications.Object,
-            bridge.Object);      // Finding 18
-    }
+        => SettingsViewModelFactory.Create(
+            settingsService: settingsServiceMock,
+            credentialService: SettingsViewModelFactory.CredentialService(hasValidToken),
+            sessionNameStore: sessionNameStore,
+            jsonlService: jsonlService,
+            dispatcherQueue: dispatcherQueue,
+            apiService: apiServiceMock);
 
     // ─── Existing tab visibility tests (indexes shifted: About is now 4) ──────────
 
@@ -203,7 +157,7 @@ public class SettingsViewModelTests
     [Fact]
     public void RefreshSessionRenameItems_PopulatesFromJsonlService()
     {
-        var store = CreateSessionNameStore();
+        var store = SettingsViewModelFactory.SessionNameStore();
         store.Setup(s => s.GetCustomName("session-1")).Returns("Custom1");
         store.Setup(s => s.GetCustomName("session-2")).Returns((string?)null);
 
@@ -232,7 +186,7 @@ public class SettingsViewModelTests
     [Fact]
     public async Task SaveSessionCustomName_StripsControlCharsAndPersists()
     {
-        var store = CreateSessionNameStore();
+        var store = SettingsViewModelFactory.SessionNameStore();
 
         var vm = CreateViewModel(sessionNameStore: store);
         var item = new SessionRenameItem
@@ -252,7 +206,7 @@ public class SettingsViewModelTests
     [Fact]
     public async Task SaveSessionCustomName_EmptyValueClears()
     {
-        var store = CreateSessionNameStore();
+        var store = SettingsViewModelFactory.SessionNameStore();
 
         var vm = CreateViewModel(sessionNameStore: store);
         var item = new SessionRenameItem
@@ -273,7 +227,7 @@ public class SettingsViewModelTests
     [Fact]
     public async Task ClearSessionCustomName_RemovesEntry()
     {
-        var store = CreateSessionNameStore();
+        var store = SettingsViewModelFactory.SessionNameStore();
 
         var vm = CreateViewModel(sessionNameStore: store);
         var item = new SessionRenameItem
@@ -296,7 +250,7 @@ public class SettingsViewModelTests
     {
         EventHandler<SessionNameChangedEventArgs>? capturedHandler = null;
 
-        var store = CreateSessionNameStore();
+        var store = SettingsViewModelFactory.SessionNameStore();
         store.SetupAdd(s => s.NameChanged += It.IsAny<EventHandler<SessionNameChangedEventArgs>>())
              .Callback<EventHandler<SessionNameChangedEventArgs>>(h => capturedHandler = h);
         store.SetupRemove(s => s.NameChanged -= It.IsAny<EventHandler<SessionNameChangedEventArgs>>())
@@ -334,7 +288,7 @@ public class SettingsViewModelTests
     [Fact]
     public void RefreshSessionRenameItems_WiresClearCommandAndLabelOntoEveryRow()
     {
-        var store = CreateSessionNameStore();
+        var store = SettingsViewModelFactory.SessionNameStore();
         store.Setup(s => s.GetCustomName("session-1")).Returns("Custom1");
         store.Setup(s => s.GetKnownSessionIds()).Returns(new[] { "session-1", "gone-session" });
         store.Setup(s => s.GetCustomName("gone-session")).Returns("Orphan name");
@@ -365,7 +319,7 @@ public class SettingsViewModelTests
     [Fact]
     public async Task RowClearCommand_ExecutesAgainstTheStore()
     {
-        var store = CreateSessionNameStore();
+        var store = SettingsViewModelFactory.SessionNameStore();
         var jsonl = new Mock<IJsonlService>();
         jsonl.Setup(s => s.Sessions).Returns(new[]
         {
@@ -391,7 +345,7 @@ public class SettingsViewModelTests
     [Fact]
     public void RefreshSessionRenameItems_ReadsOrphansFromTheStore_NotFromDisk()
     {
-        var store = CreateSessionNameStore();
+        var store = SettingsViewModelFactory.SessionNameStore();
         store.Setup(s => s.GetKnownSessionIds()).Returns(new[] { "orphan-1" });
         store.Setup(s => s.GetCustomName("orphan-1")).Returns("Renamed orphan");
 
@@ -412,7 +366,7 @@ public class SettingsViewModelTests
     [Fact]
     public async Task SaveSessionCustomName_WhenPersistenceFails_RestoresStoreValueAndSurfacesError()
     {
-        var store = CreateSessionNameStore();
+        var store = SettingsViewModelFactory.SessionNameStore();
         store.Setup(s => s.SaveAsync(default)).ReturnsAsync(false);
         store.Setup(s => s.GetCustomName("proj-9")).Returns("Name that is on disk");
 
@@ -435,7 +389,7 @@ public class SettingsViewModelTests
     [Fact]
     public async Task ClearSessionCustomName_WhenPersistenceFails_RestoresStoreValueAndSurfacesError()
     {
-        var store = CreateSessionNameStore();
+        var store = SettingsViewModelFactory.SessionNameStore();
         store.Setup(s => s.SaveAsync(default)).ReturnsAsync(false);
         store.Setup(s => s.GetCustomName("proj-9")).Returns("Still named on disk");
 
@@ -457,7 +411,7 @@ public class SettingsViewModelTests
     [Fact]
     public async Task SaveSessionCustomName_WhenPersistenceSucceeds_KeepsValueAndShowsNoError()
     {
-        var store = CreateSessionNameStore();
+        var store = SettingsViewModelFactory.SessionNameStore();
 
         var vm = CreateViewModel(sessionNameStore: store);
         var item = new SessionRenameItem

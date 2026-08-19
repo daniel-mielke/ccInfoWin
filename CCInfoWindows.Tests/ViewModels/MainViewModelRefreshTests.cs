@@ -20,45 +20,14 @@ public class MainViewModelRefreshTests
 
     private static MainViewModel CreateSut(Mock<IClaudeApiService>? apiMock = null)
     {
+        // ponytail: the stub is re-applied even to a caller-supplied mock, exactly as it was before
+        // the factory extraction — Moq lets the later Setup win, so a caller that stubs
+        // FetchUsageAsync itself is overridden here. Kept so this refactor stays behaviour-neutral.
         apiMock ??= new Mock<IClaudeApiService>();
         apiMock.Setup(x => x.FetchUsageAsync(It.IsAny<CancellationToken>()))
                .ReturnsAsync(MinimalUsageResponse);
 
-        var credentialService = new Mock<ICredentialService>();
-        var navigationService = new Mock<INavigationService>();
-        var settingsService = new Mock<ISettingsService>();
-        settingsService.Setup(s => s.LoadSettings()).Returns(new AppSettings());
-
-        var historyService = new Mock<IUsageHistoryService>();
-        historyService.Setup(s => s.LoadHistory()).Returns(new UsageHistory());
-
-        var jsonlService = new Mock<IJsonlService>();
-        jsonlService.Setup(s => s.Sessions).Returns([]);
-        jsonlService.Setup(s => s.IsScanning).Returns(false);
-
-        var pricingService = new Mock<IPricingService>();
-        pricingService.Setup(s => s.EnsurePricesLoadedAsync()).Returns(Task.CompletedTask);
-
-        var updateService = new Mock<IUpdateService>();
-        updateService.Setup(s => s.CheckForUpdateAsync()).Returns(Task.CompletedTask);
-
-        var burnRateService = new Mock<IUsageNotificationService>();
-        var sessionNameStore = new Mock<ISessionNameStore>();
-        sessionNameStore.Setup(s => s.GetCustomName(It.IsAny<string>())).Returns((string?)null);
-
-        return new MainViewModel(
-            credentialService.Object,
-            navigationService.Object,
-            apiMock.Object,
-            settingsService.Object,
-            historyService.Object,
-            jsonlService.Object,
-            pricingService.Object,
-            updateService.Object,
-            burnRateService.Object,
-            new FakeDispatcherQueue(),
-            sessionNameStore.Object,
-            _ => null!);   // headless brushFactory seam — SolidColorBrush requires WinRT COM
+        return MainViewModelFactory.Create(apiService: apiMock);
     }
 
     [Fact]
@@ -169,41 +138,10 @@ public class MainViewModelRefreshTests
         Mock<ISessionNameStore> sessionNameStore,
         Mock<IJsonlService> jsonlService,
         FakeDispatcherQueue? dispatcherQueue = null)
-    {
-        var apiMock = new Mock<IClaudeApiService>();
-        apiMock.Setup(x => x.FetchUsageAsync(It.IsAny<CancellationToken>()))
-               .ReturnsAsync(MinimalUsageResponse);
-
-        var credentialService = new Mock<ICredentialService>();
-        var navigationService = new Mock<INavigationService>();
-        var settingsService = new Mock<ISettingsService>();
-        settingsService.Setup(s => s.LoadSettings()).Returns(new AppSettings());
-
-        var historyService = new Mock<IUsageHistoryService>();
-        historyService.Setup(s => s.LoadHistory()).Returns(new UsageHistory());
-
-        var pricingService = new Mock<IPricingService>();
-        pricingService.Setup(s => s.EnsurePricesLoadedAsync()).Returns(Task.CompletedTask);
-
-        var updateService = new Mock<IUpdateService>();
-        updateService.Setup(s => s.CheckForUpdateAsync()).Returns(Task.CompletedTask);
-
-        var burnRateService = new Mock<IUsageNotificationService>();
-
-        return new MainViewModel(
-            credentialService.Object,
-            navigationService.Object,
-            apiMock.Object,
-            settingsService.Object,
-            historyService.Object,
-            jsonlService.Object,
-            pricingService.Object,
-            updateService.Object,
-            burnRateService.Object,
-            dispatcherQueue ?? new FakeDispatcherQueue(),
-            sessionNameStore.Object,
-            _ => null!);   // headless brushFactory seam — SolidColorBrush requires WinRT COM
-    }
+        => MainViewModelFactory.Create(
+            jsonlService: jsonlService,
+            sessionNameStore: sessionNameStore,
+            dispatcherQueue: dispatcherQueue);
 
     private static void InvokeRefreshSessionList(MainViewModel vm)
     {

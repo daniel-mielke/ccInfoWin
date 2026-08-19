@@ -19,74 +19,28 @@ public class CountdownFormatterTests
         Assert.Equal("--", CountdownFormatter.FormatCountdown(null));
     }
 
-    [Fact]
-    public void FormatCountdown_PastTime_ReturnsDash()
+    /// <summary>
+    /// The countdown truncates, so every offset carries the same +30s guard: it keeps the target off
+    /// a band edge that the clock could cross between the Add chain and the format call. Written once
+    /// here rather than re-typed per case, which is how a copy without it turns flaky.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 0, -10, "--")]           // already past
+    [InlineData(0, 0, 0, "--")]             // under a minute left, only the +30s guard
+    [InlineData(0, 0, 45, "45min")]
+    [InlineData(0, 2, 14, "2h 14min")]
+    [InlineData(0, 23, 59, "23h 59min")]    // last minute below the days band
+    [InlineData(0, 24, 0, "1d 0h")]         // first minute inside the days band
+    [InlineData(1, 0, 30, "1d 0h")]         // same output, reached from a different offset
+    [InlineData(3, 22, 15, "3d 22h")]
+    [InlineData(7, 0, 0, "7d 0h")]
+    public void FormatCountdown_RendersTheRemainingTimeInItsBand(
+        int days, int hours, int minutes, string expected)
     {
-        var pastTime = DateTimeOffset.UtcNow.AddMinutes(-10);
-        Assert.Equal("--", CountdownFormatter.FormatCountdown(pastTime));
-    }
+        var target = DateTimeOffset.UtcNow
+            .AddDays(days).AddHours(hours).AddMinutes(minutes).AddSeconds(30);
 
-    [Fact]
-    public void FormatCountdown_TwoHoursFourteenMinutes_ReturnsFormatted()
-    {
-        var future = DateTimeOffset.UtcNow.AddHours(2).AddMinutes(14).AddSeconds(30);
-        var result = CountdownFormatter.FormatCountdown(future);
-        Assert.Equal("2h 14min", result);
-    }
-
-    [Fact]
-    public void FormatCountdown_FortyFiveMinutes_ReturnsMinutesOnly()
-    {
-        var future = DateTimeOffset.UtcNow.AddMinutes(45).AddSeconds(30);
-        var result = CountdownFormatter.FormatCountdown(future);
-        Assert.Equal("45min", result);
-    }
-
-    [Fact]
-    public void FormatCountdown_LessThanOneMinute_ReturnsDash()
-    {
-        var future = DateTimeOffset.UtcNow.AddSeconds(30);
-        Assert.Equal("--", CountdownFormatter.FormatCountdown(future));
-    }
-
-    [Fact]
-    public void FormatCountdown_ThreeDays22Hours_ReturnsDaysHoursFormat()
-    {
-        var future = DateTimeOffset.UtcNow.AddDays(3).AddHours(22).AddMinutes(15).AddSeconds(30);
-        var result = CountdownFormatter.FormatCountdown(future);
-        Assert.Equal("3d 22h", result);
-    }
-
-    [Fact]
-    public void FormatCountdown_ExactlyOneDay_ReturnsDaysHoursFormat()
-    {
-        var future = DateTimeOffset.UtcNow.AddHours(24).AddSeconds(30);
-        var result = CountdownFormatter.FormatCountdown(future);
-        Assert.Equal("1d 0h", result);
-    }
-
-    [Fact]
-    public void FormatCountdown_OneDayZeroMinutes_ReturnsDaysHoursFormat()
-    {
-        var future = DateTimeOffset.UtcNow.AddDays(1).AddMinutes(30).AddSeconds(30);
-        var result = CountdownFormatter.FormatCountdown(future);
-        Assert.Equal("1d 0h", result);
-    }
-
-    [Fact]
-    public void FormatCountdown_SevenDays_ReturnsDaysHoursFormat()
-    {
-        var future = DateTimeOffset.UtcNow.AddDays(7).AddSeconds(30);
-        var result = CountdownFormatter.FormatCountdown(future);
-        Assert.Equal("7d 0h", result);
-    }
-
-    [Fact]
-    public void FormatCountdown_JustUnder24Hours_ReturnsHoursMinutes()
-    {
-        var future = DateTimeOffset.UtcNow.AddHours(23).AddMinutes(59).AddSeconds(30);
-        var result = CountdownFormatter.FormatCountdown(future);
-        Assert.Equal("23h 59min", result);
+        Assert.Equal(expected, CountdownFormatter.FormatCountdown(target));
     }
 
     [Fact]

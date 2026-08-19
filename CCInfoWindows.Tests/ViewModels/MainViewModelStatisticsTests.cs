@@ -1,8 +1,5 @@
 using CCInfoWindows.Models;
-using CCInfoWindows.Services.Interfaces;
-using CCInfoWindows.Tests.Helpers;
 using CCInfoWindows.ViewModels;
-using Moq;
 
 namespace CCInfoWindows.Tests.ViewModels;
 
@@ -13,8 +10,8 @@ namespace CCInfoWindows.Tests.ViewModels;
 /// injected services and whose ApplyStatistics was a second implementation of the rules under test.
 /// That copy had already drifted — it knew nothing about the synthetic/unknown filter, the Distinct
 /// or the ordering — and dropping the "> 0" token guard in production left all five tests green.
-/// The real ViewModel is built headlessly exactly as MainViewModelAuthFlowTests and
-/// MainViewModelRefreshTests build it: FakeDispatcherQueue plus the brushFactory seam.
+/// The real ViewModel is built headlessly through MainViewModelFactory, the way every other
+/// MainViewModel suite builds it: FakeDispatcherQueue plus the brushFactory seam.
 /// </summary>
 public class MainViewModelStatisticsTests
 {
@@ -29,39 +26,7 @@ public class MainViewModelStatisticsTests
     private const string OpusIdWithDateSuffix = "claude-opus-5-20260101";
     private const string OpusDisplayName = "Opus 5";
 
-    private static MainViewModel CreateSut()
-    {
-        var settingsService = new Mock<ISettingsService>();
-        settingsService.Setup(s => s.LoadSettings()).Returns(new AppSettings());
-
-        var jsonlService = new Mock<IJsonlService>();
-        jsonlService.Setup(s => s.Sessions).Returns([]);
-        jsonlService.Setup(s => s.IsScanning).Returns(false);
-        jsonlService.Setup(s => s.GetStatistics(It.IsAny<TimePeriod>(), It.IsAny<string?>()))
-            .Returns(StatisticsSummary.Empty);
-
-        var pricingService = new Mock<IPricingService>();
-        pricingService.Setup(s => s.Source).Returns(PricingSource.Unknown);
-        pricingService.Setup(s => s.LastFetch).Returns((DateTimeOffset?)null);
-        pricingService.Setup(s => s.EnsurePricesLoadedAsync()).Returns(Task.CompletedTask);
-
-        var sessionNameStore = new Mock<ISessionNameStore>();
-        sessionNameStore.Setup(s => s.GetCustomName(It.IsAny<string>())).Returns((string?)null);
-
-        return new MainViewModel(
-            new Mock<ICredentialService>().Object,
-            new Mock<INavigationService>().Object,
-            new Mock<IClaudeApiService>().Object,
-            settingsService.Object,
-            new Mock<IUsageHistoryService>().Object,
-            jsonlService.Object,
-            pricingService.Object,
-            new Mock<IUpdateService>().Object,
-            new Mock<IUsageNotificationService>().Object,
-            new FakeDispatcherQueue(),
-            sessionNameStore.Object,
-            _ => null!);   // headless brushFactory seam — SolidColorBrush requires WinRT COM
-    }
+    private static MainViewModel CreateSut() => MainViewModelFactory.Create();
 
     private static MainViewModel WithStatistics(StatisticsSummary stats)
     {

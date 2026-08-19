@@ -53,6 +53,9 @@ public class UpdateServiceTests
     [InlineData("https://githubXcom/daniel-mielke/ccInfoWin", false)]
     [InlineData("http://github.com/daniel-mielke/ccInfoWin", false)]
     [InlineData("https://user@evil.example/https://github.com/", false)]
+    // Userinfo, not authority: the shared rule compares Uri.Host, so the "github.com@" prefix cannot
+    // smuggle the launch past the allow-list.
+    [InlineData("https://github.com@evil.example/daniel-mielke/ccInfoWin", false)]
     [InlineData("javascript:alert(1)", false)]
     [InlineData("", false)]
     public void IsReleasePageUrl_AcceptsOnlyHttpsUrlsOnTheGitHubHost(string url, bool expected)

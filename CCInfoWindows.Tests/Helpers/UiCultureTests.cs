@@ -112,9 +112,7 @@ public class UiCultureTests
         // Finding 30's cross-file half: App.ApplyUiCulture and SettingsViewModel.ApplyUiCulture were
         // byte-identical, and the second was added months after the first without anyone noticing the
         // first existed. A third copy fails here.
-        var offenders = FilesContaining(UiCultureAssignment)
-            .Where(name => !string.Equals(name, UiCultureFileName, StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        var offenders = ProductionSourceFiles.FilesContaining(UiCultureAssignment, UiCultureFileName).ToList();
 
         Assert.True(
             offenders.Count == 0,
@@ -128,7 +126,7 @@ public class UiCultureTests
         // The decision, enforced instead of only documented: a display-language choice must not silently
         // re-format the user's numbers and dates. UiCulture itself is not exempt — it is the file where
         // adding the third line would feel most natural.
-        var offenders = FilesContaining(FormattingCultureAssignment).ToList();
+        var offenders = ProductionSourceFiles.FilesContaining(FormattingCultureAssignment).ToList();
 
         Assert.True(
             offenders.Count == 0,
@@ -148,12 +146,6 @@ public class UiCultureTests
         Assert.Contains(DefaultThreadUiCultureAssignment, uiCulture);
         Assert.Contains(CurrentUiCultureAssignment, uiCulture);
     }
-
-    private static IEnumerable<string> FilesContaining(string needle) =>
-        ProductionSourceFiles.All()
-            .Where(file => file.Text.Contains(needle, StringComparison.Ordinal))
-            .Select(file => file.Name)
-            .Order();
 
     /// <summary>
     /// Runs the real rule with the assignment replaced by a capture, so nothing outlives the test.

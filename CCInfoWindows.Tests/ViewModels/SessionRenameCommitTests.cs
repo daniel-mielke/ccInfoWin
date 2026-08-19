@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using CCInfoWindows.Models;
 using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
+using CCInfoWindows.Tests.Convention;
 using CCInfoWindows.Tests.Helpers;
 using CCInfoWindows.ViewModels;
 using Moq;
@@ -33,42 +34,8 @@ public class SessionRenameCommitTests
     private const string EnterCommitRecordsTheRow = "_rowCommittedByEnter = item;";
     private const string LostFocusConsultsTheRecord = "ReferenceEquals(item, _rowCommittedByEnter)";
 
-    private static Mock<ISessionNameStore> CreateSessionNameStore()
-    {
-        var store = new Mock<ISessionNameStore>();
-        store.Setup(s => s.GetKnownSessionIds()).Returns(Array.Empty<string>());
-        store.Setup(s => s.SaveAsync(default)).ReturnsAsync(true);
-        return store;
-    }
-
     private static SettingsViewModel CreateSut(Mock<ISessionNameStore> sessionNameStore)
-    {
-        var settingsService = new Mock<ISettingsService>();
-        settingsService.Setup(s => s.LoadSettings()).Returns(new AppSettings());
-
-        var credentialService = new Mock<ICredentialService>();
-        credentialService.Setup(s => s.HasValidToken()).Returns(true);
-
-        var pricingService = new Mock<IPricingService>();
-        pricingService.Setup(s => s.Source).Returns(PricingSource.Unknown);
-        pricingService.Setup(s => s.LastFetch).Returns((DateTimeOffset?)null);
-
-        var jsonlService = new Mock<IJsonlService>();
-        jsonlService.Setup(s => s.Sessions).Returns(Array.Empty<SessionInfo>());
-
-        return new SettingsViewModel(
-            settingsService.Object,
-            credentialService.Object,
-            new Mock<INavigationService>().Object,
-            pricingService.Object,
-            new Mock<IUsageHistoryService>().Object,
-            sessionNameStore.Object,
-            jsonlService.Object,
-            new Mock<IDispatcherQueue>().Object,
-            new Mock<IClaudeApiService>().Object,
-            new Mock<IUsageNotificationService>().Object,
-            new Mock<IWebViewBridge>().Object);
-    }
+        => SettingsViewModelFactory.Create(sessionNameStore: sessionNameStore);
 
     private static SessionRenameItem CreateRow(string sessionId, string customName) => new()
     {
@@ -77,26 +44,11 @@ public class SessionRenameCommitTests
         CustomName = customName
     };
 
-    private static string ReadSettingsViewXaml()
-    {
-        var candidates = Directory
-            .EnumerateFiles(ProductionSourceFiles.Root, SettingsViewXamlFileName, SearchOption.AllDirectories)
-            .Where(path => !IsBuildOutput(path))
-            .ToList();
-
-        return File.ReadAllText(Assert.Single(candidates));
-    }
-
-    // obj\ and bin\ hold stale MSBuild copies of the very file being scanned.
-    private static bool IsBuildOutput(string path) =>
-        path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
-        || path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase);
-
     /// <summary>What the user types has to reach the store, which is the defect in one sentence.</summary>
     [Fact]
     public async Task SaveSessionCustomName_WithATypedName_ReachesTheStore()
     {
-        var store = CreateSessionNameStore();
+        var store = SettingsViewModelFactory.SessionNameStore();
         var vm = CreateSut(store);
 
         await vm.SaveSessionCustomNameCommand.ExecuteAsync(CreateRow("proj-b1", "Release branch"));
@@ -110,7 +62,7 @@ public class SessionRenameCommitTests
     [Fact]
     public async Task SaveSessionCustomName_WithAnEmptyBox_ClearsInsteadOfSetting()
     {
-        var store = CreateSessionNameStore();
+        var store = SettingsViewModelFactory.SessionNameStore();
         var vm = CreateSut(store);
 
         await vm.SaveSessionCustomNameCommand.ExecuteAsync(CreateRow("proj-b1", string.Empty));
@@ -124,7 +76,7 @@ public class SessionRenameCommitTests
     [Fact]
     public async Task SaveSessionCustomName_WithWhitespaceOnly_ClearsInsteadOfSetting()
     {
-        var store = CreateSessionNameStore();
+        var store = SettingsViewModelFactory.SessionNameStore();
         var vm = CreateSut(store);
 
         await vm.SaveSessionCustomNameCommand.ExecuteAsync(CreateRow("proj-b1", "   "));
@@ -137,7 +89,7 @@ public class SessionRenameCommitTests
     [Fact]
     public async Task SaveSessionCustomName_WithATypedName_LeavesTheRowShowingIt()
     {
-        var store = CreateSessionNameStore();
+        var store = SettingsViewModelFactory.SessionNameStore();
         var vm = CreateSut(store);
         var row = CreateRow("proj-b1", "Release branch");
 
@@ -154,7 +106,7 @@ public class SessionRenameCommitTests
     [Fact]
     public void SessionRenameTextBox_WritesItsValueBackOnEveryKeystroke()
     {
-        var binding = CustomNameBindingPattern.Match(ReadSettingsViewXaml());
+        var binding = CustomNameBindingPattern.Match(SourceTree.ReadSettingsViewXaml());
 
         Assert.True(binding.Success, $"{SettingsViewXamlFileName} no longer binds a session row's CustomName.");
         Assert.True(

@@ -1,8 +1,9 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using CCInfoWindows.Messages;
 using CCInfoWindows.Models;
 using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
+using CCInfoWindows.Tests.TestSupport;
 using CommunityToolkit.Mvvm.Messaging;
 using Moq;
 
@@ -18,49 +19,24 @@ namespace CCInfoWindows.Tests.Services;
 /// another collection and drives their navigation, breaking their Times.Once assertions at random.
 /// </summary>
 [Collection("WeakReferenceMessenger")]
-public class ClaudeApiServiceTests : IDisposable
+public class ClaudeApiServiceTests : ClaudeApiServiceTestBase
 {
-    private readonly Mock<ICredentialService> _credentialMock;
-    private readonly Mock<IWebViewBridge> _bridgeMock;
-    private readonly string _cacheDir;
     private readonly string _cacheFile;
 
-    public ClaudeApiServiceTests()
+    public ClaudeApiServiceTests() : base("ccinfo_test_")
     {
-        _credentialMock = new Mock<ICredentialService>();
-        _bridgeMock = new Mock<IWebViewBridge>();
-        _bridgeMock.Setup(b => b.IsInitialized).Returns(true);
-        _cacheDir = Path.Combine(Path.GetTempPath(), $"ccinfo_test_{Guid.NewGuid():N}");
-        _cacheFile = Path.Combine(_cacheDir, "usage_cache.json");
-    }
-
-    public void Dispose()
-    {
-        // The single unregister point, and the reason no test body needs a try/finally of its own: xUnit
-        // runs Dispose after every test, failed ones included, so a registration cannot survive a failed
-        // assertion and start receiving another test's messages.
-        WeakReferenceMessenger.Default.UnregisterAll(this);
-
-        if (Directory.Exists(_cacheDir))
-        {
-            Directory.Delete(_cacheDir, recursive: true);
-        }
-    }
-
-    private ClaudeApiService CreateService()
-    {
-        return new ClaudeApiService(_bridgeMock.Object, _credentialMock.Object, _cacheDir);
+        _cacheFile = Path.Combine(CacheDirectory, "usage_cache.json");
     }
 
     [Fact]
     public async Task FetchUsageAsync_ConstructsUrlWithPercentEncodedOrgId()
     {
         var orgId = "org 123+test";
-        _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
-        _credentialMock.Setup(x => x.GetOrganizationId()).Returns(orgId);
+        CredentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
+        CredentialMock.Setup(x => x.GetOrganizationId()).Returns(orgId);
 
         string? capturedUrl = null;
-        _bridgeMock
+        BridgeMock
             .Setup(b => b.FetchJsonAsync(It.IsAny<string>()))
             .Callback<string>(url => capturedUrl = url)
             .ReturnsAsync(CreateUsageJson(0.5));
@@ -82,10 +58,10 @@ public class ClaudeApiServiceTests : IDisposable
         // The bridge signals HTTP 401 with SessionExpiredException. It used to raise
         // UnauthorizedAccessException, which the filesystem also raises for ACL failures —
         // that ambiguity let a failed cache write force a logout (review finding 5).
-        _credentialMock.Setup(x => x.GetSessionToken()).Returns("expired-token");
-        _credentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
+        CredentialMock.Setup(x => x.GetSessionToken()).Returns("expired-token");
+        CredentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
 
-        _bridgeMock
+        BridgeMock
             .Setup(b => b.FetchJsonAsync(It.IsAny<string>()))
             .ThrowsAsync(new SessionExpiredException());
 
@@ -109,9 +85,9 @@ public class ClaudeApiServiceTests : IDisposable
     [Fact]
     public async Task FetchUsageAsync_WhenCacheWriteFails_ReturnsDataAndKeepsSessionAlive()
     {
-        _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
-        _credentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
-        _bridgeMock
+        CredentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
+        CredentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
+        BridgeMock
             .Setup(b => b.FetchJsonAsync(It.IsAny<string>()))
             .ReturnsAsync(CreateUsageJson(0.5));
 
@@ -129,7 +105,7 @@ public class ClaudeApiServiceTests : IDisposable
         Assert.NotNull(result);
         Assert.Equal(0.5, result!.FiveHour!.Utilization);
         Assert.Equal(0, authMessages);
-        _bridgeMock.Verify(b => b.FetchJsonAsync(It.IsAny<string>()), Times.Once);
+        BridgeMock.Verify(b => b.FetchJsonAsync(It.IsAny<string>()), Times.Once);
     }
 
     [Fact]
@@ -167,10 +143,10 @@ public class ClaudeApiServiceTests : IDisposable
         // a null body means the bridge fetch produced nothing. That is not treated as a transient
         // fault — the caller renders stale/no data and the 30s poll loop retries on its own.
         // The retry loop is reserved for thrown exceptions (timeouts, 5xx).
-        _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
-        _credentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
+        CredentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
+        CredentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
 
-        _bridgeMock
+        BridgeMock
             .Setup(b => b.FetchJsonAsync(It.IsAny<string>()))
             .ReturnsAsync((string?)null);
 
@@ -179,7 +155,7 @@ public class ClaudeApiServiceTests : IDisposable
         var result = await service.FetchUsageAsync();
 
         Assert.Null(result);
-        _bridgeMock.Verify(b => b.FetchJsonAsync(It.IsAny<string>()), Times.Once);
+        BridgeMock.Verify(b => b.FetchJsonAsync(It.IsAny<string>()), Times.Once);
     }
 
 
@@ -214,7 +190,7 @@ public class ClaudeApiServiceTests : IDisposable
     [Fact]
     public async Task LoadCacheAsync_CorruptFile_ReturnsNull()
     {
-        Directory.CreateDirectory(_cacheDir);
+        Directory.CreateDirectory(CacheDirectory);
         await File.WriteAllTextAsync(_cacheFile, "not valid json{{{");
         var service = CreateService();
 
@@ -226,10 +202,10 @@ public class ClaudeApiServiceTests : IDisposable
     [Fact]
     public async Task GetCachedUsage_ReturnsLastFetchedData()
     {
-        _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
-        _credentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
+        CredentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
+        CredentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
 
-        _bridgeMock
+        BridgeMock
             .Setup(b => b.FetchJsonAsync(It.IsAny<string>()))
             .ReturnsAsync(CreateUsageJson(0.6));
 
@@ -246,26 +222,26 @@ public class ClaudeApiServiceTests : IDisposable
     [Fact]
     public async Task FetchUsageAsync_BridgeNotInitialized_ThrowsInvalidOperation()
     {
-        _bridgeMock.Setup(b => b.IsInitialized).Returns(false);
-        _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
-        _credentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
+        BridgeMock.Setup(b => b.IsInitialized).Returns(false);
+        CredentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
+        CredentialMock.Setup(x => x.GetOrganizationId()).Returns("org-123");
 
         var service = CreateService();
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.FetchUsageAsync());
-        _bridgeMock.Verify(b => b.FetchJsonAsync(It.IsAny<string>()), Times.Never);
+        BridgeMock.Verify(b => b.FetchJsonAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
     public async Task FetchUsageAsync_NullOrgId_AttemptsOrgMigration()
     {
-        _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
-        _credentialMock.SetupSequence(x => x.GetOrganizationId())
+        CredentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
+        CredentialMock.SetupSequence(x => x.GetOrganizationId())
             .Returns((string?)null)
             .Returns("migrated-org");
 
         var callCount = 0;
-        _bridgeMock
+        BridgeMock
             .Setup(b => b.FetchJsonAsync(It.IsAny<string>()))
             .ReturnsAsync(() =>
             {
@@ -280,16 +256,16 @@ public class ClaudeApiServiceTests : IDisposable
         var result = await service.FetchUsageAsync();
 
         Assert.NotNull(result);
-        _credentialMock.Verify(x => x.SaveOrganizationId("migrated-org"), Times.Once);
+        CredentialMock.Verify(x => x.SaveOrganizationId("migrated-org"), Times.Once);
     }
 
     [Fact]
     public async Task FetchUsageAsync_OrgMigrationFails_ThrowsInvalidOperation()
     {
-        _credentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
-        _credentialMock.Setup(x => x.GetOrganizationId()).Returns((string?)null);
+        CredentialMock.Setup(x => x.GetSessionToken()).Returns("test-token");
+        CredentialMock.Setup(x => x.GetOrganizationId()).Returns((string?)null);
 
-        _bridgeMock
+        BridgeMock
             .Setup(b => b.FetchJsonAsync(It.IsAny<string>()))
             .ReturnsAsync((string?)null);
 

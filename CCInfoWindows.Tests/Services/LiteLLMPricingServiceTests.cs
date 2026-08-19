@@ -1,10 +1,9 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using System.Text.Json;
 using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
-using Moq;
-using Moq.Protected;
+using CCInfoWindows.Tests.TestSupport;
 
 namespace CCInfoWindows.Tests.Services;
 
@@ -12,53 +11,8 @@ namespace CCInfoWindows.Tests.Services;
 /// Unit tests for LiteLLMPricingService covering live fetch, fallback, model name lookup, the
 /// download size cap, and the source reporting MainViewModel keys its pricing banner off.
 /// </summary>
-public class LiteLLMPricingServiceTests : IDisposable
+public class LiteLLMPricingServiceTests : PricingServiceTestBase
 {
-    /// <summary>Present in the bundled fallback table, so it proves the seed is in place.</summary>
-    private const string BundledModelKey = "claude-opus-4-5";
-
-    /// <summary>Absent from the bundled table, so it can only come from a live/cached response.</summary>
-    private const string LiveOnlyModelKey = "claude-testmodel-9-9";
-
-    /// <summary>Mirrors the service's private cache file name — asserted, not configured.</summary>
-    private const string CacheFileName = "litellm-pricing-cache.json";
-
-    private readonly string _cacheDir;
-
-    public LiteLLMPricingServiceTests()
-    {
-        _cacheDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-        Directory.CreateDirectory(_cacheDir);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(_cacheDir))
-            Directory.Delete(_cacheDir, recursive: true);
-    }
-
-    private static Mock<HttpMessageHandler> BuildHandler(Func<HttpResponseMessage> responseFactory)
-    {
-        var handler = new Mock<HttpMessageHandler>();
-        handler.Protected()
-            .Setup<Task<HttpResponseMessage>>(
-                "SendAsync",
-                ItExpr.IsAny<HttpRequestMessage>(),
-                ItExpr.IsAny<CancellationToken>())
-            .Returns(() => Task.FromResult(responseFactory()));
-
-        return handler;
-    }
-
-    private static HttpClient BuildHttpClient(string responseJson, HttpStatusCode statusCode = HttpStatusCode.OK)
-    {
-        return new HttpClient(BuildHandler(() => new HttpResponseMessage
-        {
-            StatusCode = statusCode,
-            Content = new StringContent(responseJson, Encoding.UTF8, "application/json")
-        }).Object);
-    }
-
     private static string BuildPricingJson(string modelKey, double inputCost = 0.000003, double outputCost = 0.000015)
     {
         return JsonSerializer.Serialize(new Dictionary<string, object>
@@ -80,7 +34,7 @@ public class LiteLLMPricingServiceTests : IDisposable
         // Task.Run and calls RefreshSessionList on the next line. Context-window resolution reads
         // GetPrice synchronously there, so an empty map on cold start would size every model to
         // the 200K default.
-        var service = new LiteLLMPricingService(BuildHttpClient(""), _cacheDir);
+        var service = new LiteLLMPricingService(BuildHttpClient(""), CacheDir);
 
         Assert.NotNull(service.GetPrice(BundledModelKey));
         Assert.Equal(PricingSource.Fallback, service.Source);
@@ -92,7 +46,7 @@ public class LiteLLMPricingServiceTests : IDisposable
     {
         var json = BuildPricingJson("claude-sonnet-4-6-20260205");
         var client = BuildHttpClient(json);
-        var service = new LiteLLMPricingService(client, _cacheDir);
+        var service = new LiteLLMPricingService(client, CacheDir);
 
         await service.EnsurePricesLoadedAsync();
 
@@ -104,7 +58,7 @@ public class LiteLLMPricingServiceTests : IDisposable
     public async Task EnsurePricesLoadedAsync_FailedFetch_SetsSourceToFallback()
     {
         var client = BuildHttpClient("", HttpStatusCode.ServiceUnavailable);
-        var service = new LiteLLMPricingService(client, _cacheDir);
+        var service = new LiteLLMPricingService(client, CacheDir);
 
         await service.EnsurePricesLoadedAsync();
 
@@ -118,7 +72,7 @@ public class LiteLLMPricingServiceTests : IDisposable
         const string ModelKey = "claude-haiku-4-5-20251001";
         var json = BuildPricingJson(ModelKey, inputCost: 0.0000008, outputCost: 0.000004);
         var client = BuildHttpClient(json);
-        var service = new LiteLLMPricingService(client, _cacheDir);
+        var service = new LiteLLMPricingService(client, CacheDir);
         await service.EnsurePricesLoadedAsync();
 
         var pricing = service.GetPrice(ModelKey);
@@ -134,7 +88,7 @@ public class LiteLLMPricingServiceTests : IDisposable
         const string ModelKeyStripped = "claude-sonnet-4-5";
         var json = BuildPricingJson(ModelKeyWithDate);
         var client = BuildHttpClient(json);
-        var service = new LiteLLMPricingService(client, _cacheDir);
+        var service = new LiteLLMPricingService(client, CacheDir);
         await service.EnsurePricesLoadedAsync();
 
         // Both the dated id and its stripped form must resolve to the same entry: the map holds the
@@ -148,7 +102,7 @@ public class LiteLLMPricingServiceTests : IDisposable
     {
         var json = BuildPricingJson("claude-sonnet-4-6-20260205");
         var client = BuildHttpClient(json);
-        var service = new LiteLLMPricingService(client, _cacheDir);
+        var service = new LiteLLMPricingService(client, CacheDir);
         await service.EnsurePricesLoadedAsync();
 
         var pricing = service.GetPrice("gpt-4o");
@@ -159,7 +113,7 @@ public class LiteLLMPricingServiceTests : IDisposable
     [Fact]
     public void GetPrice_EmptyModelName_ReturnsNullInsteadOfThrowing()
     {
-        var service = new LiteLLMPricingService(BuildHttpClient(""), _cacheDir);
+        var service = new LiteLLMPricingService(BuildHttpClient(""), CacheDir);
 
         Assert.Null(service.GetPrice(""));
     }
@@ -172,7 +126,7 @@ public class LiteLLMPricingServiceTests : IDisposable
     public async Task EnsurePricesLoadedAsync_LiveFetch_ReplacesTheSeededTableWholesale()
     {
         var client = BuildHttpClient(BuildPricingJson(LiveOnlyModelKey));
-        var service = new LiteLLMPricingService(client, _cacheDir);
+        var service = new LiteLLMPricingService(client, CacheDir);
 
         await service.EnsurePricesLoadedAsync();
 
@@ -189,24 +143,18 @@ public class LiteLLMPricingServiceTests : IDisposable
         // by one reference swap, so there is no window to land in. The gate keeps the fetch
         // provably suspended while the reader runs — no sleeps, no timing assumptions.
         var gate = new TaskCompletionSource();
-        var handler = new Mock<HttpMessageHandler>();
-        handler.Protected()
-            .Setup<Task<HttpResponseMessage>>(
-                "SendAsync",
-                ItExpr.IsAny<HttpRequestMessage>(),
-                ItExpr.IsAny<CancellationToken>())
-            .Returns(async () =>
+        var handler = BuildHandler(async () =>
+        {
+            await gate.Task;
+            return new HttpResponseMessage
             {
-                await gate.Task;
-                return new HttpResponseMessage
-                {
-                    StatusCode = HttpStatusCode.OK,
-                    Content = new StringContent(
-                        BuildPricingJson(LiveOnlyModelKey), Encoding.UTF8, "application/json")
-                };
-            });
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(
+                    BuildPricingJson(LiveOnlyModelKey), Encoding.UTF8, "application/json")
+            };
+        });
 
-        var service = new LiteLLMPricingService(new HttpClient(handler.Object), _cacheDir);
+        var service = new LiteLLMPricingService(new HttpClient(handler.Object), CacheDir);
         var load = service.EnsurePricesLoadedAsync();
 
         Assert.NotNull(service.GetPrice(BundledModelKey));
@@ -223,12 +171,12 @@ public class LiteLLMPricingServiceTests : IDisposable
     public async Task EnsurePricesLoadedAsync_CachesTheResponse_SoTheNextColdStartSeesIt()
     {
         var client = BuildHttpClient(BuildPricingJson(LiveOnlyModelKey));
-        await new LiteLLMPricingService(client, _cacheDir).EnsurePricesLoadedAsync();
+        await new LiteLLMPricingService(client, CacheDir).EnsurePricesLoadedAsync();
 
         // Fresh instance, same cache directory, no network: it must seed from the cache file the
         // first instance wrote (the cache is now written as raw UTF-8 bytes, not a re-encoded string).
         var coldStart = new LiteLLMPricingService(
-            BuildHttpClient("", HttpStatusCode.ServiceUnavailable), _cacheDir);
+            BuildHttpClient("", HttpStatusCode.ServiceUnavailable), CacheDir);
 
         Assert.NotNull(coldStart.GetPrice(LiveOnlyModelKey));
         Assert.Equal(PricingSource.Fallback, coldStart.Source);
@@ -246,7 +194,7 @@ public class LiteLLMPricingServiceTests : IDisposable
         // A well-formed response that yields nothing usable is what an upstream schema change looks
         // like. ParseAndStore used to Clear() first and never check the count, so the About tab
         // reported "Live" while every entry priced at ~$0.00.
-        var service = new LiteLLMPricingService(BuildHttpClient(json), _cacheDir);
+        var service = new LiteLLMPricingService(BuildHttpClient(json), CacheDir);
 
         await service.EnsurePricesLoadedAsync();
 
@@ -262,7 +210,7 @@ public class LiteLLMPricingServiceTests : IDisposable
         // "Fallback" here asserted "Fallback (gebündelt)" in Settings while every cost was zero.
         var service = new LiteLLMPricingService(
             BuildHttpClient("", HttpStatusCode.ServiceUnavailable),
-            _cacheDir,
+            CacheDir,
             openBundledPrices: () => null);
 
         Assert.Equal(PricingSource.Unknown, service.Source);
@@ -278,7 +226,7 @@ public class LiteLLMPricingServiceTests : IDisposable
     {
         var service = new LiteLLMPricingService(
             BuildHttpClient(""),
-            _cacheDir,
+            CacheDir,
             openBundledPrices: () => new MemoryStream("not json at all"u8.ToArray()));
 
         Assert.Equal(PricingSource.Unknown, service.Source);
@@ -295,9 +243,9 @@ public class LiteLLMPricingServiceTests : IDisposable
         {
             var content = new StringContent("{}", Encoding.UTF8, "application/json");
             content.Headers.ContentLength = 64L * 1024 * 1024;   // declared, never delivered
-            return new HttpResponseMessage { StatusCode = HttpStatusCode.OK, Content = content };
+            return Task.FromResult(new HttpResponseMessage { StatusCode = HttpStatusCode.OK, Content = content });
         });
-        var service = new LiteLLMPricingService(new HttpClient(handler.Object), _cacheDir);
+        var service = new LiteLLMPricingService(new HttpClient(handler.Object), CacheDir);
 
         await service.EnsurePricesLoadedAsync();
 
@@ -312,18 +260,18 @@ public class LiteLLMPricingServiceTests : IDisposable
         // No Content-Length (chunked, or a lying proxy), so only the streaming guard can stop it.
         // The old code awaited GetStringAsync first and checked the char count afterwards, which
         // could not prevent the allocation it existed to prevent.
-        var handler = BuildHandler(() => new HttpResponseMessage
+        var handler = BuildHandler(() => Task.FromResult(new HttpResponseMessage
         {
             StatusCode = HttpStatusCode.OK,
             Content = new StreamContent(new NeverEndingStream())
-        });
-        var service = new LiteLLMPricingService(new HttpClient(handler.Object), _cacheDir);
+        }));
+        var service = new LiteLLMPricingService(new HttpClient(handler.Object), CacheDir);
 
         await service.EnsurePricesLoadedAsync();
 
         Assert.Equal(PricingSource.Fallback, service.Source);
         Assert.Null(service.LastFetch);
-        Assert.False(File.Exists(Path.Combine(_cacheDir, CacheFileName)));
+        AssertNothingWasCached();
     }
 
     /// <summary>

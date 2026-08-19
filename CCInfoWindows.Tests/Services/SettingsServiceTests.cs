@@ -1,6 +1,7 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using CCInfoWindows.Models;
 using CCInfoWindows.Services;
+using CCInfoWindows.Tests.TestSupport;
 
 namespace CCInfoWindows.Tests.Services;
 
@@ -19,23 +20,13 @@ public class SettingsServiceTests : IDisposable
     private const string SettingsFileName = "settings.json";
     private const string TempFileName = SettingsFileName + ".tmp";
 
-    private readonly string _tempDir;
+    private readonly TempDirectory _temp = new("ccinfo-settings-");
 
-    public SettingsServiceTests()
-    {
-        _tempDir = Path.Combine(Path.GetTempPath(), "ccinfo-settings-" + Guid.NewGuid());
-        Directory.CreateDirectory(_tempDir);
-    }
+    public void Dispose() => _temp.Dispose();
 
-    public void Dispose()
-    {
-        try { Directory.Delete(_tempDir, recursive: true); }
-        catch (IOException) { /* another handle still open on a temp file; the OS reclaims it */ }
-    }
+    private string SettingsPath => Path.Combine(_temp.Path, SettingsFileName);
 
-    private string SettingsPath => Path.Combine(_tempDir, SettingsFileName);
-
-    private SettingsService CreateService() => new(_tempDir);
+    private SettingsService CreateService() => new(_temp.Path);
 
     private void WriteRawSettings(string json) => File.WriteAllText(SettingsPath, json);
 
@@ -104,7 +95,7 @@ public class SettingsServiceTests : IDisposable
         CreateService().SaveSettings(new AppSettings());
 
         Assert.True(File.Exists(SettingsPath));
-        Assert.False(File.Exists(Path.Combine(_tempDir, TempFileName)));
+        Assert.False(File.Exists(Path.Combine(_temp.Path, TempFileName)));
     }
 
     [Fact]
@@ -114,7 +105,7 @@ public class SettingsServiceTests : IDisposable
         // a .tmp left over from an interrupted write must never be mistaken for the settings.
         var service = CreateService();
         service.SaveSettings(new AppSettings { RefreshIntervalSeconds = 30 });
-        File.WriteAllText(Path.Combine(_tempDir, TempFileName), "{ half-written garbage");
+        File.WriteAllText(Path.Combine(_temp.Path, TempFileName), "{ half-written garbage");
 
         var loaded = service.LoadSettings();
 

@@ -33,7 +33,6 @@ public class AppHostConventionTests
     private const string SettingsViewModelFile = "SettingsViewModel.cs";
 
     /// <summary>Not a .cs file, so it is read by relative path rather than through the by-name index.</summary>
-    private const string SettingsViewXamlPath = @"Views\SettingsView.xaml";
     private const string MainViewXamlPath = @"Views\MainView.xaml";
 
     private static readonly string[] AppHostFiles = [AppFile, MainWindowFile, MainViewFile];
@@ -256,7 +255,7 @@ public class AppHostConventionTests
         Assert.DoesNotContain("IWebViewBridge", mainViewModel);
         Assert.DoesNotContain("private void Logout()", mainViewModel);
 
-        Assert.Contains("ViewModel.LogoutCommand", ReadSettingsViewXaml());
+        Assert.Contains("ViewModel.LogoutCommand", SourceTree.ReadSettingsViewXaml());
     }
 
     /// <summary>
@@ -416,27 +415,5 @@ public class AppHostConventionTests
     }
 
     /// <summary>MainView.xaml, read the same way and for the same reason as its SettingsView twin.</summary>
-    private static string ReadMainViewXaml()
-    {
-        var path = Path.Combine(ProductionSourceFiles.Root, MainViewXamlPath);
-
-        Assert.True(File.Exists(path), $"{MainViewXamlPath} not found under {ProductionSourceFiles.Root}.");
-
-        return File.ReadAllText(path);
-    }
-
-
-    /// <summary>
-    /// The one assertion target that is not C#. ProductionSourceFiles indexes *.cs by file name, so the
-    /// XAML is read from the source root it already resolves — which is why the fourth private copy of
-    /// that directory walk could be deleted from this class.
-    /// </summary>
-    private static string ReadSettingsViewXaml()
-    {
-        var path = Path.Combine(ProductionSourceFiles.Root, SettingsViewXamlPath);
-
-        Assert.True(File.Exists(path), $"{SettingsViewXamlPath} not found under {ProductionSourceFiles.Root}.");
-
-        return File.ReadAllText(path);
-    }
+    private static string ReadMainViewXaml() => SourceTree.ReadRelative(MainViewXamlPath);
 }

@@ -1,5 +1,6 @@
-using CCInfoWindows.Models;
+﻿using CCInfoWindows.Models;
 using CCInfoWindows.Services;
+using CCInfoWindows.Tests.TestSupport;
 using System.Text.Json;
 using Xunit;
 
@@ -16,45 +17,21 @@ public class SessionNameStoreTests : IDisposable
     /// </summary>
     private const int NamesLargeEnoughToYield = 20_000;
 
-    private static readonly TimeSpan PendingWriteTimeout = TimeSpan.FromSeconds(10);
+    private readonly TempDirectory _temp = new("ccinfo-rename-");
 
-    private readonly string _tempDir;
-
-    public SessionNameStoreTests()
-    {
-        _tempDir = Path.Combine(Path.GetTempPath(), "ccinfo-rename-" + Guid.NewGuid());
-        Directory.CreateDirectory(_tempDir);
-    }
-
-    public void Dispose()
-    {
-        try { Directory.Delete(_tempDir, recursive: true); }
-        catch (IOException) { /* another handle still open on a temp file; the OS reclaims it */ }
-    }
-
-    /// <summary>Records dispatcher Posts without ever running them — see the history-service twin.</summary>
-    private sealed class RecordingPumpContext : SynchronizationContext
-    {
-        private int _postCount;
-
-        public int PostCount => Volatile.Read(ref _postCount);
-
-        public override void Post(SendOrPostCallback d, object? state) => Interlocked.Increment(ref _postCount);
-
-        public override void Send(SendOrPostCallback d, object? state) => d(state);
-    }
+    public void Dispose() => _temp.Dispose();
 
     [Fact]
     public void LoadFromDisk_FileMissing_ReturnsEmptyState()
     {
-        var store = new SessionNameStore(_tempDir);
+        var store = new SessionNameStore(_temp.Path);
         Assert.Null(store.GetCustomName("any-id"));
     }
 
     [Fact]
     public void SetCustomName_UpdatesInMemoryMap()
     {
-        var store = new SessionNameStore(_tempDir);
+        var store = new SessionNameStore(_temp.Path);
         store.SetCustomName("id1", "Alpha");
         Assert.Equal("Alpha", store.GetCustomName("id1"));
     }
@@ -62,7 +39,7 @@ public class SessionNameStoreTests : IDisposable
     [Fact]
     public void SetCustomName_StripsControlChars()
     {
-        var store = new SessionNameStore(_tempDir);
+        var store = new SessionNameStore(_temp.Path);
         store.SetCustomName("id1", "Bad\x01\x1FX");
         Assert.Equal("BadX", store.GetCustomName("id1"));
     }
@@ -70,7 +47,7 @@ public class SessionNameStoreTests : IDisposable
     [Fact]
     public void SetCustomName_EmptyClears()
     {
-        var store = new SessionNameStore(_tempDir);
+        var store = new SessionNameStore(_temp.Path);
         store.SetCustomName("id1", "Alpha");
         store.SetCustomName("id1", "");
         Assert.Null(store.GetCustomName("id1"));
@@ -79,7 +56,7 @@ public class SessionNameStoreTests : IDisposable
     [Fact]
     public void SetCustomName_RaisesNameChanged()
     {
-        var store = new SessionNameStore(_tempDir);
+        var store = new SessionNameStore(_temp.Path);
         SessionNameChangedEventArgs? received = null;
         store.NameChanged += (_, args) => received = args;
 
@@ -92,7 +69,7 @@ public class SessionNameStoreTests : IDisposable
     [Fact]
     public void ClearCustomName_RemovesEntryAndRaisesEvent()
     {
-        var store = new SessionNameStore(_tempDir);
+        var store = new SessionNameStore(_temp.Path);
         store.SetCustomName("id1", "Alpha");
 
         SessionNameChangedEventArgs? received = null;
@@ -108,13 +85,13 @@ public class SessionNameStoreTests : IDisposable
     [Fact]
     public async Task SaveAsync_PersistsToTempThenMoves()
     {
-        var store = new SessionNameStore(_tempDir);
+        var store = new SessionNameStore(_temp.Path);
         store.SetCustomName("id1", "Alpha");
 
         await store.SaveAsync();
 
-        var tmpPath = Path.Combine(_tempDir, "session-names.json.tmp");
-        var finalPath = Path.Combine(_tempDir, "session-names.json");
+        var tmpPath = Path.Combine(_temp.Path, "session-names.json.tmp");
+        var finalPath = Path.Combine(_temp.Path, "session-names.json");
 
         Assert.False(File.Exists(tmpPath));
         Assert.True(File.Exists(finalPath));
@@ -123,12 +100,12 @@ public class SessionNameStoreTests : IDisposable
     [Fact]
     public async Task SaveAsync_RoundTrip_ReadsBackSameData()
     {
-        var storeA = new SessionNameStore(_tempDir);
+        var storeA = new SessionNameStore(_temp.Path);
         storeA.SetCustomName("a", "Alpha");
         storeA.SetCustomName("b", "Beta");
         await storeA.SaveAsync();
 
-        var storeB = new SessionNameStore(_tempDir);
+        var storeB = new SessionNameStore(_temp.Path);
         Assert.Equal("Alpha", storeB.GetCustomName("a"));
         Assert.Equal("Beta", storeB.GetCustomName("b"));
     }
@@ -136,8 +113,8 @@ public class SessionNameStoreTests : IDisposable
     [Fact]
     public async Task Save_And_SaveAsync_ProduceByteIdenticalJson()
     {
-        var dirA = Path.Combine(_tempDir, "a");
-        var dirB = Path.Combine(_tempDir, "b");
+        var dirA = Path.Combine(_temp.Path, "a");
+        var dirB = Path.Combine(_temp.Path, "b");
         Directory.CreateDirectory(dirA);
         Directory.CreateDirectory(dirB);
 
@@ -160,7 +137,7 @@ public class SessionNameStoreTests : IDisposable
     [Fact]
     public async Task SaveAsync_ConcurrentCallers_NoCorruption()
     {
-        var store = new SessionNameStore(_tempDir);
+        var store = new SessionNameStore(_temp.Path);
 
         var tasks = Enumerable.Range(0, 10).Select(i => Task.Run(async () =>
         {
@@ -170,7 +147,7 @@ public class SessionNameStoreTests : IDisposable
 
         await Task.WhenAll(tasks);
 
-        var finalPath = Path.Combine(_tempDir, "session-names.json");
+        var finalPath = Path.Combine(_temp.Path, "session-names.json");
         Assert.True(File.Exists(finalPath));
 
         var json = File.ReadAllText(finalPath);
@@ -181,11 +158,11 @@ public class SessionNameStoreTests : IDisposable
     [Fact]
     public async Task OrphanEntriesArePreserved()
     {
-        var storeA = new SessionNameStore(_tempDir);
+        var storeA = new SessionNameStore(_temp.Path);
         storeA.SetCustomName("deleted-session", "Custom");
         await storeA.SaveAsync();
 
-        var storeB = new SessionNameStore(_tempDir);
+        var storeB = new SessionNameStore(_temp.Path);
         Assert.Equal("Custom", storeB.GetCustomName("deleted-session"));
     }
 
@@ -193,7 +170,7 @@ public class SessionNameStoreTests : IDisposable
     public async Task SyncSave_ReleasesLockOnException()
     {
         // Point at a read-only scenario: use a file-as-directory trick to force an IOException.
-        var blockerPath = Path.Combine(_tempDir, "blocker");
+        var blockerPath = Path.Combine(_temp.Path, "blocker");
         File.WriteAllText(blockerPath, "I am a file, not a directory");
 
         var store = new SessionNameStore(blockerPath);
@@ -211,7 +188,7 @@ public class SessionNameStoreTests : IDisposable
     [Fact]
     public async Task LastSavedSnapshot_NullBeforeFirstWrite_MatchesAfterSave()
     {
-        var store = new SessionNameStore(_tempDir);
+        var store = new SessionNameStore(_temp.Path);
 
         // Before any write, snapshot is null
         Assert.Null(store.PeekLastSnapshot());
@@ -229,11 +206,11 @@ public class SessionNameStoreTests : IDisposable
     public async Task LastSavedSnapshot_OnAStoreBuiltOverAnExistingFile_IsTheFileContent()
     {
         // The rollback target has to be what is actually on disk, not "empty until we write once".
-        var writer = new SessionNameStore(_tempDir);
+        var writer = new SessionNameStore(_temp.Path);
         writer.SetCustomName("id1", "Alpha");
         await writer.SaveAsync();
 
-        var snapshot = new SessionNameStore(_tempDir).PeekLastSnapshot();
+        var snapshot = new SessionNameStore(_temp.Path).PeekLastSnapshot();
 
         Assert.NotNull(snapshot);
         Assert.Equal("Alpha", snapshot!["id1"]);
@@ -244,7 +221,7 @@ public class SessionNameStoreTests : IDisposable
     [Fact]
     public async Task SaveAsync_WhenThePublishFails_RevertsToThePersistedNameAndRaisesNameChanged()
     {
-        var store = new SessionNameStore(_tempDir);
+        var store = new SessionNameStore(_temp.Path);
         store.SetCustomName("id1", "Alpha");
         Assert.True(await store.SaveAsync());
 
@@ -253,7 +230,7 @@ public class SessionNameStoreTests : IDisposable
         store.SetCustomName("id1", "Renamed");
 
         bool saved;
-        using (File.Open(Path.Combine(_tempDir, StoreFileName), FileMode.Open, FileAccess.Read, FileShare.None))
+        using (File.Open(Path.Combine(_temp.Path, StoreFileName), FileMode.Open, FileAccess.Read, FileShare.None))
         {
             saved = await store.SaveAsync();
         }
@@ -261,13 +238,13 @@ public class SessionNameStoreTests : IDisposable
         Assert.False(saved);
         Assert.Equal("Alpha", store.GetCustomName("id1"));
         Assert.Equal(new[] { "id1", "id1" }, raised);   // once for the edit, once for the rollback
-        Assert.False(File.Exists(Path.Combine(_tempDir, TempFileName)));
+        Assert.False(File.Exists(Path.Combine(_temp.Path, TempFileName)));
     }
 
     [Fact]
     public async Task SaveAsync_WhenThePublishFails_AndNothingWasEverPersisted_DropsTheName()
     {
-        var blockerPath = Path.Combine(_tempDir, "blocker");
+        var blockerPath = Path.Combine(_temp.Path, "blocker");
         File.WriteAllText(blockerPath, "I am a file, not a directory");
         var store = new SessionNameStore(blockerPath);
         store.SetCustomName("id1", "Alpha");
@@ -279,14 +256,14 @@ public class SessionNameStoreTests : IDisposable
     [Fact]
     public async Task SaveAsync_WhenThePublishFails_RestoresANameWhoseRemovalNeverReachedDisk()
     {
-        var store = new SessionNameStore(_tempDir);
+        var store = new SessionNameStore(_temp.Path);
         store.SetCustomName("id1", "Alpha");
         Assert.True(await store.SaveAsync());
 
         store.ClearCustomName("id1");
 
         bool saved;
-        using (File.Open(Path.Combine(_tempDir, StoreFileName), FileMode.Open, FileAccess.Read, FileShare.None))
+        using (File.Open(Path.Combine(_temp.Path, StoreFileName), FileMode.Open, FileAccess.Read, FileShare.None))
         {
             saved = await store.SaveAsync();
         }
@@ -300,7 +277,7 @@ public class SessionNameStoreTests : IDisposable
     [Fact]
     public void GetKnownSessionIds_ReturnsEveryKeyIncludingOrphans()
     {
-        var store = new SessionNameStore(_tempDir);
+        var store = new SessionNameStore(_temp.Path);
         store.SetCustomName("live", "Alpha");
         store.SetCustomName("deleted-session", "Beta");
         store.SetCustomName("cleared", "Gamma");
@@ -314,34 +291,20 @@ public class SessionNameStoreTests : IDisposable
     [Fact]
     public void SaveAsync_WhileTheCallingThreadBlocksInSave_CompletesWithoutTheDispatcher()
     {
-        var store = new SessionNameStore(_tempDir);
+        var store = new SessionNameStore(_temp.Path);
         for (var i = 0; i < NamesLargeEnoughToYield; i++)
         {
             store.SetCustomName($"id{i}", $"Name{i}");
         }
 
-        var pump = new RecordingPumpContext();
-        var previous = SynchronizationContext.Current;
-        SynchronizationContext.SetSynchronizationContext(pump);
-        try
-        {
-            var pending = store.SaveAsync();
+        var saved = false;
 
-            // Without ConfigureAwait(false) the release continuation is queued to this pump, which
-            // the blocked thread below can never drain.
-            Assert.True(store.Save());
+        // The scaffold — undrainable pump, bounded join, PostCount assertion — lives in TestPump, so
+        // this store and the history service cannot drift apart on the rule they both assert.
+        TestPump.AssertAsyncWriteSurvivesABlockingWrite(
+            () => store.SaveAsync(),
+            () => saved = store.Save());
 
-            // xUnit1031 (no blocking task operations) cannot be honoured here -- see the history-service twin:
-            // the pump installed above is never drained, so an await either hangs this test or resumes the
-            // context restore on a pooled thread and leaks the pump onto an xUnit worker.
-#pragma warning disable xUnit1031
-            Assert.True(pending.Wait(PendingWriteTimeout), "the async write never completed");
-#pragma warning restore xUnit1031
-            Assert.Equal(0, pump.PostCount);
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(previous);
-        }
+        Assert.True(saved);
     }
 }

@@ -1,4 +1,4 @@
-using CCInfoWindows.Tests.Helpers;
+﻿using CCInfoWindows.Tests.Helpers;
 
 namespace CCInfoWindows.Tests.Convention;
 
@@ -21,13 +21,7 @@ public class DiagnosticChannelConventionTests
     [Fact]
     public void NoProductionFileOutsideAppLog_ReportsThroughTheErasedDebugChannel()
     {
-        var offenders = ProductionSourceFiles.All()
-            .Where(file => !string.Equals(file.Name, AppLogFileName, StringComparison.OrdinalIgnoreCase))
-            .Where(file => file.Text.Contains(ErasedChannel, StringComparison.Ordinal))
-            .Select(file => file.Name)
-            .Distinct()
-            .Order()
-            .ToList();
+        var offenders = ProductionSourceFiles.FilesContaining(ErasedChannel, AppLogFileName).ToList();
 
         Assert.True(
             offenders.Count == 0,

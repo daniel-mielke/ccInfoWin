@@ -1,7 +1,5 @@
 using CCInfoWindows.Messages;
-using CCInfoWindows.Models;
 using CCInfoWindows.Services.Interfaces;
-using CCInfoWindows.Tests.Helpers;
 using CCInfoWindows.ViewModels;
 using CCInfoWindows.Views;
 using Moq;
@@ -19,36 +17,9 @@ public class MainViewModelAuthFlowTests
 {
     private static (MainViewModel vm, Mock<INavigationService> nav) CreateViewModel()
     {
-        var credentialService = new Mock<ICredentialService>();
         var navigationService = new Mock<INavigationService>();
-        var apiService = new Mock<IClaudeApiService>();
-        var settingsService = new Mock<ISettingsService>();
-        settingsService.Setup(s => s.LoadSettings()).Returns(new AppSettings());
-        var historyService = new Mock<IUsageHistoryService>();
-        var jsonlService = new Mock<IJsonlService>();
-        jsonlService.Setup(s => s.Sessions).Returns([]);
-        var pricingService = new Mock<IPricingService>();
-        pricingService.Setup(s => s.EnsurePricesLoadedAsync()).Returns(Task.CompletedTask);
-        var updateService = new Mock<IUpdateService>();
-        var burnRate = new Mock<IUsageNotificationService>();
-        var sessionNameStore = new Mock<ISessionNameStore>();
-        sessionNameStore.Setup(s => s.GetCustomName(It.IsAny<string>())).Returns((string?)null);
 
-        var vm = new MainViewModel(
-            credentialService.Object,
-            navigationService.Object,
-            apiService.Object,
-            settingsService.Object,
-            historyService.Object,
-            jsonlService.Object,
-            pricingService.Object,
-            updateService.Object,
-            burnRate.Object,
-            new FakeDispatcherQueue(),
-            sessionNameStore.Object,
-            _ => null!);   // headless brushFactory seam — SolidColorBrush requires WinRT COM
-
-        return (vm, navigationService);
+        return (MainViewModelFactory.Create(navigationService: navigationService), navigationService);
     }
 
     [Fact]

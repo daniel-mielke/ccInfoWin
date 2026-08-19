@@ -1,4 +1,5 @@
 ﻿using CCInfoWindows.Services;
+using CCInfoWindows.Tests.TestSupport;
 
 namespace CCInfoWindows.Tests.Services;
 
@@ -7,34 +8,26 @@ namespace CCInfoWindows.Tests.Services;
 /// file-level .jsonl changes in subdirectories (SESW-01 regression lock).
 /// </summary>
 [Trait("Category", "Integration")]
-public class JsonlServiceWatcherTests : IAsyncDisposable
+public class JsonlServiceWatcherTests : JsonlServiceTestBase, IAsyncDisposable
 {
     private const int PositiveTimeoutSeconds = 5;
     private const int NegativeTimeoutSeconds = 4;
-    private const string CacheDirectoryName = "cache";
 
-    private readonly string _tempDir;
-    private readonly string _cacheDir;
     private JsonlService? _service;
 
-    public JsonlServiceWatcherTests()
+    public JsonlServiceWatcherTests() : base("jsonl-watcher-")
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-        Directory.CreateDirectory(_tempDir);
-        _cacheDir = Path.Combine(_tempDir, CacheDirectoryName);
-        Directory.CreateDirectory(_cacheDir);
     }
 
     public async ValueTask DisposeAsync()
     {
-        _service?.Stop();
+        ReleaseServices();
         _service = null;
 
         // Brief delay to allow watcher handles to release before deleting the directory
         await Task.Delay(200);
 
-        if (Directory.Exists(_tempDir))
-            Directory.Delete(_tempDir, recursive: true);
+        Dispose();
     }
 
     [Fact]
@@ -46,7 +39,7 @@ public class JsonlServiceWatcherTests : IAsyncDisposable
         var dataUpdatedFired = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _service.DataUpdated += (_, _) => dataUpdatedFired.TrySetResult(true);
 
-        var projectSubDir = Path.Combine(_tempDir, "test-project");
+        var projectSubDir = Path.Combine(ProjectsDir, "test-project");
         Directory.CreateDirectory(projectSubDir);
         await File.WriteAllTextAsync(Path.Combine(projectSubDir, "session.jsonl"), "{}\n");
 
@@ -63,7 +56,7 @@ public class JsonlServiceWatcherTests : IAsyncDisposable
         _service = BuildService();
         await _service.InitializeAsync();
 
-        var projectSubDir = Path.Combine(_tempDir, "test-project-modify");
+        var projectSubDir = Path.Combine(ProjectsDir, "test-project-modify");
         Directory.CreateDirectory(projectSubDir);
         var filePath = Path.Combine(projectSubDir, "session.jsonl");
         await File.WriteAllTextAsync(filePath, "{}\n");
@@ -99,7 +92,7 @@ public class JsonlServiceWatcherTests : IAsyncDisposable
         var dataUpdatedFired = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _service.DataUpdated += (_, _) => dataUpdatedFired.TrySetResult(true);
 
-        await File.WriteAllTextAsync(Path.Combine(_tempDir, "irrelevant.txt"), "not jsonl\n");
+        await File.WriteAllTextAsync(Path.Combine(ProjectsDir, "irrelevant.txt"), "not jsonl\n");
 
         var delayTask = Task.Delay(TimeSpan.FromSeconds(NegativeTimeoutSeconds));
         var completedFirst = await Task.WhenAny(dataUpdatedFired.Task, delayTask);
@@ -116,7 +109,7 @@ public class JsonlServiceWatcherTests : IAsyncDisposable
     [Fact]
     public async Task WatcherDetectsDeletedJsonlFile()
     {
-        var projectSubDir = Path.Combine(_tempDir, "test-project-delete");
+        var projectSubDir = Path.Combine(ProjectsDir, "test-project-delete");
         Directory.CreateDirectory(projectSubDir);
         var filePath = Path.Combine(projectSubDir, "session.jsonl");
         await File.WriteAllTextAsync(filePath, "{}\n");
@@ -136,6 +129,4 @@ public class JsonlServiceWatcherTests : IAsyncDisposable
         Assert.True(eventFired, "DataUpdated should fire when a watched .jsonl file is deleted.");
     }
 
-    private JsonlService BuildService()
-        => new(projectsDirectoryOverride: _tempDir, cacheDirectoryOverride: _cacheDir);
 }

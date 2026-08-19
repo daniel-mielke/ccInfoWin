@@ -1,18 +1,29 @@
+using CCInfoWindows.ViewModels;
+
 namespace CCInfoWindows.Tests.ViewModels;
 
 /// <summary>
-/// PRICING-03 / D-PR-05: banner-stack policy verification — (IsPricingError x IsSessionExpired)
-/// matrix. The ViewModel formula is `IsPricingError &amp;&amp; !IsSessionExpired`. This test asserts the
-/// 4-cell truth table at unit-test level without requiring a full MainViewModel construction.
+/// PRICING-03 / D-PR-05: banner-stack policy verification — the
+/// (IsPricingError x IsSessionExpired) matrix on <see cref="MainViewModel.IsPricingErrorVisible"/>.
+///
+/// The 4-cell truth table used to be asserted against a private copy of the formula in this class,
+/// which left the production property with zero coverage: dropping <c>&amp;&amp; !IsSessionExpired</c>
+/// kept the whole suite green while the pricing InfoBar rendered on top of the session-expired one.
+/// It now drives the real ViewModel, built headlessly like every other MainViewModel suite.
 ///
 /// Rationale: ResourceCoverageTests covers resw-key correctness; this class covers the
 /// banner-priority logic that suppresses pricing while auth is showing.
 /// </summary>
 public class BannerStackPolicyTests
 {
-    /// <summary>Mirrors MainViewModel.IsPricingErrorVisible exactly.</summary>
-    private static bool ComputeIsPricingErrorVisible(bool isPricingError, bool isSessionExpired)
-        => isPricingError && !isSessionExpired;
+    private static bool IsPricingErrorVisible(bool isPricingError, bool isSessionExpired)
+    {
+        var sut = MainViewModelFactory.Create();
+        sut.IsPricingError = isPricingError;
+        sut.IsSessionExpired = isSessionExpired;
+
+        return sut.IsPricingErrorVisible;
+    }
 
     [Theory]
     [InlineData(false, false, false)]   // Neither — pricing banner hidden
@@ -23,7 +34,7 @@ public class BannerStackPolicyTests
         bool isPricingError, bool isSessionExpired, bool expected)
     {
         // ARRANGE / ACT
-        var actual = ComputeIsPricingErrorVisible(isPricingError, isSessionExpired);
+        var actual = IsPricingErrorVisible(isPricingError, isSessionExpired);
 
         // ASSERT
         Assert.Equal(expected, actual);
@@ -34,7 +45,7 @@ public class BannerStackPolicyTests
     {
         // The two-banner cap policy: when auth banner is showing, pricing must be suppressed
         // regardless of pricing-error state.
-        Assert.False(ComputeIsPricingErrorVisible(isPricingError: true,  isSessionExpired: true));
-        Assert.False(ComputeIsPricingErrorVisible(isPricingError: false, isSessionExpired: true));
+        Assert.False(IsPricingErrorVisible(isPricingError: true,  isSessionExpired: true));
+        Assert.False(IsPricingErrorVisible(isPricingError: false, isSessionExpired: true));
     }
 }

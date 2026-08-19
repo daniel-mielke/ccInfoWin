@@ -1,7 +1,6 @@
-using System.Text.Json;
-using CCInfoWindows.Helpers;
 using CCInfoWindows.Services;
 using CCInfoWindows.Tests.Helpers;
+using CCInfoWindows.Tests.TestSupport;
 
 namespace CCInfoWindows.Tests.Services;
 
@@ -10,32 +9,13 @@ namespace CCInfoWindows.Tests.Services;
 /// Covers Cwd fallback via DecodeProjectDirectory, softened empty-Cwd filter, deleted-dir filter,
 /// and the stream.Position race fix.
 /// </summary>
-public class JsonlServiceColdStartTests : IDisposable
+public class JsonlServiceColdStartTests : JsonlServiceTestBase
 {
-    private const string CacheDirectoryName = "cache";
+    /// <summary>The model these fixtures name, kept distinct from the shared fixture default.</summary>
+    private const string FixtureModel = "claude-sonnet-4-20250514";
 
-    private readonly string _tempDir;
-    private readonly string _cacheDir;
-    private readonly List<JsonlService> _services = [];
-
-    public JsonlServiceColdStartTests()
+    public JsonlServiceColdStartTests() : base("cs-tests-")
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), "cs-tests-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(_tempDir);
-        _cacheDir = Path.Combine(_tempDir, CacheDirectoryName);
-        Directory.CreateDirectory(_cacheDir);
-    }
-
-    public void Dispose()
-    {
-        // The in-test Stop() calls do not run when an assertion fails, and a live FileSystemWatcher
-        // on _tempDir would then race the delete below and mask the real failure.
-        foreach (var service in _services)
-            service.Dispose();
-        _services.Clear();
-
-        if (Directory.Exists(_tempDir))
-            Directory.Delete(_tempDir, recursive: true);
     }
 
     // -------------------------------------------------------------------------
@@ -52,12 +32,12 @@ public class JsonlServiceColdStartTests : IDisposable
     public async Task ApplyFileSlice_NoEntryHasCwd_FallsBackToDecodedProjectDirName()
     {
         const string ProjectDirName = "D--myProjects-ccInfoWin";
-        var projectDir = CreateProjectSubdir(_tempDir, ProjectDirName);
+        var projectDir = CreateProjectSubdir(ProjectsDir, ProjectDirName);
         var sessionFile = Path.Combine(projectDir, "abc-session.jsonl");
         WriteAssistantJsonlLine(sessionFile, "sess-1", cwd: null, outputTokens: 100);
         WriteAssistantJsonlLine(sessionFile, "sess-1", cwd: null, outputTokens: 200);
 
-        var svc = BuildService(_tempDir);
+        var svc = BuildService();
         await svc.InitializeAsync();
 
         var session = svc.Sessions.SingleOrDefault(s => s.Id == ProjectDirName);
@@ -81,11 +61,11 @@ public class JsonlServiceColdStartTests : IDisposable
     public async Task BuildSessionList_EmptyCwd_KeepsSessionWhenDisplayNameDerivable()
     {
         const string ProjectDirName = "D--myProjects-ccInfoWin";
-        var projectDir = CreateProjectSubdir(_tempDir, ProjectDirName);
+        var projectDir = CreateProjectSubdir(ProjectsDir, ProjectDirName);
         var sessionFile = Path.Combine(projectDir, "xyz.jsonl");
         WriteAssistantJsonlLine(sessionFile, "sess-2", cwd: null, outputTokens: 50);
 
-        var svc = BuildService(_tempDir);
+        var svc = BuildService();
         await svc.InitializeAsync();
 
         Assert.Contains(svc.Sessions, s => s.Id == ProjectDirName);
@@ -103,13 +83,13 @@ public class JsonlServiceColdStartTests : IDisposable
     public async Task BuildSessionList_NonEmptyCwdPointingAtDeletedDir_DropsSession()
     {
         const string ProjectDirName = "X--ghostpath";
-        var projectDir = CreateProjectSubdir(_tempDir, ProjectDirName);
+        var projectDir = CreateProjectSubdir(ProjectsDir, ProjectDirName);
         var sessionFile = Path.Combine(projectDir, "ghost.jsonl");
         var deadCwd = Path.Combine(Path.GetTempPath(), $"phase25-deleted-{Guid.NewGuid():N}");
         Assert.False(Directory.Exists(deadCwd));
         WriteAssistantJsonlLine(sessionFile, "sess-3", cwd: deadCwd, outputTokens: 10);
 
-        var svc = BuildService(_tempDir);
+        var svc = BuildService();
         await svc.InitializeAsync();
 
         Assert.DoesNotContain(svc.Sessions, s => s.Id == ProjectDirName);
@@ -135,13 +115,13 @@ public class JsonlServiceColdStartTests : IDisposable
         const int LinesBeforeFirstPass = 3;
         const int LinesAppendedBetweenPasses = 2;
 
-        var projectDir = CreateProjectSubdir(_tempDir, ProjectDirName);
+        var projectDir = CreateProjectSubdir(ProjectsDir, ProjectDirName);
         var sessionFile = Path.Combine(projectDir, "race.jsonl");
 
         for (var i = 0; i < LinesBeforeFirstPass; i++)
             WriteAssistantJsonlLine(sessionFile, "sess-r", cwd: null, outputTokens: 1);
 
-        var svc = BuildService(_tempDir);
+        var svc = BuildService();
 
         // First full read (arms the file-position marker)
         await svc.InitializeAsync();
@@ -178,7 +158,7 @@ public class JsonlServiceColdStartTests : IDisposable
         const int LinesBeforeTheRead = 3;
         const int LinesAppendedAtEndOfFile = 2;
 
-        var sessionFile = Path.Combine(_tempDir, "midread.jsonl");
+        var sessionFile = Path.Combine(ProjectsDir, "midread.jsonl");
         for (var i = 0; i < LinesBeforeTheRead; i++)
             WriteAssistantJsonlLine(sessionFile, "sess-m", cwd: null, outputTokens: 1);
 
@@ -225,11 +205,11 @@ public class JsonlServiceColdStartTests : IDisposable
         const long PartialOutputTokens = 1L;
         const long FinalOutputTokens = 300L;
 
-        var projectDir = CreateProjectSubdir(_tempDir, ProjectDirName);
+        var projectDir = CreateProjectSubdir(ProjectsDir, ProjectDirName);
         var sessionFile = Path.Combine(projectDir, "streamed.jsonl");
         WriteAssistantJsonlLine(sessionFile, "sess-s", cwd: null, PartialOutputTokens, SharedMessageId);
 
-        var svc = BuildService(_tempDir);
+        var svc = BuildService();
         await svc.InitializeAsync();
 
         Assert.Equal(PartialOutputTokens, svc.GetTokenSummary(ProjectDirName).OutputTokens);
@@ -253,11 +233,11 @@ public class JsonlServiceColdStartTests : IDisposable
         const long FirstOutputTokens = 40L;
         const long SecondOutputTokens = 60L;
 
-        var projectDir = CreateProjectSubdir(_tempDir, ProjectDirName);
+        var projectDir = CreateProjectSubdir(ProjectsDir, ProjectDirName);
         var sessionFile = Path.Combine(projectDir, "appended.jsonl");
         WriteAssistantJsonlLine(sessionFile, "sess-a", cwd: null, FirstOutputTokens, "msg_first");
 
-        var svc = BuildService(_tempDir);
+        var svc = BuildService();
         await svc.InitializeAsync();
 
         WriteAssistantJsonlLine(sessionFile, "sess-a", cwd: null, SecondOutputTokens, "msg_second");
@@ -289,10 +269,10 @@ public class JsonlServiceColdStartTests : IDisposable
     public async Task InitializeAsync_RaisesWhileScanningFirstAndWithPublishedSessionsLast()
     {
         const string ProjectDirName = "P--publishorder";
-        var projectDir = CreateProjectSubdir(_tempDir, ProjectDirName);
+        var projectDir = CreateProjectSubdir(ProjectsDir, ProjectDirName);
         WriteAssistantJsonlLine(Path.Combine(projectDir, "order.jsonl"), "sess-o", cwd: null, outputTokens: 5);
 
-        var svc = BuildService(_tempDir);
+        var svc = BuildService();
         var observed = new List<(bool IsScanning, int SessionCount)>();
         svc.DataUpdated += (_, _) => observed.Add((svc.IsScanning, svc.Sessions.Count));
 
@@ -319,12 +299,12 @@ public class JsonlServiceColdStartTests : IDisposable
         const long FirstOutputTokens = 70L;
         const long SecondOutputTokens = 30L;
 
-        var projectDir = CreateProjectSubdir(_tempDir, ProjectDirName);
+        var projectDir = CreateProjectSubdir(ProjectsDir, ProjectDirName);
         var sessionFile = Path.Combine(projectDir, "twice.jsonl");
         WriteAssistantJsonlLine(sessionFile, "sess-i", cwd: null, FirstOutputTokens);
         WriteAssistantJsonlLine(sessionFile, "sess-i", cwd: null, SecondOutputTokens);
 
-        var svc = BuildService(_tempDir);
+        var svc = BuildService();
         await svc.InitializeAsync();
 
         Assert.Single(svc.Sessions);
@@ -349,16 +329,16 @@ public class JsonlServiceColdStartTests : IDisposable
     [Fact]
     public async Task InitializeAsync_AfterAStop_ScansAgain()
     {
-        var firstDir = CreateProjectSubdir(_tempDir, "P--restart");
+        var firstDir = CreateProjectSubdir(ProjectsDir, "P--restart");
         WriteAssistantJsonlLine(Path.Combine(firstDir, "first.jsonl"), "sess-r2", cwd: null, outputTokens: 12);
 
-        var svc = BuildService(_tempDir);
+        var svc = BuildService();
         await svc.InitializeAsync();
         Assert.Single(svc.Sessions);
 
         svc.Stop();
 
-        var laterDir = CreateProjectSubdir(_tempDir, "P--restart-second");
+        var laterDir = CreateProjectSubdir(ProjectsDir, "P--restart-second");
         WriteAssistantJsonlLine(Path.Combine(laterDir, "later.jsonl"), "sess-r3", cwd: null, outputTokens: 8);
 
         await svc.InitializeAsync();
@@ -386,13 +366,9 @@ public class JsonlServiceColdStartTests : IDisposable
     }
 
     /// <summary>
-    /// Appends one JSONL assistant entry line to filePath.
-    /// When cwd is null the key is omitted entirely, reproducing entries from
-    /// projects where Claude Code never writes the cwd field.
-    /// The line shape mirrors real Claude Code output: a per-line uuid plus a message.id that
-    /// identifies the assistant message. Passing messageId makes several lines belong to one
-    /// message, which is how a streamed response is written. There is no uniqueHash key —
-    /// Claude Code never writes one.
+    /// Appends one JSONL assistant entry line to filePath. A null cwd omits the key entirely,
+    /// reproducing entries from projects where Claude Code never writes the cwd field — see
+    /// <see cref="JsonlFixture.AssistantLine"/> for the shape.
     /// </summary>
     private static void WriteAssistantJsonlLine(
         string filePath,
@@ -401,64 +377,21 @@ public class JsonlServiceColdStartTests : IDisposable
         long outputTokens,
         string? messageId = null)
     {
-        var uuid = Guid.NewGuid().ToString();
         var resolvedMessageId = messageId ?? $"msg_{Guid.NewGuid():N}";
 
         // Measured on the live corpus (6,941 usage-bearing lines, 3,322 distinct message.id): of the 2,552 ids
         // written on more than one line, zero span more than one requestId. requestId is a function of message.id,
         // so lines sharing a message must share the request id or the fixture invents a shape that never occurs.
-        var requestId = $"req_{resolvedMessageId}";
-        var message = new
-        {
-            id = resolvedMessageId,
-            model = "claude-sonnet-4-20250514",
-            usage = new
-            {
-                input_tokens = 10,
-                output_tokens = outputTokens,
-                cache_read_input_tokens = 0,
-                cache_creation_input_tokens = 0
-            }
-        };
-        var timestamp = DateTimeOffset.UtcNow.ToString("O");
+        var line = JsonlFixture.AssistantLine(
+            sessionId,
+            uuid: Guid.NewGuid().ToString(),
+            requestId: $"req_{resolvedMessageId}",
+            cwd: cwd,
+            model: FixtureModel,
+            inputTokens: 10,
+            outputTokens: outputTokens,
+            messageId: resolvedMessageId);
 
-        var line = cwd is null
-            ? JsonSerializer.Serialize(new
-            {
-                uuid,
-                requestId,
-                sessionId,
-                timestamp,
-                isSidechain = false,
-                type = "assistant",
-                message
-            })
-            : JsonSerializer.Serialize(new
-            {
-                uuid,
-                requestId,
-                sessionId,
-                cwd,
-                timestamp,
-                isSidechain = false,
-                type = "assistant",
-                message
-            });
-
-        File.AppendAllText(filePath, line + "\n");
-    }
-
-    /// <summary>
-    /// The cache override is mandatory, not cosmetic: without it JsonlService writes
-    /// jsonl-cache.json to the real %LOCALAPPDATA%\CCInfoWindows and the suite overwrites the
-    /// developer's live cache.
-    /// </summary>
-    private JsonlService BuildService(string projectsRoot)
-    {
-        var service = new JsonlService(
-            projectsDirectoryOverride: projectsRoot,
-            cacheDirectoryOverride: _cacheDir);
-        _services.Add(service);
-        return service;
+        JsonlFixture.AppendLine(filePath, line);
     }
 }

@@ -47,6 +47,12 @@ public class SessionDisplayTooltipTests
         // In test host: Localizer returns key name "InactiveSessionTooltip" (missing key fallback)
         // OR throws (defensive catch returns "Inactive for > {0}min" formatted).
         // Both paths produce a two-line result starting with Cwd.
+        //
+        // A second test named ComputeTooltipText_Inactive_LocalizerThrowsFallback used to sit below
+        // this one on the identical input and assert a strict subset of these lines. It injected no
+        // throwing localizer, so the fallback branch its name promised was never reached and stayed
+        // untested behind a green name. Covering it for real needs an injectable lookup on
+        // ComputeTooltipText, the way LocalizedText.Resolve already takes one.
         var session = MakeSession("s1", "/foo/bar", DateTimeOffset.Now.AddHours(-3));
 
         var result = InvokeComputeTooltipText(session, isActive: false, thresholdMinutes: 30);
@@ -56,22 +62,6 @@ public class SessionDisplayTooltipTests
         Assert.Equal(2, lines.Length);
         // Second line is either formatted template (contains "30") or key name — both are acceptable.
         Assert.NotEmpty(lines[1]);
-    }
-
-    [Fact]
-    public void ComputeTooltipText_Inactive_LocalizerThrowsFallback()
-    {
-        // Verifies defensive try/catch path: even if Localizer returns key name instead of
-        // throwing, the result is still a valid two-line tooltip starting with Cwd.
-        var session = MakeSession("s1", "/foo/bar", DateTimeOffset.Now.AddHours(-3));
-
-        var result = InvokeComputeTooltipText(session, isActive: false, thresholdMinutes: 30);
-
-        // Must start with Cwd followed by newline — regardless of Localizer state.
-        Assert.StartsWith("/foo/bar\n", result);
-        // Second line must be non-empty (either formatted message or key name).
-        var secondLine = result.Substring("/foo/bar\n".Length);
-        Assert.NotEmpty(secondLine);
     }
 
     [Fact]

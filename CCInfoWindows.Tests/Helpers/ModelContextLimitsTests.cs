@@ -180,6 +180,8 @@ public class ModelContextLimitsTests
         Assert.Equal(expected, result);
     }
 
+    // The badge names the context panel shows. ContextWindowTests used to carry a second copy of
+    // this table; this one is the superset and the only home.
     [Theory]
     [InlineData("claude-opus-4-6", "Opus 4.6")]
     [InlineData("claude-sonnet-4-6", "Sonnet 4.6")]
@@ -187,27 +189,13 @@ public class ModelContextLimitsTests
     [InlineData("claude-haiku-4-5-20251001", "Haiku 4.5")]
     [InlineData("claude-sonnet-4-5-20250929", "Sonnet 4.5")]
     [InlineData("claude-opus-4-1", "Opus 4.1")]
-    public void GetDisplayName_KnownModel_ReturnsFormattedName(string modelName, string expected)
+    [InlineData(null, "Unbekannt")]
+    [InlineData("", "Unbekannt")]
+    public void GetDisplayName_ReturnsTheFriendlyBadgeName(string? modelName, string expected)
     {
         var result = ModelContextLimits.GetDisplayName(modelName);
 
         Assert.Equal(expected, result);
-    }
-
-    [Fact]
-    public void GetDisplayName_NullModel_ReturnsUnbekannt()
-    {
-        var result = ModelContextLimits.GetDisplayName(null);
-
-        Assert.Equal("Unbekannt", result);
-    }
-
-    [Fact]
-    public void GetDisplayName_EmptyModel_ReturnsUnbekannt()
-    {
-        var result = ModelContextLimits.GetDisplayName("");
-
-        Assert.Equal("Unbekannt", result);
     }
 
     // -------------------------------------------------------------------------
@@ -218,7 +206,9 @@ public class ModelContextLimitsTests
     // 200K model: effective max 167K, so the warning threshold is 147K.
     [InlineData(147_000, 200_000, true)]    // exactly at the boundary
     [InlineData(147_001, 200_000, true)]    // above the boundary
+    [InlineData(160_000, 200_000, true)]    // above the boundary, bar not yet saturated
     [InlineData(167_000, 200_000, true)]    // at the effective max, where the bar reads 100%
+    [InlineData(190_000, 200_000, true)]    // bar long saturated
     [InlineData(200_000, 200_000, true)]    // at the raw max
     [InlineData(146_999, 200_000, false)]   // just below the boundary
     [InlineData(50_000, 200_000, false)]    // well below

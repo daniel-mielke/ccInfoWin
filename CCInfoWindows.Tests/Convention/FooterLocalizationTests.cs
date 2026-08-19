@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
-using System.Xml.Linq;
 using CCInfoWindows.Tests.Helpers;
+using CCInfoWindows.Tests.Localization;
 
 namespace CCInfoWindows.Tests.Convention;
 
@@ -23,8 +23,6 @@ public class FooterLocalizationTests
 {
     private const string MainViewRelativePath = "Views/MainView.xaml";
     private const string MainViewCodeBehindRelativePath = "Views/MainView.xaml.cs";
-    private const string EnUsRelativePath = "Strings/en-US/Resources.resw";
-    private const string DeDeRelativePath = "Strings/de-DE/Resources.resw";
 
     /// <summary>
     /// MainView's icon-only buttons: the x:Name the code-behind labels, and the resw key it reads.
@@ -101,9 +99,9 @@ public class FooterLocalizationTests
     [Fact]
     public void EveryIconOnlyButtonKey_IsASingleSegmentKey_InBothLocales()
     {
-        foreach (var (locale, path) in Locales())
+        foreach (var (locale, path) in ReswFiles.Locales())
         {
-            var keyToValue = LoadResw(path);
+            var keyToValue = ReswFiles.Load(path);
 
             foreach (var (elementName, resourceKey) in IconOnlyButtons)
             {
@@ -127,9 +125,9 @@ public class FooterLocalizationTests
     {
         // They resolved in the resource test and reached no control, which is what made the defect
         // survive a review: the evidence pointed at markup that looked correct.
-        foreach (var (locale, path) in Locales())
+        foreach (var (locale, path) in ReswFiles.Locales())
         {
-            var stale = LoadResw(path).Keys
+            var stale = ReswFiles.Load(path).Keys
                 .Where(key => IconOnlyButtons.Any(
                     button => key.StartsWith(button.ElementName + ".[using:", StringComparison.Ordinal)))
                 .Order()
@@ -147,32 +145,4 @@ public class FooterLocalizationTests
 
     private static string ReadMainViewCodeBehind() =>
         File.ReadAllText(Path.Combine(ProductionSourceFiles.Root, MainViewCodeBehindRelativePath));
-
-    private static IEnumerable<(string Locale, string Path)> Locales()
-    {
-        yield return ("en-US", EnUsRelativePath);
-        yield return ("de-DE", DeDeRelativePath);
-    }
-
-    private static Dictionary<string, string> LoadResw(string relativePath)
-    {
-        var fullPath = Path.Combine(AppContext.BaseDirectory, relativePath);
-        Assert.True(File.Exists(fullPath), $"Resw file not found at: {fullPath}");
-
-        var doc = XDocument.Load(fullPath);
-        var dataElements = doc.Root?.Elements("data") ?? Enumerable.Empty<XElement>();
-
-        var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var data in dataElements)
-        {
-            var name = data.Attribute("name")?.Value;
-            var value = data.Element("value")?.Value;
-            if (name != null && value != null)
-            {
-                result[name] = value;
-            }
-        }
-
-        return result;
-    }
 }

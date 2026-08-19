@@ -1,10 +1,8 @@
 using System.Text.RegularExpressions;
 using CCInfoWindows.Models;
-using CCInfoWindows.Services;
-using CCInfoWindows.Services.Interfaces;
+using CCInfoWindows.Tests.Convention;
 using CCInfoWindows.Tests.Helpers;
 using CCInfoWindows.ViewModels;
-using Moq;
 
 namespace CCInfoWindows.Tests.ViewModels;
 
@@ -30,7 +28,6 @@ public class LanguageSwitchItemsTests
     private static readonly int EnglishLanguageIndex =
         AppSettings.SupportedLanguages.IndexOf(AppSettings.EnglishLanguage);
 
-    private const string SettingsViewXamlFileName = "SettingsView.xaml";
     private const string SettingsViewCodeBehindFileName = "SettingsView.xaml.cs";
 
     private const string SubscribesToLanguageApplied = "ViewModel.LanguageApplied += OnLanguageApplied";
@@ -68,52 +65,7 @@ public class LanguageSwitchItemsTests
     private static readonly Regex SelectedIndexAssignmentPattern =
         new(@"SelectedIndex\s*=(?!=)", RegexOptions.Compiled);
 
-    private static SettingsViewModel CreateSut()
-    {
-        var settingsService = new Mock<ISettingsService>();
-        settingsService.Setup(s => s.LoadSettings()).Returns(new AppSettings());
-
-        var credentialService = new Mock<ICredentialService>();
-        credentialService.Setup(s => s.HasValidToken()).Returns(true);
-
-        var pricingService = new Mock<IPricingService>();
-        pricingService.Setup(s => s.Source).Returns(PricingSource.Unknown);
-        pricingService.Setup(s => s.LastFetch).Returns((DateTimeOffset?)null);
-
-        var sessionNameStore = new Mock<ISessionNameStore>();
-        sessionNameStore.Setup(s => s.GetKnownSessionIds()).Returns(Array.Empty<string>());
-
-        var jsonlService = new Mock<IJsonlService>();
-        jsonlService.Setup(s => s.Sessions).Returns(Array.Empty<SessionInfo>());
-
-        return new SettingsViewModel(
-            settingsService.Object,
-            credentialService.Object,
-            new Mock<INavigationService>().Object,
-            pricingService.Object,
-            new Mock<IUsageHistoryService>().Object,
-            sessionNameStore.Object,
-            jsonlService.Object,
-            new Mock<IDispatcherQueue>().Object,
-            new Mock<IClaudeApiService>().Object,
-            new Mock<IUsageNotificationService>().Object,
-            new Mock<IWebViewBridge>().Object);
-    }
-
-    private static string ReadSettingsViewXaml()
-    {
-        var candidates = Directory
-            .EnumerateFiles(ProductionSourceFiles.Root, SettingsViewXamlFileName, SearchOption.AllDirectories)
-            .Where(path => !IsBuildOutput(path))
-            .ToList();
-
-        return File.ReadAllText(Assert.Single(candidates));
-    }
-
-    // obj\ and bin\ hold stale MSBuild copies of the very file being scanned.
-    private static bool IsBuildOutput(string path) =>
-        path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
-        || path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase);
+    private static SettingsViewModel CreateSut() => SettingsViewModelFactory.Create();
 
     /// <summary>The signal the View refreshes from — exactly once per switch, or captions flicker.</summary>
     [Fact]
@@ -235,7 +187,7 @@ public class LanguageSwitchItemsTests
     public void NoComboBoxItem_IsDeclaredWithoutItsOwnCaption()
     {
         var captionless = LocalizedComboBoxItemPattern
-            .Matches(ReadSettingsViewXaml())
+            .Matches(SourceTree.ReadSettingsViewXaml())
             .Select(match => match.Value.Trim())
             .ToList();
 

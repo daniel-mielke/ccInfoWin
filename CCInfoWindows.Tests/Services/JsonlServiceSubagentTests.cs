@@ -1,5 +1,5 @@
 ﻿using System.Text.Json;
-using CCInfoWindows.Services;
+using CCInfoWindows.Tests.TestSupport;
 
 namespace CCInfoWindows.Tests.Services;
 
@@ -11,7 +11,7 @@ namespace CCInfoWindows.Tests.Services;
 /// tool-calls keep the subagent visible even when the last assistant entry
 /// is older than the 30s cutoff.
 /// </summary>
-public class JsonlServiceSubagentTests : IDisposable
+public class JsonlServiceSubagentTests : JsonlServiceTestBase
 {
     // Synthetic project name — decodes via SessionNameHelper.DecodeProjectDirectory
     // to "fixture" without depending on any real machine path. Hermetic for CI and
@@ -19,28 +19,29 @@ public class JsonlServiceSubagentTests : IDisposable
     // (they carry no cwd at all), so it also stays clear of the BuildSessionList
     // validity filter; GetContextWindow is queried by project directory name directly.
     private const string ProjectDirName = "X--phase29-subagent-fixture";
-    private const string CacheDirectoryName = "cache";
     private const string SubagentsDirName = "subagents";
     private const string WorkflowsDirName = "workflows";
 
-    private readonly string _tempDir;
-    private readonly string _cacheDir;
+    /// <summary>The model these fixtures name, kept distinct from the shared fixture default.</summary>
+    private const string FixtureModel = "claude-sonnet-4-20250514";
 
-    public JsonlServiceSubagentTests()
-    {
-        _tempDir = Path.Combine(Path.GetTempPath(), "subagent-tests-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(_tempDir);
-        _cacheDir = Path.Combine(_tempDir, CacheDirectoryName);
-        Directory.CreateDirectory(_cacheDir);
-    }
+    /// <summary>
+    /// How far back a fixture file's mtime is pushed to fall outside the production activity cutoff.
+    /// One offset for the whole suite: six hand-written copies of it meant a widened cutoff had to be
+    /// chased through six places, and any that was missed turned a stale-side test into a vacuous pass
+    /// — the file counts as fresh, the agent stays visible, and Assert.DoesNotContain stops proving
+    /// anything.
+    /// </summary>
+    private static readonly TimeSpan StaleOffset = TimeSpan.FromMinutes(5);
 
-    public void Dispose()
+    /// <summary>
+    /// Upper bound on how old a fixture file's mtime may be and still count as fresh. Below the
+    /// production 30 s cutoff with room for a slow machine, above any plausible test runtime.
+    /// </summary>
+    private static readonly TimeSpan FreshCeiling = TimeSpan.FromSeconds(20);
+
+    public JsonlServiceSubagentTests() : base("subagent-tests-")
     {
-        if (Directory.Exists(_tempDir))
-        {
-            try { Directory.Delete(_tempDir, recursive: true); }
-            catch (IOException) { /* AV / handle race — leave it for the OS to clean */ }
-        }
     }
 
     // -------------------------------------------------------------------------
@@ -61,9 +62,7 @@ public class JsonlServiceSubagentTests : IDisposable
             assistantTimestamp: DateTimeOffset.UtcNow.AddMinutes(-5),
             agentId: "alpha");
 
-        var freshMtime = DateTime.UtcNow;
-        File.SetLastWriteTimeUtc(agentFile, freshMtime);
-        AssertMtimeWasSet(agentFile, freshMtime);
+        MakeFresh(agentFile);
 
         using var svc = BuildService();
         await svc.InitializeAsync();
@@ -93,9 +92,7 @@ public class JsonlServiceSubagentTests : IDisposable
             assistantTimestamp: DateTimeOffset.UtcNow.AddMinutes(-5),
             agentId: "bravo");
 
-        var staleMtime = DateTime.UtcNow.AddMinutes(-5);
-        File.SetLastWriteTimeUtc(agentFile, staleMtime);
-        AssertMtimeWasSet(agentFile, staleMtime);
+        MakeStale(agentFile);
 
         using var svc = BuildService();
         await svc.InitializeAsync();
@@ -125,11 +122,9 @@ public class JsonlServiceSubagentTests : IDisposable
             assistantTimestamp: staleStamp,
             agentId: "charlie");
 
-        // Capture freshMtime BEFORE the SetLastWriteTimeUtc call and reuse it
-        // in the assertion — avoids sub-second precision loss on round-trip read.
-        var freshMtime = DateTime.UtcNow;
-        File.SetLastWriteTimeUtc(agentFile, freshMtime);
-        AssertMtimeWasSet(agentFile, freshMtime);
+        // Capture the stamp we set and reuse it in the assertion — avoids sub-second
+        // precision loss on round-trip read.
+        var freshMtime = MakeFresh(agentFile);
 
         using var svc = BuildService();
         await svc.InitializeAsync();
@@ -217,6 +212,42 @@ public class JsonlServiceSubagentTests : IDisposable
         var subagent = svc.GetContextWindow(ProjectDirName).Subagents.Single(s => s.AgentId == "foxtrot");
 
         Assert.Null(subagent.WorkflowId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Review finding A2: the synthetic-marker walk-back reaches the subagent rows
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// A transcript whose LAST assistant entry names Claude Code's synthetic marker instead of a
+    /// model must still report the model of the last real entry. The subagent path used to read
+    /// message.model raw while the session bar walked back past the marker, so such an agent missed
+    /// the pricing lookup and had its percentage computed against the default ceiling instead of its
+    /// model's — on a row rendered directly below the session bar. Both paths now share one read.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_SubagentEndingOnSyntheticEntry_ResolvesModelPastTheMarker()
+    {
+        var agentFile = ArrangeSubagentFixture(
+            assistantTimestamp: DateTimeOffset.UtcNow,
+            agentId: "synthetic-tail");
+
+        WriteAssistantJsonlLine(
+            agentFile,
+            sessionId: SessionUuidOf(agentFile),
+            isSidechain: true,
+            timestamp: DateTimeOffset.UtcNow,
+            model: "<synthetic>");
+
+        MakeFresh(agentFile);
+
+        using var svc = BuildService();
+        await svc.InitializeAsync();
+
+        var subagent = svc.GetContextWindow(ProjectDirName).Subagents
+            .Single(s => s.AgentId == "synthetic-tail");
+
+        Assert.Equal(FixtureModel, subagent.ModelName);
     }
 
     /// <summary>
@@ -315,9 +346,7 @@ public class JsonlServiceSubagentTests : IDisposable
             workflowId: "wf_gate-1",
             sessionUuid: SessionUuidOf(staleFile));
 
-        var staleMtime = DateTime.UtcNow.AddMinutes(-5);
-        File.SetLastWriteTimeUtc(staleFile, staleMtime);
-        AssertMtimeWasSet(staleFile, staleMtime);
+        MakeStale(staleFile);
         AssertMtimeIsFresh(freshFile);
 
         using var svc = BuildService();
@@ -351,12 +380,8 @@ public class JsonlServiceSubagentTests : IDisposable
             agentId: "control",
             sessionUuid: SessionUuidOf(firstFile));
 
-        var staleMtime = DateTime.UtcNow.AddMinutes(-5);
         foreach (var file in new[] { firstFile, secondFile })
-        {
-            File.SetLastWriteTimeUtc(file, staleMtime);
-            AssertMtimeWasSet(file, staleMtime);
-        }
+            MakeStale(file);
         AssertMtimeIsFresh(controlFile);
 
         using var svc = BuildService();
@@ -387,9 +412,7 @@ public class JsonlServiceSubagentTests : IDisposable
             agentId: "plain-fresh",
             sessionUuid: SessionUuidOf(staleFile));
 
-        var staleMtime = DateTime.UtcNow.AddMinutes(-5);
-        File.SetLastWriteTimeUtc(staleFile, staleMtime);
-        AssertMtimeWasSet(staleFile, staleMtime);
+        MakeStale(staleFile);
         AssertMtimeIsFresh(freshFile);
 
         using var svc = BuildService();
@@ -736,14 +759,14 @@ public class JsonlServiceSubagentTests : IDisposable
     }
 
     /// <summary>
-    /// Asserts a fixture file's mtime is inside the 30s activity window, so a failure downstream
-    /// points at the code rather than at an AV product that touched the file.
+    /// Asserts a fixture file's mtime is inside the activity window, so a failure downstream points at
+    /// the code rather than at an AV product that touched the file.
     /// </summary>
     private static void AssertMtimeIsFresh(string filePath)
     {
         var age = DateTime.UtcNow - File.GetLastWriteTimeUtc(filePath);
         Assert.True(
-            age < TimeSpan.FromSeconds(20),
+            age < FreshCeiling,
             $"fixture file should be fresh but its mtime is {age} old — test environment hostile to mtime control (AV likely).");
     }
     // -------------------------------------------------------------------------
@@ -766,9 +789,7 @@ public class JsonlServiceSubagentTests : IDisposable
         var sessionUuid = SessionUuidOf(agentFile);
 
         RewriteAgentFileWithTokens(agentFile, sessionUuid, fourDigitTokens: 1000);
-        var mtime = DateTime.UtcNow;
-        File.SetLastWriteTimeUtc(agentFile, mtime);
-        AssertMtimeWasSet(agentFile, mtime);
+        var mtime = MakeFresh(agentFile);
         var lengthBefore = new FileInfo(agentFile).Length;
 
         using var svc = BuildService();
@@ -780,8 +801,7 @@ public class JsonlServiceSubagentTests : IDisposable
         // Same stamp, different content. Four-digit token counts on both sides keep the byte
         // length identical; every other field of the line is fixed-width.
         RewriteAgentFileWithTokens(agentFile, sessionUuid, fourDigitTokens: 9000);
-        File.SetLastWriteTimeUtc(agentFile, mtime);
-        AssertMtimeWasSet(agentFile, mtime);
+        SetMtime(agentFile, mtime);
         Assert.Equal(lengthBefore, new FileInfo(agentFile).Length);
 
         var second = svc.GetContextWindow(ProjectDirName).Subagents
@@ -803,9 +823,7 @@ public class JsonlServiceSubagentTests : IDisposable
         var sessionUuid = SessionUuidOf(agentFile);
 
         RewriteAgentFileWithTokens(agentFile, sessionUuid, fourDigitTokens: 1000);
-        var mtime = DateTime.UtcNow.AddSeconds(-5);
-        File.SetLastWriteTimeUtc(agentFile, mtime);
-        AssertMtimeWasSet(agentFile, mtime);
+        var mtime = SetMtime(agentFile, DateTime.UtcNow.AddSeconds(-5));
 
         using var svc = BuildService();
         await svc.InitializeAsync();
@@ -815,9 +833,7 @@ public class JsonlServiceSubagentTests : IDisposable
 
         // Same length, newer mtime — still inside the 30 s activity window, so the row stays.
         RewriteAgentFileWithTokens(agentFile, sessionUuid, fourDigitTokens: 9000);
-        var bumped = DateTime.UtcNow;
-        File.SetLastWriteTimeUtc(agentFile, bumped);
-        AssertMtimeWasSet(agentFile, bumped);
+        MakeFresh(agentFile);
 
         var second = svc.GetContextWindow(ProjectDirName).Subagents
             .Single(s => s.AgentId == "memo-mtime").TotalTokens;
@@ -839,9 +855,7 @@ public class JsonlServiceSubagentTests : IDisposable
         var sessionUuid = SessionUuidOf(agentFile);
 
         RewriteAgentFileWithTokens(agentFile, sessionUuid, fourDigitTokens: 1000);
-        var mtime = DateTime.UtcNow;
-        File.SetLastWriteTimeUtc(agentFile, mtime);
-        AssertMtimeWasSet(agentFile, mtime);
+        var mtime = MakeFresh(agentFile);
         var lengthBefore = new FileInfo(agentFile).Length;
 
         using var svc = BuildService();
@@ -853,8 +867,7 @@ public class JsonlServiceSubagentTests : IDisposable
         // A second, higher-token entry appended: the last assistant entry is what counts, so the
         // token total moves — and so does the length, while the mtime is put back.
         WriteAssistantJsonlLineWithTokens(agentFile, sessionUuid, fourDigitTokens: 9000);
-        File.SetLastWriteTimeUtc(agentFile, mtime);
-        AssertMtimeWasSet(agentFile, mtime);
+        SetMtime(agentFile, mtime);
         Assert.NotEqual(lengthBefore, new FileInfo(agentFile).Length);
 
         var second = svc.GetContextWindow(ProjectDirName).Subagents
@@ -864,9 +877,6 @@ public class JsonlServiceSubagentTests : IDisposable
     }
 
 
-
-    private JsonlService BuildService()
-        => new(projectsDirectoryOverride: _tempDir, cacheDirectoryOverride: _cacheDir);
 
     /// <summary>
     /// Walks up to the "subagents" directory and takes one more hop — the session UUID, the value
@@ -884,7 +894,7 @@ public class JsonlServiceSubagentTests : IDisposable
     }
 
     /// <summary>
-    /// Stages: {_tempDir}/{ProjectDirName}/{sessionUuid}.jsonl (main session,
+    /// Stages: {ProjectsDir}/{ProjectDirName}/{sessionUuid}.jsonl (main session,
     /// one fresh assistant entry — required by FindSubagentFilesForSession)
     /// + the subagent file with one assistant entry at assistantTimestamp, either at
     /// {sessionUuid}/subagents/agent-{id}.jsonl (workflowId null, Agent tool) or at
@@ -899,7 +909,7 @@ public class JsonlServiceSubagentTests : IDisposable
         string? workflowId = null,
         string? sessionUuid = null)
     {
-        var projectDir = Path.Combine(_tempDir, ProjectDirName);
+        var projectDir = Path.Combine(ProjectsDir, ProjectDirName);
         Directory.CreateDirectory(projectDir);
 
         sessionUuid ??= Guid.NewGuid().ToString();
@@ -946,38 +956,45 @@ public class JsonlServiceSubagentTests : IDisposable
     }
 
     /// <summary>
-    /// Appends one assistant JSONL entry to filePath. Uses File.AppendAllText
-    /// (closes handle before returning) so the subsequent File.SetLastWriteTimeUtc
-    /// call is safe. Property names mirror JsonlServiceColdStartTests for
-    /// deserialization compatibility against the production JsonlEntry record —
-    /// including message.id, which is the identity JsonlService deduplicates on.
+    /// Stamps a fixture file's mtime and proves it stuck, returning the value that was set so callers
+    /// can assert against it without a lossy round-trip read.
     /// </summary>
-    private static void WriteAssistantJsonlLine(string filePath, string sessionId, bool isSidechain, DateTimeOffset timestamp)
+    private static DateTime SetMtime(string filePath, DateTime utc)
     {
-        var uuid = Guid.NewGuid().ToString();
-        var requestId = $"req_{Guid.NewGuid():N}";
-        var line = JsonSerializer.Serialize(new
-        {
-            uuid,
-            requestId,
+        File.SetLastWriteTimeUtc(filePath, utc);
+        AssertMtimeWasSet(filePath, utc);
+        return utc;
+    }
+
+    /// <summary>Pushes a fixture file's mtime outside the production activity cutoff.</summary>
+    private static DateTime MakeStale(string filePath) => SetMtime(filePath, DateTime.UtcNow - StaleOffset);
+
+    /// <summary>Stamps a fixture file's mtime at "now", well inside the activity cutoff.</summary>
+    private static DateTime MakeFresh(string filePath) => SetMtime(filePath, DateTime.UtcNow);
+
+    /// <summary>
+    /// Appends one assistant JSONL entry to filePath — see <see cref="JsonlFixture.AssistantLine"/>
+    /// for the schema and why it is stated in one place. These fixtures carry no cwd at all, which is
+    /// what keeps them clear of the BuildSessionList validity filter.
+    /// </summary>
+    private static void WriteAssistantJsonlLine(
+        string filePath,
+        string sessionId,
+        bool isSidechain,
+        DateTimeOffset timestamp,
+        string model = FixtureModel)
+    {
+        JsonlFixture.AppendLine(filePath, JsonlFixture.AssistantLine(
             sessionId,
-            timestamp = timestamp.ToString("O"),
-            isSidechain,
-            type = "assistant",
-            message = new
-            {
-                id = $"msg_{Guid.NewGuid():N}",
-                model = "claude-sonnet-4-20250514",
-                usage = new
-                {
-                    input_tokens = 10,
-                    output_tokens = 5,
-                    cache_read_input_tokens = 0,
-                    cache_creation_input_tokens = 0
-                }
-            }
-        });
-        File.AppendAllText(filePath, line + "\n");
+            uuid: Guid.NewGuid().ToString(),
+            requestId: $"req_{Guid.NewGuid():N}",
+            cwd: null,
+            model: model,
+            inputTokens: 10,
+            outputTokens: 5,
+            isSidechain: isSidechain,
+            timestamp: timestamp,
+            messageId: $"msg_{Guid.NewGuid():N}"));
     }
 
     /// <summary>
@@ -1001,28 +1018,18 @@ public class JsonlServiceSubagentTests : IDisposable
     {
         Assert.InRange(fourDigitTokens, 1000, 9999);
 
-        var line = JsonSerializer.Serialize(new
-        {
-            uuid = Guid.NewGuid().ToString(),
-            requestId = $"req_{Guid.NewGuid():N}",
+        JsonlFixture.AppendLine(filePath, JsonlFixture.AssistantLine(
             sessionId,
-            timestamp = DateTimeOffset.UtcNow.ToString("O"),
-            isSidechain = true,
-            type = "assistant",
-            message = new
-            {
-                id = $"msg_{Guid.NewGuid():N}",
-                model = "claude-sonnet-4-20250514",
-                usage = new
-                {
-                    input_tokens = fourDigitTokens,
-                    output_tokens = 5,
-                    cache_read_input_tokens = fourDigitTokens,
-                    cache_creation_input_tokens = fourDigitTokens
-                }
-            }
-        });
-        File.AppendAllText(filePath, line + "\n");
+            uuid: Guid.NewGuid().ToString(),
+            requestId: $"req_{Guid.NewGuid():N}",
+            cwd: null,
+            model: FixtureModel,
+            inputTokens: fourDigitTokens,
+            outputTokens: 5,
+            cacheCreation: fourDigitTokens,
+            cacheRead: fourDigitTokens,
+            isSidechain: true,
+            messageId: $"msg_{Guid.NewGuid():N}"));
     }
 
 }

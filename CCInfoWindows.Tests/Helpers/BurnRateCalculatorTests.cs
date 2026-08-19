@@ -8,118 +8,46 @@ public class BurnRateCalculatorTests
     private static UsageHistoryPoint MakePoint(DateTimeOffset ts, double utilNormalized)
         => new() { Timestamp = ts, Utilization = utilNormalized };
 
-    [Fact]
-    public void Predict_NullResetsAt_ReturnsNull()
+    /// <summary>
+    /// Builds a history from minute offsets against a single captured instant. Reading UtcNow once per
+    /// element — what these cases used to do — puts the samples a few microseconds off the intended
+    /// spacing, which is harmless at three-minute gaps and flaky at tight ones.
+    /// </summary>
+    private static List<UsageHistoryPoint> History(
+        DateTimeOffset now, params (int MinutesAgo, double Utilization)[] samples) =>
+        [.. samples.Select(s => MakePoint(now.AddMinutes(-s.MinutesAgo), s.Utilization))];
+
+    /// <summary>
+    /// Every input shape Predict has to reject. The first column names the reason so a failure says
+    /// which one broke; the reset offset is minutes from the same captured "now", null for no reset.
+    /// </summary>
+    public static TheoryData<string, int?, double, (int MinutesAgo, double Utilization)[]> RejectedInputs() => new()
     {
-        var history = new List<UsageHistoryPoint>
-        {
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-10), 0.30),
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-5), 0.40),
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-2), 0.50),
-        };
+        { "no resetsAt", null, 50.0, [(10, 0.30), (5, 0.40), (2, 0.50)] },
+        { "resetsAt already past", -60, 50.0, [(10, 0.30), (5, 0.40), (2, 0.50)] },
+        { "utilization below the floor", 180, 15.0, [(10, 0.05), (5, 0.10), (2, 0.13)] },
+        { "fewer samples than the fit needs", 180, 40.0, [(10, 0.30), (5, 0.40)] },
+        { "flat usage", 180, 50.0, [(10, 0.50), (7, 0.50), (4, 0.50), (1, 0.50)] },
+        { "decreasing usage", 180, 60.0, [(10, 0.80), (7, 0.75), (4, 0.68), (1, 0.60)] },
+        // Very slow burn: exhaustion lands after the 10-minute reset, so there is nothing to warn about.
+        { "exhaustion falls past the reset", 10, 50.3, [(14, 0.50), (10, 0.501), (5, 0.502), (1, 0.503)] },
+        { "already at full utilization", 180, 100.0, [(10, 0.70), (7, 0.80), (4, 0.90), (1, 1.00)] },
+    };
 
-        var result = BurnRateCalculator.Predict(history, 50.0, null);
-
-        Assert.Null(result);
-    }
-
-    [Fact]
-    public void Predict_PastResetsAt_ReturnsNull()
+    [Theory]
+    [MemberData(nameof(RejectedInputs))]
+    public void Predict_RejectsUnusableHistory(
+        string reason, int? resetsInMinutes, double currentUtilization,
+        (int MinutesAgo, double Utilization)[] samples)
     {
-        var pastResetsAt = DateTimeOffset.UtcNow.AddHours(-1);
-        var history = new List<UsageHistoryPoint>
-        {
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-10), 0.30),
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-5), 0.40),
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-2), 0.50),
-        };
+        var now = DateTimeOffset.UtcNow;
+        var resetsAt = resetsInMinutes is null
+            ? (DateTimeOffset?)null
+            : now.AddMinutes(resetsInMinutes.Value);
 
-        var result = BurnRateCalculator.Predict(history, 50.0, pastResetsAt);
+        var result = BurnRateCalculator.Predict(History(now, samples), currentUtilization, resetsAt);
 
-        Assert.Null(result);
-    }
-
-    [Fact]
-    public void Predict_LowUtilization_ReturnsNull()
-    {
-        var resetsAt = DateTimeOffset.UtcNow.AddHours(3);
-        var history = new List<UsageHistoryPoint>
-        {
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-10), 0.05),
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-5), 0.10),
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-2), 0.13),
-        };
-
-        var result = BurnRateCalculator.Predict(history, 15.0, resetsAt);
-
-        Assert.Null(result);
-    }
-
-    [Fact]
-    public void Predict_TooFewPoints_ReturnsNull()
-    {
-        var resetsAt = DateTimeOffset.UtcNow.AddHours(3);
-        var history = new List<UsageHistoryPoint>
-        {
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-10), 0.30),
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-5), 0.40),
-        };
-
-        var result = BurnRateCalculator.Predict(history, 40.0, resetsAt);
-
-        Assert.Null(result);
-    }
-
-    [Fact]
-    public void Predict_FlatUsage_ReturnsNull()
-    {
-        var resetsAt = DateTimeOffset.UtcNow.AddHours(3);
-        var history = new List<UsageHistoryPoint>
-        {
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-10), 0.50),
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-7), 0.50),
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-4), 0.50),
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-1), 0.50),
-        };
-
-        var result = BurnRateCalculator.Predict(history, 50.0, resetsAt);
-
-        Assert.Null(result);
-    }
-
-    [Fact]
-    public void Predict_DecreasingUsage_ReturnsNull()
-    {
-        var resetsAt = DateTimeOffset.UtcNow.AddHours(3);
-        var history = new List<UsageHistoryPoint>
-        {
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-10), 0.80),
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-7), 0.75),
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-4), 0.68),
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-1), 0.60),
-        };
-
-        var result = BurnRateCalculator.Predict(history, 60.0, resetsAt);
-
-        Assert.Null(result);
-    }
-
-    [Fact]
-    public void Predict_ExhaustsAfterReset_ReturnsNull()
-    {
-        // Very slow burn: will exhaust after the 10-minute reset
-        var resetsAt = DateTimeOffset.UtcNow.AddMinutes(10);
-        var history = new List<UsageHistoryPoint>
-        {
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-14), 0.50),
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-10), 0.501),
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-5), 0.502),
-            MakePoint(DateTimeOffset.UtcNow.AddMinutes(-1), 0.503),
-        };
-
-        var result = BurnRateCalculator.Predict(history, 50.3, resetsAt);
-
-        Assert.Null(result);
+        Assert.True(result is null, $"Predict should return null for: {reason}");
     }
 
     [Fact]
@@ -127,17 +55,10 @@ public class BurnRateCalculatorTests
     {
         // 4 points going from 20% to 60% in 10 minutes = ~4%/min slope
         // At that rate, from 60%, need 40 more percent = ~10 min
-        var resetsAt = DateTimeOffset.UtcNow.AddHours(3);
         var now = DateTimeOffset.UtcNow;
-        var history = new List<UsageHistoryPoint>
-        {
-            MakePoint(now.AddMinutes(-10), 0.20),
-            MakePoint(now.AddMinutes(-7), 0.33),
-            MakePoint(now.AddMinutes(-4), 0.47),
-            MakePoint(now.AddMinutes(-1), 0.60),
-        };
+        var history = History(now, (10, 0.20), (7, 0.33), (4, 0.47), (1, 0.60));
 
-        var result = BurnRateCalculator.Predict(history, 60.0, resetsAt);
+        var result = BurnRateCalculator.Predict(history, 60.0, now.AddHours(3));
 
         Assert.NotNull(result);
         Assert.InRange(result.MinutesUntilLimit, 5, 20);
@@ -147,40 +68,15 @@ public class BurnRateCalculatorTests
     [Fact]
     public void Predict_MinutesUntilLimit_MinimumOne()
     {
-        // Points that make projected exhaustion happen in < 60 seconds
-        var resetsAt = DateTimeOffset.UtcNow.AddHours(3);
-        var now = DateTimeOffset.UtcNow;
+        // Points that make projected exhaustion happen in < 60 seconds.
         // Very steep slope: 0% to 99% in 15 minutes → almost at limit, very few seconds remain
-        var history = new List<UsageHistoryPoint>
-        {
-            MakePoint(now.AddMinutes(-14), 0.01),
-            MakePoint(now.AddMinutes(-9), 0.34),
-            MakePoint(now.AddMinutes(-4), 0.67),
-            MakePoint(now.AddMinutes(-1), 0.99),
-        };
+        var now = DateTimeOffset.UtcNow;
+        var history = History(now, (14, 0.01), (9, 0.34), (4, 0.67), (1, 0.99));
 
-        var result = BurnRateCalculator.Predict(history, 99.0, resetsAt);
+        var result = BurnRateCalculator.Predict(history, 99.0, now.AddHours(3));
 
         Assert.NotNull(result);
         Assert.Equal(1, result.MinutesUntilLimit);
-    }
-
-    [Fact]
-    public void Predict_FullUtilization_ReturnsNull()
-    {
-        var resetsAt = DateTimeOffset.UtcNow.AddHours(3);
-        var now = DateTimeOffset.UtcNow;
-        var history = new List<UsageHistoryPoint>
-        {
-            MakePoint(now.AddMinutes(-10), 0.70),
-            MakePoint(now.AddMinutes(-7), 0.80),
-            MakePoint(now.AddMinutes(-4), 0.90),
-            MakePoint(now.AddMinutes(-1), 1.00),
-        };
-
-        var result = BurnRateCalculator.Predict(history, 100.0, resetsAt);
-
-        Assert.Null(result);
     }
 
     [Fact]

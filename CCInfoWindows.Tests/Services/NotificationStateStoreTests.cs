@@ -1,25 +1,19 @@
-using CCInfoWindows.Models;
+﻿using CCInfoWindows.Models;
 using CCInfoWindows.Services;
+using CCInfoWindows.Tests.TestSupport;
 
 namespace CCInfoWindows.Tests.Services;
 
 public class NotificationStateStoreTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), $"ccinfo_notif_{Guid.NewGuid():N}");
+    private readonly TempDirectory _temp = new("ccinfo_notif_");
 
-    public void Dispose()
-    {
-        try
-        {
-            if (Directory.Exists(_dir)) Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException) { /* another handle still open on a temp file; the OS reclaims it */ }
-    }
+    public void Dispose() => _temp.Dispose();
 
     [Fact]
     public void Load_MissingFile_ReturnsEmptyState()
     {
-        var state = new NotificationStateStore(_dir).Load();
+        var state = new NotificationStateStore(_temp.Path).Load();
 
         Assert.Null(state.FiveHour.WindowId);
         Assert.Null(state.Weekly.WindowId);
@@ -31,7 +25,7 @@ public class NotificationStateStoreTests : IDisposable
         // A fresh instance is the point: the flags have to survive an app restart, which is what
         // makes "no refire on startup" work without any extra logic.
         var resetsAt = new DateTimeOffset(2026, 8, 6, 0, 20, 0, TimeSpan.Zero);
-        new NotificationStateStore(_dir).Save(new NotificationState
+        new NotificationStateStore(_temp.Path).Save(new NotificationState
         {
             FiveHour = new WindowNotificationState
             {
@@ -46,7 +40,7 @@ public class NotificationStateStoreTests : IDisposable
             BurnRateNotifiedWindowId = "id-5h"
         });
 
-        var loaded = new NotificationStateStore(_dir).Load();
+        var loaded = new NotificationStateStore(_temp.Path).Load();
 
         Assert.Equal("id-5h", loaded.BurnRateNotifiedWindowId);
 
@@ -63,10 +57,10 @@ public class NotificationStateStoreTests : IDisposable
     [Fact]
     public void Load_CorruptFile_ReturnsEmptyStateInsteadOfThrowing()
     {
-        Directory.CreateDirectory(_dir);
-        File.WriteAllText(Path.Combine(_dir, "notification-state.json"), "{ not json");
+        Directory.CreateDirectory(_temp.Path);
+        File.WriteAllText(Path.Combine(_temp.Path, "notification-state.json"), "{ not json");
 
-        var state = new NotificationStateStore(_dir).Load();
+        var state = new NotificationStateStore(_temp.Path).Load();
 
         Assert.Null(state.FiveHour.WindowId);
     }
@@ -74,21 +68,21 @@ public class NotificationStateStoreTests : IDisposable
     [Fact]
     public void Save_CreatesTheDirectory()
     {
-        new NotificationStateStore(_dir).Save(new NotificationState());
+        new NotificationStateStore(_temp.Path).Save(new NotificationState());
 
-        Assert.True(File.Exists(Path.Combine(_dir, "notification-state.json")));
+        Assert.True(File.Exists(Path.Combine(_temp.Path, "notification-state.json")));
     }
 
     [Fact]
     public void Load_FileWrittenBeforeTheBurnRateFieldExisted_LeavesTheToastArmed()
     {
         // Back-compat for finding 20(c): a v1.5 notification-state.json has no burnRateNotifiedWindowId.
-        Directory.CreateDirectory(_dir);
+        Directory.CreateDirectory(_temp.Path);
         File.WriteAllText(
-            Path.Combine(_dir, "notification-state.json"),
+            Path.Combine(_temp.Path, "notification-state.json"),
             """{"fiveHour":{"windowId":"id-5h","notified80":true},"weekly":{}}""");
 
-        var state = new NotificationStateStore(_dir).Load();
+        var state = new NotificationStateStore(_temp.Path).Load();
 
         Assert.Equal("id-5h", state.FiveHour.WindowId);
         Assert.True(state.FiveHour.Notified80);

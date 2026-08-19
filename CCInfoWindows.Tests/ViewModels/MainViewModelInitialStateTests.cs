@@ -1,10 +1,6 @@
 using CCInfoWindows.Helpers;
-using CCInfoWindows.Models;
-using CCInfoWindows.Services.Interfaces;
-using CCInfoWindows.Tests.Helpers;
 using CCInfoWindows.ViewModels;
 using Microsoft.UI.Xaml.Media;
-using Moq;
 
 namespace CCInfoWindows.Tests.ViewModels;
 
@@ -23,36 +19,7 @@ namespace CCInfoWindows.Tests.ViewModels;
 public class MainViewModelInitialStateTests
 {
     private static MainViewModel CreateSut(Func<string, SolidColorBrush> brushFactory)
-    {
-        var credentialService = new Mock<ICredentialService>();
-        var navigationService = new Mock<INavigationService>();
-        var apiService = new Mock<IClaudeApiService>();
-        var settingsService = new Mock<ISettingsService>();
-        settingsService.Setup(s => s.LoadSettings()).Returns(new AppSettings());
-        var historyService = new Mock<IUsageHistoryService>();
-        var jsonlService = new Mock<IJsonlService>();
-        jsonlService.Setup(s => s.Sessions).Returns([]);
-        var pricingService = new Mock<IPricingService>();
-        pricingService.Setup(s => s.EnsurePricesLoadedAsync()).Returns(Task.CompletedTask);
-        var updateService = new Mock<IUpdateService>();
-        var burnRate = new Mock<IUsageNotificationService>();
-        var sessionNameStore = new Mock<ISessionNameStore>();
-        sessionNameStore.Setup(s => s.GetCustomName(It.IsAny<string>())).Returns((string?)null);
-
-        return new MainViewModel(
-            credentialService.Object,
-            navigationService.Object,
-            apiService.Object,
-            settingsService.Object,
-            historyService.Object,
-            jsonlService.Object,
-            pricingService.Object,
-            updateService.Object,
-            burnRate.Object,
-            new FakeDispatcherQueue(),
-            sessionNameStore.Object,
-            brushFactory);
-    }
+        => MainViewModelFactory.Create(brushFactory: brushFactory);
 
     /// <summary>Records every hex the ViewModel asks the seam for, in request order.</summary>
     private static List<string> CaptureRequestedHexes()

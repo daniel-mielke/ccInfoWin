@@ -4,6 +4,7 @@ using CCInfoWindows.Helpers;
 using CCInfoWindows.Models;
 using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
+using CCInfoWindows.Tests.TestSupport;
 using Moq;
 
 namespace CCInfoWindows.Tests.Services;
@@ -13,48 +14,8 @@ namespace CCInfoWindows.Tests.Services;
 /// context window calculation (last assistant only), token aggregation with dedup,
 /// incremental reads, and cache persistence.
 /// </summary>
-public class JsonlServiceTests : IDisposable
+public class JsonlServiceTests : JsonlServiceTestBase
 {
-    private const string CacheDirectoryName = "cache";
-
-    private readonly string _tempDir;
-    private readonly string _cacheDir;
-    private readonly List<JsonlService> _services = [];
-
-    public JsonlServiceTests()
-    {
-        _tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-        Directory.CreateDirectory(_tempDir);
-        _cacheDir = Path.Combine(_tempDir, CacheDirectoryName);
-        Directory.CreateDirectory(_cacheDir);
-    }
-
-    public void Dispose()
-    {
-        // Every service started a FileSystemWatcher on _tempDir; releasing them before the delete
-        // keeps the teardown from racing live watcher callbacks. Dispose is idempotent, so the
-        // tests that additionally wrap the instance in `using` are fine.
-        foreach (var service in _services)
-            service.Dispose();
-        _services.Clear();
-
-        if (Directory.Exists(_tempDir))
-            Directory.Delete(_tempDir, recursive: true);
-    }
-
-    /// <summary>
-    /// Every instance gets its cache inside this test's own temp directory. Without the override
-    /// JsonlService writes jsonl-cache.json to the real %LOCALAPPDATA%\CCInfoWindows, so running
-    /// the suite would overwrite the developer's live cache — an F.I.R.S.T. Independent violation
-    /// with an effect outside the test process.
-    /// </summary>
-    private JsonlService BuildService(IPricingService? pricingService = null)
-    {
-        var service = new JsonlService(_tempDir, _cacheDir, pricingService);
-        _services.Add(service);
-        return service;
-    }
-
     // -------------------------------------------------------------------------
     // ReadTailLines
     // -------------------------------------------------------------------------
@@ -150,16 +111,11 @@ public class JsonlServiceTests : IDisposable
     public async Task GetContextWindow_ReturnsLastAssistantMessageTokens_NotCumulative()
     {
         const string SessionId = "ctx1aaaa-0000-0000-0000-000000000001";
-        var projectDir = CreateProjectSessionDir(SessionId);
-        var projectDirName = Path.GetFileName(projectDir);
-        var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
 
         // Two assistant messages — context window should reflect only the LAST one
-        await File.WriteAllLinesAsync(jsonlFile,
-        [
+        var (_, projectDirName, _) = await SeedSessionAsync(SessionId,
             BuildAssistantEntry(SessionId, "uuid-1", "req-1", inputTokens: 1000, outputTokens: 100),
-            BuildAssistantEntry(SessionId, "uuid-2", "req-2", inputTokens: 5000, outputTokens: 200)
-        ]);
+            BuildAssistantEntry(SessionId, "uuid-2", "req-2", inputTokens: 5000, outputTokens: 200));
 
         var service = BuildService();
         await service.InitializeAsync();
@@ -174,15 +130,10 @@ public class JsonlServiceTests : IDisposable
     public async Task GetContextWindow_IgnoresSidechainMessages()
     {
         const string SessionId = "ctx2aaaa-0000-0000-0000-000000000002";
-        var projectDir = CreateProjectSessionDir(SessionId);
-        var projectDirName = Path.GetFileName(projectDir);
-        var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
 
-        await File.WriteAllLinesAsync(jsonlFile,
-        [
+        var (_, projectDirName, _) = await SeedSessionAsync(SessionId,
             BuildAssistantEntry(SessionId, "uuid-1", "req-1", inputTokens: 3000, outputTokens: 50),
-            BuildSidechainAssistantEntry(SessionId, "uuid-2", "req-2", inputTokens: 99000, outputTokens: 10)
-        ]);
+            BuildSidechainAssistantEntry(SessionId, "uuid-2", "req-2", inputTokens: 99000, outputTokens: 10));
 
         var service = BuildService();
         await service.InitializeAsync();
@@ -216,14 +167,9 @@ public class JsonlServiceTests : IDisposable
     public async Task GetContextWindow_NewestSessionFileDeleted_ReturnsEmptyAndDoesNotThrow()
     {
         const string SessionId = "del1aaaa-0000-0000-0000-000000000070";
-        var projectDir = CreateProjectSessionDir(SessionId);
-        var projectDirName = Path.GetFileName(projectDir);
-        var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
 
-        await File.WriteAllLinesAsync(jsonlFile,
-        [
-            BuildAssistantEntry(SessionId, "uuid-1", "req-1", inputTokens: 4000, outputTokens: 100)
-        ]);
+        var (_, projectDirName, jsonlFile) = await SeedSessionAsync(SessionId,
+            BuildAssistantEntry(SessionId, "uuid-1", "req-1", inputTokens: 4000, outputTokens: 100));
 
         var service = BuildService();
         await service.InitializeAsync();
@@ -315,14 +261,14 @@ public class JsonlServiceTests : IDisposable
     public async Task Sessions_WhileAContextReadIsInFlight_IsNotBlockedByIt()
     {
         const string SessionId = "lck3aaaa-0000-0000-0000-000000000073";
+
+        // The directory has to exist before the line is built: cwd must name a directory that exists,
+        // because RebuildSessionsList drops a session whose non-empty cwd fails IsValidProjectDirectory
+        // and the fixture default is a Unix path that does not. CreateProjectSessionDir is idempotent,
+        // so the seeding call below reuses this directory.
         var projectDir = CreateProjectSessionDir(SessionId);
-        var projectDirName = Path.GetFileName(projectDir);
-        await File.WriteAllLinesAsync(Path.Combine(projectDir, $"{SessionId}.jsonl"),
-        [
-            // cwd must be a directory that exists: RebuildSessionsList drops a session whose non-empty
-            // cwd fails IsValidProjectDirectory, and the helper's default is a Unix path that does not.
-            BuildAssistantEntry(SessionId, "uuid-ctx-1", "req-ctx-1", cwd: projectDir, inputTokens: 5000, outputTokens: 100)
-        ]);
+        var (_, projectDirName, _) = await SeedSessionAsync(SessionId,
+            BuildAssistantEntry(SessionId, "uuid-ctx-1", "req-ctx-1", cwd: projectDir, inputTokens: 5000, outputTokens: 100));
 
         using var pricingReached = new ManualResetEventSlim(false);
         using var releasePricing = new ManualResetEventSlim(false);
@@ -394,16 +340,11 @@ public class JsonlServiceTests : IDisposable
     public async Task GetTokenSummary_SumsOutputTokensAcrossAllAssistantMessages()
     {
         const string SessionId = "tok1aaaa-0000-0000-0000-000000000001";
-        var projectDir = CreateProjectSessionDir(SessionId);
-        var projectDirName = Path.GetFileName(projectDir);
-        var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
 
-        await File.WriteAllLinesAsync(jsonlFile,
-        [
+        var (_, projectDirName, _) = await SeedSessionAsync(SessionId,
             BuildAssistantEntry(SessionId, "uuid-1", "req-1", outputTokens: 100),
             BuildAssistantEntry(SessionId, "uuid-2", "req-2", outputTokens: 200),
-            BuildAssistantEntry(SessionId, "uuid-3", "req-3", outputTokens: 300)
-        ]);
+            BuildAssistantEntry(SessionId, "uuid-3", "req-3", outputTokens: 300));
 
         var service = BuildService();
         await service.InitializeAsync();
@@ -418,17 +359,12 @@ public class JsonlServiceTests : IDisposable
     {
         const string SessionId = "tok2aaaa-0000-0000-0000-000000000002";
         const string SharedMessageId = "msg_011CdkFMUPJsJvagAd5DXbrB";
-        var projectDir = CreateProjectSessionDir(SessionId);
-        var projectDirName = Path.GetFileName(projectDir);
-        var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
 
         // One assistant message written as two lines: distinct per-line uuids, shared
         // message.id + requestId. This is the shape Claude Code actually produces.
-        await File.WriteAllLinesAsync(jsonlFile,
-        [
+        var (_, projectDirName, _) = await SeedSessionAsync(SessionId,
             BuildAssistantEntry(SessionId, "uuid-1", "req-1", outputTokens: 500, messageId: SharedMessageId),
-            BuildAssistantEntry(SessionId, "uuid-2", "req-1", outputTokens: 500, messageId: SharedMessageId)
-        ]);
+            BuildAssistantEntry(SessionId, "uuid-2", "req-1", outputTokens: 500, messageId: SharedMessageId));
 
         var service = BuildService();
         await service.InitializeAsync();
@@ -455,13 +391,10 @@ public class JsonlServiceTests : IDisposable
         const long OutputTokens = 681L;
         const long CacheCreationTokens = 65_563L;
 
-        var projectDir = CreateProjectSessionDir(SessionId);
-        var projectDirName = Path.GetFileName(projectDir);
-        var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
         var withinCurrentHour = CurrentHourTimestamp(minute: 5);
 
         var lines = Enumerable.Range(1, 4)
-            .Select(lineNumber => BuildAssistantEntryWithCache(
+            .Select(lineNumber => BuildAssistantEntry(
                 SessionId,
                 uuid: $"line-{lineNumber}",
                 requestId: SharedRequestId,
@@ -472,7 +405,7 @@ public class JsonlServiceTests : IDisposable
                 messageId: SharedMessageId))
             .ToArray();
 
-        await File.WriteAllLinesAsync(jsonlFile, lines);
+        var (_, projectDirName, _) = await SeedSessionAsync(SessionId, lines);
 
         var service = BuildService(BuildNullPricingService());
         await service.InitializeAsync();
@@ -501,16 +434,10 @@ public class JsonlServiceTests : IDisposable
         const long PartialOutputTokens = 1L;
         const long FinalOutputTokens = 288L;
 
-        var projectDir = CreateProjectSessionDir(SessionId);
-        var projectDirName = Path.GetFileName(projectDir);
-        var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
-
-        await File.WriteAllLinesAsync(jsonlFile,
-        [
+        var (_, projectDirName, _) = await SeedSessionAsync(SessionId,
             BuildAssistantEntry(SessionId, "uuid-partial-1", "req-1", outputTokens: PartialOutputTokens, messageId: SharedMessageId),
             BuildAssistantEntry(SessionId, "uuid-partial-2", "req-1", outputTokens: PartialOutputTokens, messageId: SharedMessageId),
-            BuildAssistantEntry(SessionId, "uuid-final", "req-1", outputTokens: FinalOutputTokens, messageId: SharedMessageId)
-        ]);
+            BuildAssistantEntry(SessionId, "uuid-final", "req-1", outputTokens: FinalOutputTokens, messageId: SharedMessageId));
 
         var service = BuildService();
         await service.InitializeAsync();
@@ -529,15 +456,9 @@ public class JsonlServiceTests : IDisposable
     {
         const string SessionId = "tok6aaaa-0000-0000-0000-000000000006";
         const string SharedRequestId = "req-shared";
-        var projectDir = CreateProjectSessionDir(SessionId);
-        var projectDirName = Path.GetFileName(projectDir);
-        var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
-
-        await File.WriteAllLinesAsync(jsonlFile,
-        [
+        var (_, projectDirName, _) = await SeedSessionAsync(SessionId,
             BuildAssistantEntry(SessionId, "uuid-1", SharedRequestId, outputTokens: 100, messageId: "msg_first"),
-            BuildAssistantEntry(SessionId, "uuid-2", SharedRequestId, outputTokens: 200, messageId: "msg_second")
-        ]);
+            BuildAssistantEntry(SessionId, "uuid-2", SharedRequestId, outputTokens: 200, messageId: "msg_second"));
 
         var service = BuildService();
         await service.InitializeAsync();
@@ -551,15 +472,10 @@ public class JsonlServiceTests : IDisposable
     public async Task GetTokenSummary_IgnoresSidechainMessages()
     {
         const string SessionId = "tok3aaaa-0000-0000-0000-000000000003";
-        var projectDir = CreateProjectSessionDir(SessionId);
-        var projectDirName = Path.GetFileName(projectDir);
-        var jsonlFile = Path.Combine(projectDir, $"{SessionId}.jsonl");
 
-        await File.WriteAllLinesAsync(jsonlFile,
-        [
+        var (_, projectDirName, _) = await SeedSessionAsync(SessionId,
             BuildAssistantEntry(SessionId, "uuid-1", "req-1", outputTokens: 400),
-            BuildSidechainAssistantEntry(SessionId, "uuid-2", "req-2", outputTokens: 9999)
-        ]);
+            BuildSidechainAssistantEntry(SessionId, "uuid-2", "req-2", outputTokens: 9999));
 
         var service = BuildService();
         await service.InitializeAsync();
@@ -596,8 +512,8 @@ public class JsonlServiceTests : IDisposable
         var dirName1 = Path.GetFileName(dir1);
         var dirName2 = Path.GetFileName(dir2);
 
-        var cwd1 = Path.Combine(_tempDir, "project-alpha");
-        var cwd2 = Path.Combine(_tempDir, "project-beta");
+        var cwd1 = Path.Combine(ProjectsDir, "project-alpha");
+        var cwd2 = Path.Combine(ProjectsDir, "project-beta");
         Directory.CreateDirectory(cwd1);
         Directory.CreateDirectory(cwd2);
 
@@ -617,7 +533,7 @@ public class JsonlServiceTests : IDisposable
     public async Task Sessions_DisplayNameFromCwdField()
     {
         const string SessionId = "aaaaaaaa-0000-0000-0000-000000000010";
-        var cwd = Path.Combine(_tempDir, "my-awesome-project");
+        var cwd = Path.Combine(ProjectsDir, "my-awesome-project");
         Directory.CreateDirectory(cwd);
 
         CreateSessionFile(SessionId, cwd: cwd);
@@ -643,7 +559,7 @@ public class JsonlServiceTests : IDisposable
         var olderDirName = Path.GetFileName(olderDir);
         var newerDirName = Path.GetFileName(newerDir);
 
-        var cwd = Path.Combine(_tempDir, "shared-project-cwd");
+        var cwd = Path.Combine(ProjectsDir, "shared-project-cwd");
         Directory.CreateDirectory(cwd);
 
         CreateSessionFile(OlderSession, cwd: cwd, timestamp: olderTime);
@@ -666,8 +582,8 @@ public class JsonlServiceTests : IDisposable
         const string SurvivingSession = "aaa00001-0000-0000-0000-000000000001";
         const string OrphanSession = "bbb00002-0000-0000-0000-000000000002";
 
-        var realCwdA = Path.Combine(_tempDir, "real-project-aaa");
-        var realCwdB = Path.Combine(_tempDir, "real-project-bbb");
+        var realCwdA = Path.Combine(ProjectsDir, "real-project-aaa");
+        var realCwdB = Path.Combine(ProjectsDir, "real-project-bbb");
         Directory.CreateDirectory(realCwdA);
         Directory.CreateDirectory(realCwdB);
 
@@ -740,7 +656,7 @@ public class JsonlServiceTests : IDisposable
     public async Task BuildSubagentContext_ReturnsAlphabeticOrder()
     {
         const string SessionId = "eee00005-0000-0000-0000-000000000005";
-        var realCwd = Path.Combine(_tempDir, "real-project-eee");
+        var realCwd = Path.Combine(ProjectsDir, "real-project-eee");
         Directory.CreateDirectory(realCwd);
 
         CreateSessionFile(SessionId, cwd: realCwd);
@@ -813,7 +729,7 @@ public class JsonlServiceTests : IDisposable
         var service = BuildService();
         await service.InitializeAsync();
 
-        Assert.True(File.Exists(Path.Combine(_cacheDir, "jsonl-cache.json")));
+        Assert.True(File.Exists(Path.Combine(CacheDir, "jsonl-cache.json")));
     }
 
     /// <summary>
@@ -830,18 +746,18 @@ public class JsonlServiceTests : IDisposable
         const string SessionId = "cac1aaaa-0000-0000-0000-000000000060";
         var ghostPath = VanishedJsonlPath();
 
-        WriteCacheFile(_cacheDir, JsonSerializer.Serialize(new
+        WriteCacheFile(CacheDir, JsonSerializer.Serialize(new
         {
             filePositions = BuildGhostPositions(ghostPath)
         }));
 
         CreateSessionFile(SessionId);
-        var sessionFile = Path.Combine(_tempDir, "project-" + SessionId[..8], $"{SessionId}.jsonl");
+        var sessionFile = Path.Combine(ProjectsDir, "project-" + SessionId[..8], $"{SessionId}.jsonl");
 
         using var service = BuildService();
         await service.InitializeAsync();
 
-        var saved = ReadCacheFile(_cacheDir);
+        var saved = ReadCacheFile(CacheDir);
         Assert.Equal(JsonlCache.CurrentSchemaVersion, saved.SchemaVersion);
         Assert.DoesNotContain(ghostPath, saved.FilePositions.Keys);
         Assert.Contains(sessionFile, saved.FilePositions.Keys);
@@ -858,7 +774,7 @@ public class JsonlServiceTests : IDisposable
         const string SessionId = "cac2aaaa-0000-0000-0000-000000000061";
         var ghostPath = VanishedJsonlPath();
 
-        WriteCacheFile(_cacheDir, JsonSerializer.Serialize(new
+        WriteCacheFile(CacheDir, JsonSerializer.Serialize(new
         {
             schemaVersion = JsonlCache.CurrentSchemaVersion,
             filePositions = BuildGhostPositions(ghostPath)
@@ -869,7 +785,7 @@ public class JsonlServiceTests : IDisposable
         using var service = BuildService();
         await service.InitializeAsync();
 
-        var saved = ReadCacheFile(_cacheDir);
+        var saved = ReadCacheFile(CacheDir);
         Assert.Equal(JsonlCache.CurrentSchemaVersion, saved.SchemaVersion);
         Assert.Contains(ghostPath, saved.FilePositions.Keys);
     }
@@ -951,9 +867,9 @@ public class JsonlServiceTests : IDisposable
 
         await File.WriteAllLinesAsync(jsonlFile,
         [
-            BuildAssistantEntryWithCache(SessionId, "uuid-1", "req-1",
+            BuildAssistantEntry(SessionId, "uuid-1", "req-1",
                 inputTokens: 500, outputTokens: 100, cacheCreation: 200, cacheRead: 50),
-            BuildAssistantEntryWithCache(SessionId, "uuid-2", "req-2",
+            BuildAssistantEntry(SessionId, "uuid-2", "req-2",
                 inputTokens: 300, outputTokens: 80, cacheCreation: 0, cacheRead: 20)
         ]);
 
@@ -1085,57 +1001,38 @@ public class JsonlServiceTests : IDisposable
         return mock.Object;
     }
 
-    private static string BuildAssistantEntryWithCache(
-        string sessionId,
-        string uuid,
-        string requestId,
-        long inputTokens = 0,
-        long outputTokens = 0,
-        long cacheCreation = 0,
-        long cacheRead = 0,
-        DateTimeOffset? timestamp = null,
-        string? messageId = null)
-    {
-        return JsonSerializer.Serialize(new
-        {
-            uuid,
-            requestId,
-            sessionId,
-            cwd = "/home/user/project",
-            timestamp = (timestamp ?? DateTimeOffset.UtcNow).ToString("O"),
-            isSidechain = false,
-            type = "assistant",
-            message = new
-            {
-                id = messageId ?? DefaultMessageId(uuid),
-                model = "claude-sonnet-4-6",
-                usage = new
-                {
-                    input_tokens = inputTokens,
-                    output_tokens = outputTokens,
-                    cache_creation_input_tokens = cacheCreation,
-                    cache_read_input_tokens = cacheRead
-                }
-            }
-        });
-    }
-
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
     private string WriteTempFile(string content)
     {
-        var path = Path.Combine(_tempDir, Guid.NewGuid() + ".tmp");
+        var path = Path.Combine(ProjectsDir, Guid.NewGuid() + ".tmp");
         File.WriteAllText(path, content);
         return path;
     }
 
     private string CreateProjectSessionDir(string sessionId)
     {
-        var projectDir = Path.Combine(_tempDir, "project-" + sessionId[..8]);
+        var projectDir = Path.Combine(ProjectsDir, "project-" + sessionId[..8]);
         Directory.CreateDirectory(projectDir);
         return projectDir;
+    }
+
+    /// <summary>
+    /// Seeds one project directory holding one session file with the given lines, and returns the
+    /// project directory name the query methods take plus the paths some tests still touch. Ten test
+    /// methods opened with this same four-statement sequence, which is what made a change to how a
+    /// project is seeded a ten-site edit whose missed instance looks like a service bug.
+    /// </summary>
+    private async Task<(string ProjectDir, string ProjectDirName, string JsonlFile)> SeedSessionAsync(
+        string sessionId,
+        params string[] lines)
+    {
+        var projectDir = CreateProjectSessionDir(sessionId);
+        var jsonlFile = Path.Combine(projectDir, $"{sessionId}.jsonl");
+        await File.WriteAllLinesAsync(jsonlFile, lines);
+        return (projectDir, Path.GetFileName(projectDir), jsonlFile);
     }
 
     private void CreateSessionFile(
@@ -1156,50 +1053,39 @@ public class JsonlServiceTests : IDisposable
     }
 
     /// <summary>
-    /// Mirrors the real Claude Code line shape: a per-line <c>uuid</c> plus a
-    /// <c>message.id</c> that repeats across every line belonging to one assistant message.
-    /// There is deliberately no <c>uniqueHash</c> key — Claude Code never writes one
-    /// (0 occurrences across the maintainer's 145-file live corpus), so a fixture that
-    /// supplied it would test a schema that does not exist.
-    /// Pass <paramref name="messageId"/> explicitly to make several lines share one message.
+    /// Adapts this suite's call shape onto the shared line fixture — see
+    /// <see cref="JsonlFixture.AssistantLine"/> for the schema and why it is stated in one place.
     /// </summary>
     private static string BuildAssistantEntry(
         string sessionId,
         string uuid,
         string requestId,
         string? cwd = null,
-        string? model = "claude-sonnet-4-6",
+        string? model = JsonlFixture.DefaultModel,
         long inputTokens = 0,
         long outputTokens = 0,
+        long cacheCreation = 0,
+        long cacheRead = 0,
         bool isSidechain = false,
         DateTimeOffset? timestamp = null,
         string? messageId = null)
     {
-        return JsonSerializer.Serialize(new
-        {
+        return JsonlFixture.AssistantLine(
+            sessionId,
             uuid,
             requestId,
-            sessionId,
-            cwd = cwd ?? "/home/user/project",
-            timestamp = (timestamp ?? DateTimeOffset.UtcNow).ToString("O"),
-            isSidechain,
-            type = "assistant",
-            message = new
-            {
-                id = messageId ?? DefaultMessageId(uuid),
-                model,
-                usage = new
-                {
-                    input_tokens = inputTokens,
-                    output_tokens = outputTokens,
-                    cache_read_input_tokens = 0,
-                    cache_creation_input_tokens = 0
-                }
-            }
-        });
+            cwd: cwd ?? JsonlFixture.DefaultCwd,
+            model: model,
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            cacheCreation: cacheCreation,
+            cacheRead: cacheRead,
+            isSidechain: isSidechain,
+            timestamp: timestamp,
+            messageId: messageId);
     }
 
-    private static string DefaultMessageId(string uuid) => "msg_" + uuid;
+    private static string DefaultMessageId(string uuid) => JsonlFixture.MessageIdFor(uuid);
 
     private static string BuildSidechainAssistantEntry(
         string sessionId,

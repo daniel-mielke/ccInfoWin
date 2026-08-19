@@ -1,4 +1,3 @@
-using CCInfoWindows.Helpers;
 using CCInfoWindows.Models;
 
 namespace CCInfoWindows.Tests.Helpers;
@@ -26,6 +25,7 @@ public class ContextWindowTests
     [InlineData(0, 200_000, 0.0)]
     [InlineData(167_000, 200_000, 1.0)]              // 167K / (200K - 33K) = 1.0
     [InlineData(100_000, 200_000, 0.5988)]           // 100K / 167K ~ 0.5988 (validates effective = 167K)
+    [InlineData(250_000, 200_000, 1.0)]              // clamped to [0, 1] — cannot exceed 1.0
     [InlineData(967_000, 1_000_000, 1.0)]            // 967K / (1M - 33K) = 1.0 (Opus session)
     public void ContextWindowData_Utilization_ComputesTotalOverEffectiveMax(
         long totalTokens, long maxTokens, double expectedUtilization)
@@ -35,54 +35,8 @@ public class ContextWindowTests
         Assert.Equal(expectedUtilization, data.Utilization, precision: 4);
     }
 
-    [Fact]
-    public void ContextWindowData_Utilization_ClampsAtOne()
-    {
-        // Utilization is clamped to [0, 1] — cannot exceed 1.0
-        var data = new ContextWindowData { TotalTokens = 250_000, MaxTokens = 200_000 };
-
-        Assert.Equal(1.0, data.Utilization);
-    }
-
-    [Fact]
-    public void ContextWindowData_Utilization_ZeroTokens_ReturnsZero()
-    {
-        var data = new ContextWindowData { TotalTokens = 0, MaxTokens = 200_000 };
-
-        Assert.Equal(0.0, data.Utilization);
-    }
-
-    // CTXW-02: model badge mapping
-    [Theory]
-    [InlineData("claude-opus-4-6", "Opus 4.6")]
-    [InlineData("claude-sonnet-4-6", "Sonnet 4.6")]
-    [InlineData("claude-haiku-4-5", "Haiku 4.5")]
-    [InlineData("claude-haiku-4-5-20251001", "Haiku 4.5")]
-    [InlineData(null, "Unbekannt")]
-    public void ModelContextLimits_GetDisplayName_ReturnsFriendlyBadgeNames(
-        string? modelName, string expected)
-    {
-        var result = ModelContextLimits.GetDisplayName(modelName);
-
-        Assert.Equal(expected, result);
-    }
-
-    // CTXW-04: autocompact threshold — 20K before the effective max, i.e. before the same
-    // baseline Utilization divides by. Subtracting the buffer from the raw max instead put the
-    // threshold 13K above the point where the bar already showed 100%.
-    [Theory]
-    [InlineData(147_000, 200_000, true)]    // exactly at boundary (167K effective - 20K)
-    [InlineData(160_000, 200_000, true)]    // above boundary, bar not yet saturated
-    [InlineData(190_000, 200_000, true)]    // bar long saturated
-    [InlineData(146_999, 200_000, false)]   // just below boundary
-    [InlineData(50_000, 200_000, false)]    // well below
-    public void ModelContextLimits_ShouldWarnAutocompact_Warns20KBeforeEffectiveMax(
-        long totalTokens, long maxTokens, bool expected)
-    {
-        var result = ModelContextLimits.ShouldWarnAutocompact(totalTokens, maxTokens);
-
-        Assert.Equal(expected, result);
-    }
+    // CTXW-02 (model badge mapping) and CTXW-04 (autocompact threshold) are asserted in
+    // ModelContextLimitsTests, which owns that helper and carries the superset of these rows.
 
     [Theory]
     [InlineData(0, 200_000, 0.0)]

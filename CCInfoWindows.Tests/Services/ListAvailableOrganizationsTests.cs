@@ -1,7 +1,8 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using CCInfoWindows.Messages;
 using CCInfoWindows.Services;
 using CCInfoWindows.Services.Interfaces;
+using CCInfoWindows.Tests.TestSupport;
 using CommunityToolkit.Mvvm.Messaging;
 using Moq;
 
@@ -19,37 +20,18 @@ namespace CCInfoWindows.Tests.Services;
 /// every following usage fetch went to /api/organizations//usage.
 /// </summary>
 [Collection("WeakReferenceMessenger")]
-public class ListAvailableOrganizationsTests : IDisposable
+public class ListAvailableOrganizationsTests : ClaudeApiServiceTestBase
 {
     private const string OrganizationsUrl = ClaudeAiUrlPolicy.Origin + "/api/organizations";
     private const string UsagePathSuffix = "/usage";
     private const string ValidOrgId = "org-valid";
 
-    private readonly Mock<IWebViewBridge> _bridgeMock = new();
-    private readonly Mock<ICredentialService> _credentialMock = new();
-    private readonly string _cacheDirectory =
-        Path.Combine(Path.GetTempPath(), $"ccinfo_orglist_{Guid.NewGuid():N}");
-
-    public ListAvailableOrganizationsTests()
+    public ListAvailableOrganizationsTests() : base("ccinfo_orglist_")
     {
-        _bridgeMock.Setup(b => b.IsInitialized).Returns(true);
     }
-
-    public void Dispose()
-    {
-        WeakReferenceMessenger.Default.UnregisterAll(this);
-
-        if (Directory.Exists(_cacheDirectory))
-        {
-            Directory.Delete(_cacheDirectory, recursive: true);
-        }
-    }
-
-    private ClaudeApiService CreateService()
-        => new(_bridgeMock.Object, _credentialMock.Object, _cacheDirectory);
 
     private void RespondToOrganizationsWith(string? responseBody)
-        => _bridgeMock.Setup(b => b.FetchJsonAsync(OrganizationsUrl)).ReturnsAsync(responseBody);
+        => BridgeMock.Setup(b => b.FetchJsonAsync(OrganizationsUrl)).ReturnsAsync(responseBody);
 
     [Fact]
     public async Task ListAvailableOrganizations_ParsesEveryEntryFromTheOrganizationsEndpoint()
@@ -70,17 +52,17 @@ public class ListAvailableOrganizationsTests : IDisposable
         Assert.Equal("My Team", result[1].Name);
 
         // The endpoint itself is part of the contract — a mirrored parser could never assert it.
-        _bridgeMock.Verify(b => b.FetchJsonAsync(OrganizationsUrl), Times.Once);
+        BridgeMock.Verify(b => b.FetchJsonAsync(OrganizationsUrl), Times.Once);
     }
 
     [Fact]
     public async Task ListAvailableOrganizations_WithoutAnInitializedBridge_ReturnsEmptyWithoutFetching()
     {
-        _bridgeMock.Setup(b => b.IsInitialized).Returns(false);
+        BridgeMock.Setup(b => b.IsInitialized).Returns(false);
 
         Assert.Empty(await CreateService().ListAvailableOrganizationsAsync());
 
-        _bridgeMock.Verify(b => b.FetchJsonAsync(It.IsAny<string>()), Times.Never);
+        BridgeMock.Verify(b => b.FetchJsonAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
@@ -158,7 +140,7 @@ public class ListAvailableOrganizationsTests : IDisposable
     [Fact]
     public async Task ListAvailableOrganizations_OnSessionExpiry_ReturnsEmptyAndAsksForReauthentication()
     {
-        _bridgeMock.Setup(b => b.FetchJsonAsync(OrganizationsUrl))
+        BridgeMock.Setup(b => b.FetchJsonAsync(OrganizationsUrl))
                    .ThrowsAsync(new SessionExpiredException());
 
         var authStates = new List<bool>();
@@ -175,7 +157,7 @@ public class ListAvailableOrganizationsTests : IDisposable
         // The failure the empty-uuid guard prevents: the auto-pick takes orgs[0], so an entry the parser
         // should have dropped becomes the persisted org id and every usage fetch of that session goes to
         // /api/organizations//usage — a 404 loop the user can only escape by logging out.
-        _credentialMock.Setup(c => c.GetOrganizationId()).Returns((string?)null);
+        CredentialMock.Setup(c => c.GetOrganizationId()).Returns((string?)null);
         RespondToOrganizationsWith($$"""
             [
               {"uuid":"","name":"Empty uuid"},
@@ -184,7 +166,7 @@ public class ListAvailableOrganizationsTests : IDisposable
             """);
 
         string? usageUrl = null;
-        _bridgeMock
+        BridgeMock
             .Setup(b => b.FetchJsonAsync(It.Is<string>(url => url.EndsWith(UsagePathSuffix, StringComparison.Ordinal))))
             .Callback<string>(url => usageUrl = url)
             .ReturnsAsync(EmptyUsageJson);
@@ -192,22 +174,22 @@ public class ListAvailableOrganizationsTests : IDisposable
         var result = await CreateService().FetchUsageAsync();
 
         Assert.NotNull(result);
-        _credentialMock.Verify(c => c.SaveOrganizationId(ValidOrgId), Times.Once);
+        CredentialMock.Verify(c => c.SaveOrganizationId(ValidOrgId), Times.Once);
         Assert.Equal($"{OrganizationsUrl}/{ValidOrgId}{UsagePathSuffix}", usageUrl);
     }
 
     [Fact]
     public async Task FetchUsage_WhenNoOrgHasAUsableUuid_FailsInsteadOfFetchingAnEmptyOrgUrl()
     {
-        _credentialMock.Setup(c => c.GetOrganizationId()).Returns((string?)null);
+        CredentialMock.Setup(c => c.GetOrganizationId()).Returns((string?)null);
         RespondToOrganizationsWith("""[{"uuid":"","name":"Empty uuid"}]""");
 
         var service = CreateService();
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.FetchUsageAsync());
 
-        _credentialMock.Verify(c => c.SaveOrganizationId(It.IsAny<string>()), Times.Never);
-        _bridgeMock.Verify(
+        CredentialMock.Verify(c => c.SaveOrganizationId(It.IsAny<string>()), Times.Never);
+        BridgeMock.Verify(
             b => b.FetchJsonAsync(It.Is<string>(url => url.EndsWith(UsagePathSuffix, StringComparison.Ordinal))),
             Times.Never);
     }

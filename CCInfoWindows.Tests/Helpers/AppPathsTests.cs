@@ -1,4 +1,5 @@
 using CCInfoWindows.Helpers;
+using CCInfoWindows.Tests.Convention;
 
 namespace CCInfoWindows.Tests.Helpers;
 
@@ -69,10 +70,11 @@ public class AppPathsTests
     [Fact]
     public void AppPaths_IsTheOnlyProductionFileThatDerivesTheLocalAppDataRoot()
     {
-        var offenders = ProductionSourceFiles.All()
-            .Where(file => !AllowedToDeriveTheRoot.Contains(file.Name, StringComparer.OrdinalIgnoreCase))
-            .Where(file => LocalAppDataApis.Any(api => file.Text.Contains(api, StringComparison.Ordinal)))
-            .Select(file => file.Name)
+        // One call per needle: a hand-rolled copy of the layout needs either API, so a file matching
+        // either one is an offender.
+        var offenders = LocalAppDataApis
+            .SelectMany(api => ProductionSourceFiles.FilesContaining(api, AllowedToDeriveTheRoot))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         Assert.True(
@@ -118,6 +120,22 @@ internal static class ProductionSourceFiles
     /// </summary>
     internal static string Root => LazySourceRoot.Value;
 
+    /// <summary>
+    /// Names of the app-project files whose text contains <paramref name="needle"/>, minus the files
+    /// listed in <paramref name="exempt"/>. That is the shape every "this construct lives in exactly
+    /// one place" scan needs, and four suites had hand-rolled it at five sites. The needle is Ordinal
+    /// (source text is exact); file names OrdinalIgnoreCase, because NTFS is case-insensitive.
+    /// Deduplicated and ordered, so a failure message reads the same on every run even when two
+    /// directories hold a file of the same name.
+    /// </summary>
+    internal static IEnumerable<string> FilesContaining(string needle, params string[] exempt) =>
+        All()
+            .Where(file => !exempt.Contains(file.Name, StringComparer.OrdinalIgnoreCase))
+            .Where(file => file.Text.Contains(needle, StringComparison.Ordinal))
+            .Select(file => file.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order();
+
     /// <summary>Text of the one production file with this name, wherever it sits in the tree.</summary>
     internal static string Read(string fileName)
     {
@@ -132,7 +150,7 @@ internal static class ProductionSourceFiles
     {
         var files = Directory
             .EnumerateFiles(LazySourceRoot.Value, "*.cs", SearchOption.AllDirectories)
-            .Where(path => !IsBuildOutput(path))
+            .Where(path => !SourceTree.IsBuildOutput(path))
             .Select(path => new SourceFile(Path.GetFileName(path), File.ReadAllText(path)))
             .ToList();
 
@@ -142,11 +160,6 @@ internal static class ProductionSourceFiles
 
         return files;
     }
-
-    // obj\ and bin\ hold source-generator output and copies of the very files being scanned.
-    private static bool IsBuildOutput(string path) =>
-        path.Contains(@"\obj\", StringComparison.OrdinalIgnoreCase)
-        || path.Contains(@"\bin\", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Walks up from the test output directory to the app's source root — the compiled assembly carries
