@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using CCInfoWindows.Helpers;
@@ -171,6 +171,21 @@ public partial class MainViewModel : ObservableObject,
     internal const string ChartExportFailedUid = "ChartExportFailed";
     private const string ChartExportFailedFallback = "The chart could not be exported.";
 
+    /// <summary>
+    /// No-data text of the utilization panels (5-hour, weekly, Sonnet, context).
+    ///
+    /// The statistics panel deliberately writes <see cref="NoStatisticsDataText"/> instead. Those are
+    /// two display conventions, not one rule spelled twice — so each is single-sourced on its own and
+    /// the two are NOT unified.
+    /// </summary>
+    private const string NoDataText = "--";
+
+    /// <summary>
+    /// No-data text of the statistics panel: an en dash. Spelled as an escape, like every other
+    /// non-ASCII string literal in this file — a PowerShell bulk edit has already corrupted one once.
+    /// </summary>
+    private const string NoStatisticsDataText = "\u2013";
+
     private readonly ICredentialService _credentialService;
     private readonly INavigationService _navigationService;
     private readonly IClaudeApiService _apiService;
@@ -233,10 +248,10 @@ public partial class MainViewModel : ObservableObject,
     private double _fiveHourPercentage;
 
     [ObservableProperty]
-    private string _fiveHourPercentageText = "--";
+    private string _fiveHourPercentageText = NoDataText;
 
     [ObservableProperty]
-    private string _fiveHourCountdown = "--";
+    private string _fiveHourCountdown = NoDataText;
 
     // NEXTWIN-01..03: absolute reset-time label below the countdown (D-NW-04)
     [ObservableProperty]
@@ -264,13 +279,13 @@ public partial class MainViewModel : ObservableObject,
     private double _weeklyPercentage;
 
     [ObservableProperty]
-    private string _weeklyPercentageText = "--";
+    private string _weeklyPercentageText = NoDataText;
 
     [ObservableProperty]
-    private string _weeklyCountdown = "--";
+    private string _weeklyCountdown = NoDataText;
 
     [ObservableProperty]
-    private string _weeklyResetDate = "--";
+    private string _weeklyResetDate = NoDataText;
 
     private DateTimeOffset? _weeklyResetsAt;
 
@@ -283,13 +298,13 @@ public partial class MainViewModel : ObservableObject,
     private double _sonnetPercentage;
 
     [ObservableProperty]
-    private string _sonnetPercentageText = "--";
+    private string _sonnetPercentageText = NoDataText;
 
     [ObservableProperty]
-    private string _sonnetCountdown = "--";
+    private string _sonnetCountdown = NoDataText;
 
     [ObservableProperty]
-    private string _sonnetResetDate = "--";
+    private string _sonnetResetDate = NoDataText;
 
     private DateTimeOffset? _sonnetResetsAt;
 
@@ -401,7 +416,7 @@ public partial class MainViewModel : ObservableObject,
     private double _contextPercentage;
 
     [ObservableProperty]
-    private string _contextPercentageText = "--";
+    private string _contextPercentageText = NoDataText;
 
     [ObservableProperty]
     private string _contextModelBadge = string.Empty;
@@ -427,25 +442,25 @@ public partial class MainViewModel : ObservableObject,
     private bool _isAggregating;
 
     [ObservableProperty]
-    private string _statisticsModels = "\u2013";
+    private string _statisticsModels = NoStatisticsDataText;
 
     [ObservableProperty]
-    private string _statisticsInput = "\u2013";
+    private string _statisticsInput = NoStatisticsDataText;
 
     [ObservableProperty]
-    private string _statisticsOutput = "\u2013";
+    private string _statisticsOutput = NoStatisticsDataText;
 
     [ObservableProperty]
-    private string _statisticsCacheCreation = "\u2013";
+    private string _statisticsCacheCreation = NoStatisticsDataText;
 
     [ObservableProperty]
-    private string _statisticsCacheRead = "\u2013";
+    private string _statisticsCacheRead = NoStatisticsDataText;
 
     [ObservableProperty]
-    private string _statisticsTotal = "\u2013";
+    private string _statisticsTotal = NoStatisticsDataText;
 
     [ObservableProperty]
-    private string _statisticsCost = "\u2013";
+    private string _statisticsCost = NoStatisticsDataText;
 
     // --- Sorted session display items ---
 
@@ -492,10 +507,10 @@ public partial class MainViewModel : ObservableObject,
     private void InvalidateChart() => WeakReferenceMessenger.Default.Send(new ChartInvalidateMessage());
 
     /// <summary>
-    /// Start of the current 5-hour window, computed as ResetsAt minus 5 hours.
+    /// Start of the current rate-limit window, computed as ResetsAt minus the window length.
     /// Returns null until the first API response is received.
     /// </summary>
-    public DateTimeOffset? FiveHourWindowStart => _fiveHourResetsAt?.AddHours(-5);
+    public DateTimeOffset? FiveHourWindowStart => _fiveHourResetsAt?.Subtract(RateLimitWindow.Duration);
 
     /// <summary>
     /// PRICING-03 / D-PR-04: banner-stack policy — pricing InfoBar suppressed while auth banner shows.
@@ -741,6 +756,21 @@ public partial class MainViewModel : ObservableObject,
         => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
 
     /// <summary>
+    /// The percentage rule every panel and every subagent row renders: a 0..1 utilization becomes a
+    /// 0..100 percentage clamped at the length of the bar's track, plus the text for it.
+    ///
+    /// Both halves in one call because they have to agree — the clamp used to be spelled at four
+    /// sites, so dropping it (or moving to one decimal, or to a culture-aware percent format) at one
+    /// of them left one bar rendering past its rail while the others saturated, or two panels showing
+    /// "97.4 %" and "97 %" for the same number.
+    /// </summary>
+    private static (double Value, string Text) ToPercentage(double utilization)
+    {
+        var value = Math.Min(utilization * 100, 100);
+        return (value, $"{value:0}%");
+    }
+
+    /// <summary>
     /// Called by MainView on load and on ActualThemeChanged. x:Bind OneWay cannot re-evaluate on a
     /// theme toggle, so the brushes are recomputed here instead of by a converter (finding 42).
     /// </summary>
@@ -769,11 +799,19 @@ public partial class MainViewModel : ObservableObject,
     }
 
     // D-03: auto-poll wrapper — no 250ms floor (D-02). The 250ms anti-flicker only applies to manual Refresh.
-    private async Task PollUsageAsync()
+    private Task PollUsageAsync() => RunGuardedRefreshAsync(PollUsageCoreAsync);
+
+    /// <summary>
+    /// The reentrancy guard both refresh routes share: at most one poll in flight, with IsRefreshing
+    /// driving the spinner and RefreshCommand.CanExecute (D-04). The routes differ only in what they
+    /// await — the 250 ms anti-flicker floor belongs to the manual click alone (D-02/D-03) — so
+    /// anything added to the guard now reaches the auto-poll and the button alike.
+    /// </summary>
+    private async Task RunGuardedRefreshAsync(Func<Task> work)
     {
         if (IsRefreshing) return;
         IsRefreshing = true;
-        try { await PollUsageCoreAsync(); }
+        try { await work(); }
         finally { IsRefreshing = false; }
     }
 
@@ -816,16 +854,22 @@ public partial class MainViewModel : ObservableObject,
 
     private async Task UpdateUsagePropertiesAsync(UsageResponse data)
     {
-        // 5-STUNDEN-FENSTER = FiveHour
+        // 5-STUNDEN-FENSTER = FiveHour. Numbers, text and countdown come from the same reader the two
+        // weekly panels use, so the no-data placeholder and the countdown call cannot be hardened on
+        // the weekly panels while silently skipping the most prominent panel on the dashboard.
+        var fiveHour = ReadPanelValues(data.FiveHour);
+        FiveHourUtilization = fiveHour.Utilization;
+        FiveHourPercentage = fiveHour.Percentage;
+        FiveHourPercentageText = fiveHour.PercentageText;
+        FiveHourCountdown = fiveHour.Countdown;
+
+        // The tail is 5-hour-only: history plus burn rate, or clearing both. Not routed through
+        // ApplyWeeklyWindow, whose extra reset-date and resets-at delegates this panel has no use for
+        // — _fiveHourResetsAt is written by AppendHistoryPointAsync, deliberately before the chart is
+        // invalidated.
         if (data.FiveHour != null)
         {
-            var util = data.FiveHour.NormalizedUtilization;
-            FiveHourUtilization = util;
-            FiveHourPercentage = Math.Min(util * 100, 100);
-            FiveHourPercentageText = $"{Math.Min(util * 100, 100):0}%";
-            FiveHourCountdown = CountdownFormatter.FormatCountdown(data.FiveHour.ResetsAt);
-
-            await AppendHistoryPointAsync(data.FiveHour.ResetsAt, util);
+            await AppendHistoryPointAsync(data.FiveHour.ResetsAt, fiveHour.Utilization);
 
             // Burn rate prediction — uses Utilization (0-100) NOT NormalizedUtilization (0-1)
             var prediction = BurnRateCalculator.Predict(
@@ -841,10 +885,6 @@ public partial class MainViewModel : ObservableObject,
         }
         else
         {
-            FiveHourUtilization = 0;
-            FiveHourPercentage = 0;
-            FiveHourPercentageText = "--";
-            FiveHourCountdown = "--";
             _fiveHourResetsAt = null;
             RecomputeNextWindowLabel();   // NEXTWIN — clears label when API returns no FiveHour
             IsBurnRateWarningVisible = false;
@@ -947,30 +987,36 @@ public partial class MainViewModel : ObservableObject,
             timeLabel);
     }
 
+    /// <summary>
+    /// The four values every utilization panel derives from one API window, and the one place both the
+    /// no-data placeholder and the countdown call live for all three of them — the 5-hour panel
+    /// included, which used to spell this out by hand.
+    /// </summary>
+    private static (double Utilization, double Percentage, string PercentageText, string Countdown)
+        ReadPanelValues(UsageWindow? window)
+    {
+        if (window is null) return (0, 0, NoDataText, NoDataText);
+
+        var util = window.NormalizedUtilization;
+        var percentage = ToPercentage(util);
+        return (util, percentage.Value, percentage.Text, CountdownFormatter.FormatCountdown(window.ResetsAt));
+    }
+
     private static void ApplyWeeklyWindow(
         UsageWindow? window,
         Action<double> setUtilization, Action<double> setPercentage, Action<string> setPercentageText,
         Action<string> setCountdown, Action<string> setResetDate, Action<DateTimeOffset?> setResetsAt)
     {
-        if (window != null)
-        {
-            var util = window.NormalizedUtilization;
-            setUtilization(util);
-            setPercentage(Math.Min(util * 100, 100));
-            setPercentageText($"{Math.Min(util * 100, 100):0}%");
-            setCountdown(CountdownFormatter.FormatCountdown(window.ResetsAt));
-            setResetDate(CountdownFormatter.FormatResetDate(window.ResetsAt));
-            setResetsAt(window.ResetsAt);
-        }
-        else
-        {
-            setUtilization(0);
-            setPercentage(0);
-            setPercentageText("--");
-            setCountdown("--");
-            setResetDate("--");
-            setResetsAt(null);
-        }
+        var panel = ReadPanelValues(window);
+        setUtilization(panel.Utilization);
+        setPercentage(panel.Percentage);
+        setPercentageText(panel.PercentageText);
+        setCountdown(panel.Countdown);
+
+        // The reset date and the tracked reset time are the weekly panels' own: the 5-hour panel has
+        // no date label, and its reset time is written by AppendHistoryPointAsync.
+        setResetDate(window is null ? NoDataText : CountdownFormatter.FormatResetDate(window.ResetsAt));
+        setResetsAt(window?.ResetsAt);
     }
 
     /// <summary>
@@ -990,7 +1036,7 @@ public partial class MainViewModel : ObservableObject,
         history.ResetsAt = apiResetsAt;
 
         var now = DateTimeOffset.UtcNow;
-        var windowDuration = TimeSpan.FromHours(5);
+        var windowDuration = RateLimitWindow.Duration;
 
         // Cutoff is the start of the CURRENT 5h window (apiResetsAt - 5h), not now - 5h.
         // Falls back to now - 5h only if the API never delivered a resetsAt. This prevents
@@ -1017,14 +1063,22 @@ public partial class MainViewModel : ObservableObject,
         InvalidateChart();
     }
 
-    private static readonly TimeSpan WindowResetTolerance = TimeSpan.FromMinutes(2);
-
+    /// <summary>
+    /// Decides whether the rate-limit window rotated, and therefore whether the persisted chart
+    /// history belongs to a window that is gone.
+    ///
+    /// The clock-skew allowance is <see cref="UsageNotificationService.RotationClockSkewTolerance"/>
+    /// rather than a second copy of the same two minutes: the notification service answers the same
+    /// question for the reset toast and the re-armed 80/95 % toasts, and at a boundary where the two
+    /// disagreed the chart would splice a new window onto the old curve while the toast announced a
+    /// reset, or the history would be cleared with no toast at all.
+    /// </summary>
     internal static bool IsWindowReset(DateTimeOffset? storedResetsAt, DateTimeOffset? apiResetsAt)
     {
         if (!storedResetsAt.HasValue || !apiResetsAt.HasValue) return false;
 
         var difference = (apiResetsAt.Value - storedResetsAt.Value).Duration();
-        return difference > WindowResetTolerance;
+        return difference > UsageNotificationService.RotationClockSkewTolerance;
     }
 
     private void UpdateCountdowns()
@@ -1377,33 +1431,36 @@ public partial class MainViewModel : ObservableObject,
         // panels this method just cleared.
         _contextWindowRequest++;
 
-        ContextUtilization = 0;
-        ContextPercentage = 0;
-        ContextPercentageText = "--";
-        ContextModelBadge = string.Empty;
-        ContextModelBadgeColor = _brushFactory(ModelContextLimits.GetBadgeColorHex(null));
-        ShowAutocompactWarning = false;
-        HasActiveSession = false;
-        SubagentContexts.Clear();
+        PaintContextWindow(ContextWindowData.Empty, hasSession: false);
         // Do NOT reset SelectedTabIndex — user's tab choice must survive session refreshes
         ApplyStatistics(StatisticsSummary.Empty);
     }
 
     partial void OnSelectedTabIndexChanged(int value)
+        => DispatchStatistics((TimePeriod)value, showLoading: true);
+
+    /// <summary>
+    /// Dispatches the statistics panel for one period: the Session tab reads synchronously, every
+    /// other tab aggregates off the UI thread under a fresh cancellation token. The loading spinner is
+    /// the only difference between the two callers — a tab switch shows it, a repaint triggered by a
+    /// context-window read does not.
+    ///
+    /// The cancel sits above the Session branch, so switching to Session also drops an aggregate still
+    /// in flight instead of letting it repaint over the session numbers.
+    /// </summary>
+    private void DispatchStatistics(TimePeriod period, bool showLoading)
     {
         _statisticsCts?.Cancel();
 
-        var period = (TimePeriod)value;
         if (period == TimePeriod.Session)
         {
             UpdateStatisticsFromSession();
+            return;
         }
-        else
-        {
-            var cts = new CancellationTokenSource();
-            _statisticsCts = cts;
-            _ = AggregateStatisticsAsync(period, cts.Token);
-        }
+
+        var cts = new CancellationTokenSource();
+        _statisticsCts = cts;
+        _ = AggregateStatisticsAsync(period, cts.Token, showLoading);
     }
 
     private void UpdateStatisticsFromSession()
@@ -1456,8 +1513,10 @@ public partial class MainViewModel : ObservableObject,
     internal void ApplyStatistics(StatisticsSummary stats)
     {
         var displayModels = stats.Models
-            .Where(m => !string.Equals(m, "<synthetic>", StringComparison.OrdinalIgnoreCase)
-                     && !string.Equals(m, "synthetic", StringComparison.OrdinalIgnoreCase)
+            // The synthetic markers come from JsonlService, which owns that vocabulary — a new marker
+            // taught to the service must not leak a raw id into this row. "unknown" stays local: it is
+            // a display placeholder, not a marker Claude Code writes.
+            .Where(m => !JsonlService.IsSyntheticModel(m)
                      && !string.Equals(m, "unknown", StringComparison.OrdinalIgnoreCase))
             .Select(ModelContextLimits.GetDisplayName)
             // Distinct: several raw ids collapse onto one display name (claude-opus-5-2026xxxx
@@ -1469,13 +1528,20 @@ public partial class MainViewModel : ObservableObject,
             .ToList();
         StatisticsModels = displayModels.Count > 0
             ? string.Join(", ", displayModels)
-            : "\u2013";
-        StatisticsInput = stats.InputTokens > 0 ? TokenFormatter.FormatTokenCount(stats.InputTokens) : "\u2013";
-        StatisticsOutput = stats.OutputTokens > 0 ? TokenFormatter.FormatTokenCount(stats.OutputTokens) : "\u2013";
-        StatisticsCacheCreation = stats.CacheCreationTokens > 0 ? TokenFormatter.FormatTokenCount(stats.CacheCreationTokens) : "\u2013";
-        StatisticsCacheRead = stats.CacheReadTokens > 0 ? TokenFormatter.FormatTokenCount(stats.CacheReadTokens) : "\u2013";
-        StatisticsTotal = stats.TotalTokens > 0 ? TokenFormatter.FormatTokenCount(stats.TotalTokens) : "\u2013";
+            : NoStatisticsDataText;
+
+        // One no-data rule for the five token rows: five copies of it made a wrong-member slip
+        // invisible: reading CacheCreationTokens under the CacheReadTokens guard compiles and reads
+        // plausibly.
+        StatisticsInput = FormatTokenRow(stats.InputTokens);
+        StatisticsOutput = FormatTokenRow(stats.OutputTokens);
+        StatisticsCacheCreation = FormatTokenRow(stats.CacheCreationTokens);
+        StatisticsCacheRead = FormatTokenRow(stats.CacheReadTokens);
+        StatisticsTotal = FormatTokenRow(stats.TotalTokens);
         StatisticsCost = CostFormatter.FormatCost(stats.TotalCostUsd, stats.HasEstimatedCosts);
+
+        static string FormatTokenRow(long value)
+            => value > 0 ? TokenFormatter.FormatTokenCount(value) : NoStatisticsDataText;
     }
 
     /// <summary>
@@ -1525,19 +1591,35 @@ public partial class MainViewModel : ObservableObject,
     {
         if (request != _contextWindowRequest) return;
 
+        PaintContextWindow(context, hasSession: true);
+        RecomputeStatisticsForCurrentTab();
+    }
+
+    /// <summary>
+    /// The one enumeration of the KONTEXTFENSTER properties, used by the apply path and the clear
+    /// path alike. The two lists were coupled by convention only, so a property added to the apply
+    /// path and forgotten in the clear path left the gone session's value on screen next to an empty
+    /// ComboBox — which is exactly the regression recorded on <see cref="ClearSessionData"/>.
+    ///
+    /// <paramref name="hasSession"/> false is the cleared state, and it is NOT the same as painting a
+    /// zeroed window: the panel then shows the no-data placeholder rather than a computed "0%", and an
+    /// empty badge rather than GetDisplayName's "unknown" label for a model nobody reported.
+    /// </summary>
+    private void PaintContextWindow(ContextWindowData context, bool hasSession)
+    {
+        var percentage = ToPercentage(context.Utilization);
+
         ContextUtilization = context.Utilization;
-        ContextPercentage = Math.Min(context.Utilization * 100, 100);
-        ContextPercentageText = $"{Math.Min(context.Utilization * 100, 100):0}%";
-        ContextModelBadge = ModelContextLimits.GetDisplayName(context.ModelName);
+        ContextPercentage = percentage.Value;
+        ContextPercentageText = hasSession ? percentage.Text : NoDataText;
+        ContextModelBadge = hasSession ? ModelContextLimits.GetDisplayName(context.ModelName) : string.Empty;
         ContextModelBadgeColor = _brushFactory(ModelContextLimits.GetBadgeColorHex(context.ModelName));
         ShowAutocompactWarning = context.ShouldWarnAutocompact;
-        HasActiveSession = true;
+        HasActiveSession = hasSession;
 
         SubagentContexts.Clear();
         foreach (var row in BuildSubagentRows(context.Subagents, _brushFactory, FormatWorkflowRow))
             SubagentContexts.Add(row);
-
-        RecomputeStatisticsForCurrentTab();
     }
 
     /// <summary>
@@ -1611,12 +1693,12 @@ public partial class MainViewModel : ObservableObject,
         SolidColorBrush badgeColor,
         DateTimeOffset lastActivity)
     {
-        var percentage = Math.Min(utilization * 100, 100);
+        var percentage = ToPercentage(utilization);
         return new SubagentDisplayData
         {
             AgentId = agentId,
-            Percentage = percentage,
-            PercentageText = $"{percentage:0}%",
+            Percentage = percentage.Value,
+            PercentageText = percentage.Text,
             ModelBadge = modelBadge,
             BadgeColor = badgeColor,
             Icon = PlainSubagentIcon,
@@ -1805,18 +1887,7 @@ public partial class MainViewModel : ObservableObject,
     /// Recomputes the statistics panel for whichever tab is active, without the loading spinner.
     /// </summary>
     private void RecomputeStatisticsForCurrentTab()
-    {
-        if (SelectedTabIndex == (int)TimePeriod.Session)
-        {
-            UpdateStatisticsFromSession();
-            return;
-        }
-
-        _statisticsCts?.Cancel();
-        var cts = new CancellationTokenSource();
-        _statisticsCts = cts;
-        _ = AggregateStatisticsAsync((TimePeriod)SelectedTabIndex, cts.Token, showLoading: false);
-    }
+        => DispatchStatistics((TimePeriod)SelectedTabIndex, showLoading: false);
 
     private static SolidColorBrush ParseHexBrush(string hex)
     {
@@ -1836,19 +1907,9 @@ public partial class MainViewModel : ObservableObject,
 
     // D-02: 250ms anti-flicker floor — manual click only. D-04 Option A: CanExecute auto-disables button while refreshing.
     [RelayCommand(CanExecute = nameof(CanRefresh))]
-    private async Task Refresh()
-    {
-        if (IsRefreshing) return;
-        IsRefreshing = true;
-        try
-        {
-            await Task.WhenAll(
-                PollUsageCoreAsync(),
-                Task.Delay(TimeSpan.FromMilliseconds(MinimumSpinnerDisplayMs))
-            );
-        }
-        finally { IsRefreshing = false; }
-    }
+    private Task Refresh() => RunGuardedRefreshAsync(() => Task.WhenAll(
+        PollUsageCoreAsync(),
+        Task.Delay(TimeSpan.FromMilliseconds(MinimumSpinnerDisplayMs))));
 
     public bool CanRefresh => !IsRefreshing;
 
@@ -1895,22 +1956,18 @@ public partial class MainViewModel : ObservableObject,
     [RelayCommand]
     private async Task ExportChartAsPng()
     {
-        var appWindow = App.MainWindow?.AppWindow;
-        if (appWindow == null)
+        // Pattern-matched rather than null-checked so the captured window is non-nullable inside the
+        // renderer lambda below.
+        if (App.MainWindow?.AppWindow is not { } appWindow)
         {
             AppLog.Write(ExportLogSource, "no AppWindow to parent the save picker to");
             ReportActionError(ChartExportFailedUid, ChartExportFailedFallback, ExportLogSource);
             return;
         }
 
-        ClearActionError();
-        var exported = await ExportHelper.ExportChartAsPngAsync(
-            appWindow, UsageHistoryPoints, FiveHourWindowStart, FiveHourPercentageText, FiveHourCountdown, FiveHourUtilization);
-
-        if (!exported)
-        {
-            ReportActionError(ChartExportFailedUid, ChartExportFailedFallback, ExportLogSource);
-        }
+        await RunChartExportAsync((points, windowStart, percentageText, countdown, utilization) =>
+            ExportHelper.ExportChartAsPngAsync(
+                appWindow, points, windowStart, percentageText, countdown, utilization));
     }
 
     [RelayCommand]
@@ -1920,11 +1977,29 @@ public partial class MainViewModel : ObservableObject,
         // Clipboard.SetContent marshaling. Obtain it here on the UI thread (command executes on UI thread).
         var winuiDispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
-        ClearActionError();
-        var copied = await ExportHelper.CopyChartToClipboardAsync(
-            winuiDispatcherQueue, UsageHistoryPoints, FiveHourWindowStart, FiveHourPercentageText, FiveHourCountdown, FiveHourUtilization);
+        await RunChartExportAsync((points, windowStart, percentageText, countdown, utilization) =>
+            ExportHelper.CopyChartToClipboardAsync(
+                winuiDispatcherQueue, points, windowStart, percentageText, countdown, utilization));
+    }
 
-        if (!copied)
+    /// <summary>
+    /// Hands the chart snapshot to one of the two <see cref="ExportHelper"/> renderers and reports the
+    /// shared failure.
+    ///
+    /// The snapshot is read here and nowhere else: the argument list is positional and both renderers
+    /// take the same five values in the same order, so spelling it at each command let the saved PNG
+    /// and the clipboard image drift apart — a sixth value added at one site, or the two strings
+    /// swapped, compiles either way.
+    /// </summary>
+    private async Task RunChartExportAsync(
+        Func<IReadOnlyList<UsageHistoryPoint>, DateTimeOffset?, string, string, double, Task<bool>> render)
+    {
+        ClearActionError();
+
+        var succeeded = await render(
+            UsageHistoryPoints, FiveHourWindowStart, FiveHourPercentageText, FiveHourCountdown, FiveHourUtilization);
+
+        if (!succeeded)
         {
             ReportActionError(ChartExportFailedUid, ChartExportFailedFallback, ExportLogSource);
         }
@@ -1934,7 +2009,10 @@ public partial class MainViewModel : ObservableObject,
     private void OpenUpdateDownload()
     {
         if (string.IsNullOrEmpty(_updateDownloadUrl)) return;
-        if (!_updateDownloadUrl.StartsWith("https://github.com/", StringComparison.OrdinalIgnoreCase)) return;
+        // Review finding I4: one allow-list for the github.com egress. UpdateService already
+        // enforces it for the release URL it hands over, and its parse-then-compare host check
+        // is stricter than the prefix test this replaces.
+        if (!UpdateService.IsReleasePageUrl(_updateDownloadUrl)) return;
         Process.Start(new ProcessStartInfo(_updateDownloadUrl) { UseShellExecute = true });
     }
 

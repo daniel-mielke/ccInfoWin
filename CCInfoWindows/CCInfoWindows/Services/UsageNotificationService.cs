@@ -57,8 +57,11 @@ public sealed class UsageNotificationService : IUsageNotificationService, IDispo
 
     /// <summary>
     /// Clock-skew allowance when deciding whether an identity change is a real rotation: resets_at
-    /// comes from the server while the comparison uses the local clock. Same tolerance
-    /// MainViewModel.IsWindowReset applies to the history-clearing decision.
+    /// comes from the server while the comparison uses the local clock.
+    ///
+    /// Public because MainViewModel.IsWindowReset reads this very value for the history-clearing
+    /// decision instead of keeping its own copy — the two answers have to agree at the boundary, or
+    /// the chart splices a new window onto the old curve while the toast announces a reset.
     /// </summary>
     public static readonly TimeSpan RotationClockSkewTolerance = TimeSpan.FromMinutes(2);
 
@@ -256,30 +259,35 @@ public sealed class UsageNotificationService : IUsageNotificationService, IDispo
         ws.PeakUtilization = 0.0;
     }
 
+    /// <summary>
+    /// The half of the reset-toast rule both delivery paths share — the poll that observes a rotation
+    /// and the armed countdown that elapses. Whether the user gets the toast must not depend on which
+    /// of the two saw the boundary first.
+    ///
+    /// 5-hour: only report a window that was actually used. Strictly greater includes 100% and excludes
+    /// only a genuinely untouched window — sitting at the limit is exactly when the reminder is worth
+    /// most. Weekly windows are always reported.
+    ///
+    /// Deliberately does NOT decide the whole question: each path keeps its own extra guards (first run
+    /// ever and late delivery here, a stale window id there) and its own persistence, because only the
+    /// tick path has state to save and only the rotation path can be stale.
+    /// </summary>
+    private static bool IsResetToastOwed(UsageWindowKind kind, WindowNotificationState ws)
+        => kind != UsageWindowKind.FiveHour || ws.PeakUtilization > 0.0;
+
     private void SendResetToastIfDue(UsageWindowKind kind, WindowNotificationState previous)
     {
         if (previous.WindowId is null) return;      // first run ever — nothing rotated
         if (previous.NotifiedReset) return;         // the countdown already delivered it
 
-        // 5-hour: only report a window that was actually used. Strictly greater includes 100%
-        // and excludes only a genuinely untouched window — sitting at the limit is exactly when
-        // the reminder is worth most.
-        if (kind == UsageWindowKind.FiveHour && previous.PeakUtilization <= 0.0)
-        {
-            previous.NotifiedReset = true;
-            return;
-        }
+        var owed = IsResetToastOwed(kind, previous);
+        previous.NotifiedReset = true;
 
         // App was closed across the boundary and came back much later: advance without firing so
         // it cannot arrive as stale news.
-        if (previous.ResetsAt is { } previousReset && _clock() - previousReset > MaxLateResetToastAge)
-        {
-            previous.NotifiedReset = true;
-            return;
-        }
+        if (previous.ResetsAt is { } previousReset && _clock() - previousReset > MaxLateResetToastAge) return;
 
-        previous.NotifiedReset = true;
-        SendResetToast(kind);
+        if (owed) SendResetToast(kind);
     }
 
     /// <summary>
@@ -321,16 +329,11 @@ public sealed class UsageNotificationService : IUsageNotificationService, IDispo
         if (ws.WindowId != windowId) return;   // stale timer from a window that already rotated
         if (ws.NotifiedReset) return;
 
-        if (kind == UsageWindowKind.FiveHour && ws.PeakUtilization <= 0.0)
-        {
-            ws.NotifiedReset = true;
-            _store.Save(state);
-            return;
-        }
-
+        var owed = IsResetToastOwed(kind, ws);
         ws.NotifiedReset = true;
         _store.Save(state);
-        SendResetToast(kind);
+
+        if (owed) SendResetToast(kind);
     }
 
     private void CancelTimer(UsageWindowKind kind)
