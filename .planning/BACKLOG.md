@@ -72,6 +72,27 @@ GSD: promote via `/gsd-review-backlog`. Plan mode / ultracode: read this first.
   opposite direction. Verify against real data first — the 1.64× inflation factor measured on
   2026-08-07 (observation 6937) is the relevant precedent.
 
+### Carried out of v1.7 (shipped 2026-08-19, neither blocked the tag)
+
+- **Watcher-Frequenz unter Schreiblast ist unvermessen.** Die v1.7-UAT hat 0,05 % CPU über 20 s bei 51
+  gescannten Agent-Dateien gemessen — gegen einen **ruhenden** Dateibestand. Die Kostenfunktion ist
+  aber `Scan-Kosten × Event-Frequenz`, und bei ruhenden Dateien ist der zweite Faktor null. Belegt ist
+  „ein Scan ist billig"; offen ist, wie oft der `FileSystemWatcher` feuert, wenn ~44 Agents
+  gleichzeitig schreiben, denn jedes `DataUpdated` löst ein `GetContextWindow` samt rekursivem Scan
+  aus. **Nicht ungeschützt, nur unvermessen:** der Debounce (`JsonlService.DebounceMilliseconds`, 2 s,
+  bei jedem Event neu gestartet) fasst Event-Gewitter zusammen, und `36e99bf` memoisiert
+  Agent-Transkripte auf `(mtime, length)`, was die 12,7 MB pro Poll-Durchgang beim größten Run
+  beseitigt. Beides sind Argumente, keine Messwerte. **Was fehlt:** eine Messung während ein
+  Multi-Agent-Run tatsächlich schreibt. Falls es auffällt, ist der Debounce der Ort für den Fix, nicht
+  der Scan. Details in `.planning/STATE.md`, Abschnitt „Der eine offene Punkt".
+- **Das A2-Modell-Badge wurde nie gerendert gesehen.** Die Code-Clone-Remediation hat die
+  Subagent-Modellauflösung hinter dem `<synthetic>`-Marker geändert (die Zeile zeigt jetzt das letzte
+  echte Modell samt dessen Ceiling statt des Markers). Gepinnt per
+  `GetContextWindow_SubagentEndingOnSyntheticEntry_ResolvesModelPastTheMarker`, aber das *gerenderte*
+  Badge hat niemand gesehen: das Mockdata-Fixture erzeugt nur Workflow-Zeilen, und die tragen kein
+  Badge. Der Render-Pfad dahinter ist derselbe, den das Session-Badge benutzt. **Was fehlt:** ein
+  Fixture mit einer normalen Subagent-Zeile, deren letzter Assistant-Eintrag der Marker ist.
+
 ## Notes
 
 Root-cause research for shipped items: `.planning/research/rootcause-*.md`.

@@ -5,7 +5,7 @@ milestone_name: Workflow Subagent Visibility
 status: shipped
 workflow: ultracode / plan-mode (NOT GSD -- see CLAUDE.md "Workflows")
 roadmap: .planning/milestones/v1.7-ROADMAP.md
-stopped_at: v1.7 SHIPPED 2026-08-19 -- annotated tag v1.7.0 on master, fast-forwarded from feat/workflow-tooltip-hover-card, pushed with the tag. Release build and installer verified. Nothing open in v1.7 except the two carried-forward items named under "Current Position": the live-watcher-load verification point, and the A2 model badge that is unit-tested but never seen rendered.
+stopped_at: v1.7 SHIPPED 2026-08-19 -- annotated tag v1.7.0 on master, fast-forwarded from feat/workflow-tooltip-hover-card, pushed with the tag. Release build and installer verified. Nothing open in v1.7 except the two carried-forward items named under "Current Position", both now in BACKLOG.md: the unmeasured FileSystemWatcher event frequency under concurrent-write load (the 0,05 % CPU figure measured a resting file set, so it covers scan cost and not scan cost x event frequency), and the A2 model badge that is unit-tested but never seen rendered.
 last_updated: "2026-08-19T00:00:00.000Z"
 last_activity: 2026-08-19 -- code-clone review remediated (73 of 86 findings, 8 commits, tests 894 -> 898), then merged to master and tagged v1.7.0; the Laufzeitbeleg below documents the superseded phase-2 design
 progress:
@@ -61,7 +61,7 @@ Angezeigt wurde (Screenshot `.planning/reviews/v17-uat-01-workflow-rows.png`, gi
 | D-6 Run-ID wörtlich | **PASS** — `wf_11f45d5b-27d` deckt sich mit dem Ordnernamen |
 | Lokalisierung im DataTemplate | **PASS** — „· 43 aktiv" auf Deutsch; die ViewModel-Komposition umgeht die `l:Uids.Uid`-Falle wie geplant |
 | Gegenprobe normale Subagents | **PASS** — unveränderte Einzelbalken mit Badge |
-| **Breitenprüfung (Phase 3 Punkt 5)** | **PASS — Kürzen der Run-ID ist NICHT nötig.** Das längste Label („wf_11f45d5b-27d · 43 aktiv") lässt dem Balken in der Standardbreite rund zwei Drittel der Zeile. Damit ist die in D-6 offengelassene Nachjustierung entschieden: bleibt wörtlich |
+| **Breitenprüfung (Phase 3 Punkt 5)** | **PASS in der Schlussfolgerung, FALSCH in der Begründung** — Kürzen der Run-ID ist nicht nötig, und sie bleibt wörtlich. Aber „rund zwei Drittel der Zeile" wurde bei ~572 DIP gemessen, dem 1,6-fachen der 360-DIP-Standardbreite; bei der echten Standardbreite fällt der Balken auf ~104 DIP gegen ~189 DIP einer normalen Zeile, Balkenlängen benachbarter Zeilen sind dort nicht vergleichbar und können invertieren. **Moot seit Phase 3b:** der Balken ist aus den Workflow-Zeilen entfernt |
 | CPU-Last | **0,05 %** über 20 s bei 51 gescannten Agent-Dateien (24 Kerne), 266 MB Working Set |
 
 ### Der eine offene Punkt
@@ -71,6 +71,24 @@ Die CPU-Messung lief gegen einen **ruhenden** Dateibestand. Phase 3 Punkt 3 ziel
 `DataUpdated` löst ein `GetContextWindow` samt rekursivem Scan aus. Der Scan selbst ist damit als
 billig belegt, die **Watcher-Frequenz unter Last** nicht. Falls das je auffällt, ist der Debounce
 der Ort für den Fix, nicht der Scan.
+
+**Warum die Messung die falsche Größe erfasst** (2026-08-20 nachgetragen, weil „0,05 % CPU" beim
+Weiterlesen als erledigte Performance-Frage durchgeht): die Kostenfunktion ist
+`Scan-Kosten × Event-Frequenz`. Die Messung deckt nur den ersten Faktor ab, und bei ruhendem
+Dateibestand ist der zweite per Definition null. Die Zahl ist korrekt und beantwortet trotzdem nicht
+die gestellte Frage.
+
+**Was seit dieser Notiz passiert ist, ohne dass der Punkt dafür geschlossen wurde:**
+
+- Zwischen Watcher und Scan liegt ein Debounce von 2 s (`JsonlService.DebounceMilliseconds`), der bei
+  jedem weiteren Event neu gestartet wird. Genau der Mechanismus, der ein Event-Gewitter zusammenfasst
+  — er ist also nicht ungeschützt, nur unvermessen.
+- `36e99bf` memoisiert Agent-Transkripte pro Datei auf `(mtime, length)`. Vorher las ein laufender Run
+  bei *jedem* Poll-Durchgang alle Transkripte neu, gemessene 12,7 MB beim größten Run. Der teure Teil
+  des Lastfalls ist damit adressiert, bevor er je gemessen wurde.
+
+Der Punkt bleibt trotzdem offen und wird nach v1.8 übernommen: eine Messung gegen *schreibende*
+Dateien hat niemand gemacht, und beide Entschärfungen oben sind Argumente, keine Messwerte.
 
 ### Stand bei HEAD 19b8fe8 (2026-08-18)
 
@@ -114,7 +132,16 @@ Commit-Hash ein, und nur so stimmt er mit dem getaggten Commit überein.
 
 **Zwei Punkte werden in v1.8 übernommen, keiner blockiert v1.7:**
 
-1. **Live-Watcher-Last** — der unter „v1.7 — Ergebnis" aufgeschobene Verifikationspunkt.
+1. **Watcher-Frequenz unter Schreiblast ist unvermessen** (der unter „v1.7 — Ergebnis" aufgeschobene
+   Punkt — dort ausführlich). Kurzfassung: die CPU-Messung von 0,05 % lief gegen einen **ruhenden**
+   Dateibestand, misst also `Scan-Kosten` und nicht `Scan-Kosten × Event-Frequenz`. Bei ruhenden
+   Dateien ist der zweite Faktor per Definition null. Belegt ist „ein Scan ist billig"; offen ist,
+   wie oft der `FileSystemWatcher` feuert, wenn 44 Agents gleichzeitig schreiben.
+   **Nicht ungeschützt, nur unvermessen:** zwischen Watcher und Scan liegt ein bei jedem Event neu
+   gestarteter Debounce von 2 s (`JsonlService.DebounceMilliseconds`), und seit `36e99bf` sind die
+   Agent-Transkripte auf `(mtime, length)` memoisiert — der teure Teil des Szenarios (12,7 MB pro
+   Poll-Durchgang beim größten Run) ist damit weg, bevor er je gemessen wurde. Falls es doch
+   auffällt: der Debounce ist der Ort für den Fix, nicht der Scan.
 2. **Das A2-Modell-Badge** — die Subagent-Modellauflösung hinter dem `<synthetic>`-Marker ist per
    Unit-Test gepinnt, aber das gerenderte Badge wurde nie gesehen: das Mockdata-Fixture erzeugt nur
    Workflow-Rows, und die tragen kein Badge. Der Render-Pfad dahinter ist derselbe, den das
