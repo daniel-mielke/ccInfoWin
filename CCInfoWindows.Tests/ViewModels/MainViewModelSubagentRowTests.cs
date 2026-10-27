@@ -1,7 +1,7 @@
 using System.Globalization;
-using System.Xml.Linq;
 using CCInfoWindows.Helpers;
 using CCInfoWindows.Models;
+using CCInfoWindows.Tests.TestSupport;
 using CCInfoWindows.ViewModels;
 using Microsoft.UI.Xaml.Media;
 
@@ -654,21 +654,9 @@ public class MainViewModelSubagentRowTests
 
     /// <summary>
     /// The SHIPPED templates of one locale, so the label assertions run against the file the user
-    /// gets rather than against a hand-copied literal. Read straight out of the resw the same way
-    /// ResourceCoverageTests does — xUnit cannot start a WinUI3Localizer host, and that class's own
-    /// reader is private to it.
+    /// gets rather than against a hand-copied literal — xUnit cannot start a WinUI3Localizer host.
     /// </summary>
-    private static Func<string, string> Resw(string locale)
-    {
-        var path = Path.Combine(AppContext.BaseDirectory, "Strings", locale, "Resources.resw");
-        Assert.True(File.Exists(path), $"Resw file not found at: {path}");
-
-        var values = XDocument.Load(path).Root!.Elements("data")
-            .Where(data => data.Attribute("name") is not null && data.Element("value") is not null)
-            .ToDictionary(data => data.Attribute("name")!.Value, data => data.Element("value")!.Value, StringComparer.Ordinal);
-
-        return key => values[key];
-    }
+    private static Func<string, string> Resw(string locale) => ReswFixture.Load(locale);
 
     private const string Pattern = "ddd dd.MM., HH:mm";
     private static readonly CultureInfo German = new("de-DE");

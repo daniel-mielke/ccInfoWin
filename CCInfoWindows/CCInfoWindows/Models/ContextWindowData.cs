@@ -120,6 +120,34 @@ public record ContextWindowData
     public IReadOnlyList<SubagentContextData> Subagents { get; init; } = [];
 
     /// <summary>
+    /// Context of the session's FIRST assistant entry: system prompt, tools, MCP, skills and memory
+    /// files, all cached by the first request — plus the first user prompt, which that same request
+    /// carries and the transcript gives no way to subtract. Zero when unknown (no answer yet, or the
+    /// head of the file could not be read); the breakdown line is then hidden.
+    ///
+    /// Read from the head of the file, not the tail, and therefore still valid after /compact: the
+    /// fixed part of the context does not change when the conversation is summarised.
+    /// </summary>
+    public long BaselineTokens { get; init; }
+
+    /// <summary>
+    /// What the conversation adds on top of <see cref="BaselineTokens"/>. Clamped at zero: after
+    /// /compact the summary can be smaller than the first prompt the baseline includes.
+    /// </summary>
+    public long ChatTokens => Math.Max(0, TotalTokens - BaselineTokens);
+
+    /// <summary>
+    /// The autocompact reserve — the same constant <see cref="ModelContextLimits.GetEffectiveMaxTokens"/>
+    /// subtracts, so the breakdown line and the percentage above it stay on one scale.
+    /// </summary>
+    public long BufferTokens => Math.Min(ModelContextLimits.StandardAutocompactBuffer, MaxTokens);
+
+    /// <summary>
+    /// Room left before autocompact fires. Clamped at zero once the session is inside the buffer.
+    /// </summary>
+    public long FreeTokens => Math.Max(0, MaxTokens - TotalTokens - BufferTokens);
+
+    /// <summary>
     /// Fraction of the effective context window in use, clamped to 0…1.
     /// </summary>
     public double Utilization => ComputeUtilization(TotalTokens, MaxTokens);

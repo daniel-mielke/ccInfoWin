@@ -127,6 +127,10 @@
   <data name="WorkflowSubagentLabelTokensOnly" xml:space="preserve">
     <value>{0} · {1} Tokens</value>
   </data>
+  <data name="ContextBreakdownLabel" xml:space="preserve">
+    <value>Basis&#160;{0}&#160;· Chat&#160;{1}&#160;· Puffer&#160;{2}&#160;· Frei&#160;{3}</value>
+    <comment>Context breakdown line under the context bar: baseline, conversation, autocompact buffer, free space. The non-breaking spaces (&amp;#160;) keep each label with its value and each dot at the end of its line, so the text only wraps after a dot.</comment>
+  </data>
 
   <!-- MainView workflow row hover tooltip (v1.7 Phase 4). Windows-only, same note as above.
        One key per line, each carrying the LABEL for its value (D-17): a tooltip is read in

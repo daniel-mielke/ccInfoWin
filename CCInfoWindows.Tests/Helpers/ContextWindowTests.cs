@@ -1,3 +1,4 @@
+using CCInfoWindows.Helpers;
 using CCInfoWindows.Models;
 
 namespace CCInfoWindows.Tests.Helpers;
@@ -33,6 +34,55 @@ public class ContextWindowTests
         var data = new ContextWindowData { TotalTokens = totalTokens, MaxTokens = maxTokens };
 
         Assert.Equal(expectedUtilization, data.Utilization, precision: 4);
+    }
+
+    // -------------------------------------------------------------------------
+    // Breakdown line: Basis · Chat · Puffer · Frei
+    // -------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(104_200, 70_300, 200_000)]     // mid-session, 200K model
+    [InlineData(39_400, 30_000, 1_000_000)]    // early session, 1M model
+    public void ContextWindowData_Breakdown_AddsUpToTheModelLimit(
+        long totalTokens, long baselineTokens, long maxTokens)
+    {
+        var data = new ContextWindowData
+        {
+            TotalTokens = totalTokens,
+            BaselineTokens = baselineTokens,
+            MaxTokens = maxTokens
+        };
+
+        Assert.Equal(maxTokens, data.BaselineTokens + data.ChatTokens + data.BufferTokens + data.FreeTokens);
+        Assert.Equal(ModelContextLimits.StandardAutocompactBuffer, data.BufferTokens);
+    }
+
+    /// <summary>
+    /// After /compact the conversation shrinks to a summary, but the baseline is read from the head
+    /// of the file and still holds the first prompt — so the total can sit below it.
+    /// </summary>
+    [Fact]
+    public void ContextWindowData_ChatTokens_ClampsToZeroBelowTheBaseline()
+    {
+        var data = new ContextWindowData { TotalTokens = 60_000, BaselineTokens = 70_000, MaxTokens = 200_000 };
+
+        Assert.Equal(0, data.ChatTokens);
+    }
+
+    [Fact]
+    public void ContextWindowData_FreeTokens_ClampsToZeroInsideTheBuffer()
+    {
+        var data = new ContextWindowData { TotalTokens = 180_000, BaselineTokens = 70_000, MaxTokens = 200_000 };
+
+        Assert.Equal(0, data.FreeTokens);
+    }
+
+    [Fact]
+    public void ContextWindowData_BufferTokens_NeverExceedsTheModelLimit()
+    {
+        var data = new ContextWindowData { TotalTokens = 0, MaxTokens = 20_000 };
+
+        Assert.Equal(20_000, data.BufferTokens);
     }
 
     // CTXW-02 (model badge mapping) and CTXW-04 (autocompact threshold) are asserted in

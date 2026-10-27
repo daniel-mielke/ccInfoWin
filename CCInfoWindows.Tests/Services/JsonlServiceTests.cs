@@ -144,6 +144,81 @@ public class JsonlServiceTests : JsonlServiceTestBase
         Assert.Equal(3000L, ctx.TotalTokens);
     }
 
+    // -------------------------------------------------------------------------
+    // GetContextWindow — BaselineTokens (first assistant entry, read from the file head)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetContextWindow_Baseline_IsTheFirstAssistantEntry()
+    {
+        const string SessionId = "base1aaa-0000-0000-0000-000000000101";
+
+        var (_, projectDirName, _) = await SeedSessionAsync(SessionId,
+            BuildAssistantEntry(SessionId, "uuid-1", "req-1", inputTokens: 2, cacheCreation: 70_000),
+            BuildAssistantEntry(SessionId, "uuid-2", "req-2", inputTokens: 2, cacheRead: 70_000, cacheCreation: 9_000));
+
+        var service = BuildService();
+        await service.InitializeAsync();
+
+        var ctx = service.GetContextWindow(projectDirName);
+
+        Assert.Equal(70_002L, ctx.BaselineTokens);
+        Assert.Equal(79_002L, ctx.TotalTokens);
+    }
+
+    /// <summary>
+    /// The context read only sees the last <c>TailWindowBytes</c>; a long session's first answer lies
+    /// before that window, which is why the baseline has a head read of its own.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_Baseline_IsFoundBeyondTheTailWindow()
+    {
+        const string SessionId = "base2aaa-0000-0000-0000-000000000102";
+        const int TailWindowBytes = 1_048_576;
+
+        var padding = new string('x', 8_000);
+        var lines = new List<string>
+        {
+            BuildAssistantEntry(SessionId, "uuid-first", "req-first", cacheCreation: 65_000)
+        };
+        for (var i = 0; i < (TailWindowBytes / padding.Length) + 10; i++)
+            lines.Add(UserLine(SessionId, $"uuid-pad-{i}", padding));
+        lines.Add(BuildAssistantEntry(SessionId, "uuid-last", "req-last", cacheRead: 65_000, cacheCreation: 40_000));
+
+        var (_, projectDirName, _) = await SeedSessionAsync(SessionId, [.. lines]);
+
+        var service = BuildService();
+        await service.InitializeAsync();
+
+        var ctx = service.GetContextWindow(projectDirName);
+
+        Assert.Equal(65_000L, ctx.BaselineTokens);
+        Assert.Equal(105_000L, ctx.TotalTokens);
+    }
+
+    /// <summary>
+    /// A sidechain line belongs to a subagent, and a zero-usage line (the synthetic marker, an
+    /// aborted request) carries no context — neither may stand in for the session's first answer.
+    /// </summary>
+    [Fact]
+    public async Task GetContextWindow_Baseline_SkipsSidechainAndZeroUsageEntries()
+    {
+        const string SessionId = "base3aaa-0000-0000-0000-000000000103";
+
+        var (_, projectDirName, _) = await SeedSessionAsync(SessionId,
+            BuildSidechainAssistantEntry(SessionId, "uuid-1", "req-1", inputTokens: 12_000),
+            BuildAssistantEntry(SessionId, "uuid-2", "req-2", model: "<synthetic>"),
+            BuildAssistantEntry(SessionId, "uuid-3", "req-3", cacheCreation: 50_000),
+            BuildAssistantEntry(SessionId, "uuid-4", "req-4", cacheRead: 50_000, inputTokens: 5_000));
+
+        var service = BuildService();
+        await service.InitializeAsync();
+
+        var ctx = service.GetContextWindow(projectDirName);
+
+        Assert.Equal(50_000L, ctx.BaselineTokens);
+    }
+
     [Fact]
     public async Task GetContextWindow_UnknownSession_ReturnsEmpty()
     {
@@ -1086,6 +1161,17 @@ public class JsonlServiceTests : JsonlServiceTestBase
     }
 
     private static string DefaultMessageId(string uuid) => JsonlFixture.MessageIdFor(uuid);
+
+    private static string UserLine(string sessionId, string uuid, string text) =>
+        JsonSerializer.Serialize(new
+        {
+            type = "user",
+            sessionId,
+            uuid,
+            cwd = JsonlFixture.DefaultCwd,
+            timestamp = DateTimeOffset.UtcNow.ToString("O"),
+            message = new { role = "user", content = text }
+        });
 
     private static string BuildSidechainAssistantEntry(
         string sessionId,

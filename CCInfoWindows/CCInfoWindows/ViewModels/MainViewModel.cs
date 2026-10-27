@@ -145,6 +145,7 @@ public partial class MainViewModel : ObservableObject,
     private const string WorkflowSubagentIcon = "\u2699";  // gear
     private const string WorkflowSubagentLabelKey = "WorkflowSubagentLabel";
     private const string WorkflowSubagentLabelTokensOnlyKey = "WorkflowSubagentLabelTokensOnly";
+    private const string ContextBreakdownLabelKey = "ContextBreakdownLabel";
     private const string WorkflowTooltipKindKey = "WorkflowTooltipKind";
     private const string WorkflowTooltipNameKey = "WorkflowTooltipName";
     private const string WorkflowTooltipDescriptionKey = "WorkflowTooltipDescription";
@@ -423,6 +424,13 @@ public partial class MainViewModel : ObservableObject,
 
     [ObservableProperty]
     private SolidColorBrush _contextModelBadgeColor = null!;
+
+    /// <summary>"Basis · Chat · Puffer · Frei" under the context bar; empty while there is no baseline.</summary>
+    [ObservableProperty]
+    private string _contextBreakdownText = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasContextBreakdown;
 
     [ObservableProperty]
     private bool _showAutocompactWarning;
@@ -1614,12 +1622,36 @@ public partial class MainViewModel : ObservableObject,
         ContextPercentageText = hasSession ? percentage.Text : NoDataText;
         ContextModelBadge = hasSession ? ModelContextLimits.GetDisplayName(context.ModelName) : string.Empty;
         ContextModelBadgeColor = _brushFactory(ModelContextLimits.GetBadgeColorHex(context.ModelName));
+        ContextBreakdownText = hasSession
+            ? FormatContextBreakdown(context, key => Localizer.Get().GetLocalizedString(key))
+            : string.Empty;
+        HasContextBreakdown = ContextBreakdownText.Length > 0;
         ShowAutocompactWarning = context.ShouldWarnAutocompact;
         HasActiveSession = hasSession;
 
         SubagentContexts.Clear();
         foreach (var row in BuildSubagentRows(context.Subagents, _brushFactory, FormatWorkflowRow))
             SubagentContexts.Add(row);
+    }
+
+    /// <summary>
+    /// The breakdown line under the context bar. Empty without a baseline — the localizer is then
+    /// not touched at all, which keeps the clear path and every baseline-less test free of the
+    /// WinUI3Localizer host. Takes the localizer as a delegate for the reason given on
+    /// <see cref="FormatWorkflowLabel"/>.
+    /// </summary>
+    internal static string FormatContextBreakdown(ContextWindowData context, Func<string, string> localize)
+    {
+        if (context.BaselineTokens <= 0)
+            return string.Empty;
+
+        return string.Format(
+            CultureInfo.CurrentCulture,
+            localize(ContextBreakdownLabelKey),
+            TokenFormatter.FormatTokenCount(context.BaselineTokens),
+            TokenFormatter.FormatTokenCount(context.ChatTokens),
+            TokenFormatter.FormatTokenCount(context.BufferTokens),
+            TokenFormatter.FormatTokenCount(context.FreeTokens));
     }
 
     /// <summary>

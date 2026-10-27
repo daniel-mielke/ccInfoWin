@@ -299,6 +299,8 @@ public class MainViewModelRefreshTests
         Assert.False(sut.ShowAutocompactWarning);
         Assert.Equal("--", sut.ContextPercentageText);
         Assert.Equal(string.Empty, sut.ContextModelBadge);
+        Assert.Equal(string.Empty, sut.ContextBreakdownText);
+        Assert.False(sut.HasContextBreakdown);
         Assert.Equal("\u2013", sut.StatisticsTotal);
     }
 

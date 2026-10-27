@@ -1289,11 +1289,74 @@ public sealed class JsonlService : IJsonlService, IDisposable
         return new ContextWindowData
         {
             TotalTokens = totalTokens,
+            BaselineTokens = ReadBaselineTokens(sessionFile),
             MaxTokens = maxTokens,
             ModelName = modelName,
             ShouldWarnAutocompact = ModelContextLimits.ShouldWarnAutocompact(totalTokens, maxTokens),
             Subagents = subagents
         };
+    }
+
+    /// <summary>
+    /// Baselines by absolute session-file path. The first assistant entry of a transcript is never
+    /// rewritten — Claude Code only appends — so a found value needs no (mtime, length) stamp the way
+    /// <see cref="AgentSnapshotCache"/> does. Only values above zero are stored: a session that has not
+    /// answered yet is asked again on the next pass.
+    ///
+    /// Static for the same reason as <see cref="AgentSnapshotCache"/>.
+    ///
+    /// ponytail: never evicted, one entry per session file viewed in this process, ~100 bytes each.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, long> BaselineCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// How many lines of a transcript's head <see cref="ReadBaselineTokens"/> scans for the first
+    /// answer. A real session reaches it within a few dozen lines (hook output, attachments, the
+    /// prompt); the cap only keeps a file that never got one from being read end to end every tick.
+    /// </summary>
+    private const int BaselineHeadLineLimit = 2_000;
+
+    /// <summary>
+    /// Context tokens of the session's first non-sidechain assistant entry that carries any — see
+    /// <see cref="ContextWindowData.BaselineTokens"/>. Reads from the START of the file, because
+    /// <see cref="ReadTailLines"/> sees only the last <see cref="TailWindowBytes"/> and a long session's
+    /// first answer lies before that window. Zero when none is found within
+    /// <see cref="BaselineHeadLineLimit"/> lines.
+    ///
+    /// Zero-usage entries are skipped, not taken: the synthetic marker and aborted requests report no
+    /// context and would hide the real first answer behind them.
+    /// </summary>
+    private static long ReadBaselineTokens(string sessionFile)
+    {
+        if (BaselineCache.TryGetValue(sessionFile, out var cached))
+            return cached;
+
+        using var stream = new FileStream(sessionFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(stream);
+
+        var lines = 0;
+        string? line;
+        while (lines++ < BaselineHeadLineLimit && (line = reader.ReadLine()) != null)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            foreach (var entry in ParseJsonlEntries([line]))
+            {
+                if (!IsRelevantAssistantEntry(entry))
+                    continue;
+
+                var tokens = ComputeContextTokens(entry);
+                if (tokens <= 0)
+                    continue;
+
+                BaselineCache[sessionFile] = tokens;
+                return tokens;
+            }
+        }
+
+        return 0L;
     }
 
     /// <summary>

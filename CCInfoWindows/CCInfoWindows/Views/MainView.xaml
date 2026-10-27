@@ -210,6 +210,18 @@
                                  Background="{ThemeResource ProgressTrackBrush}"
                                  Style="{StaticResource AppProgressBarStyle}" />
 
+                    <!-- Context breakdown: Basis · Chat · Puffer · Frei. QuotaResetDateStyle's 12pt,
+                         but SecondaryTextBrush rather than its Tertiary for the whole line: Tertiary
+                         measures ~3:1 on AppBackgroundBrush, too faint for four numbers. Wraps rather
+                         than trims — a 1M model widens the line past the 360-DIP default. The resw
+                         template joins label and value with non-breaking spaces, so a segment moves
+                         to the next line whole and the only break opportunity is after a dot. -->
+                    <TextBlock Text="{x:Bind ViewModel.ContextBreakdownText, Mode=OneWay}"
+                               Visibility="{x:Bind ViewModel.HasContextBreakdown, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                               FontSize="12"
+                               Foreground="{ThemeResource SecondaryTextBrush}"
+                               TextWrapping="Wrap" />
+
                     <!-- Percentage + model badge row -->
                     <Grid ColumnDefinitions="Auto,*">
                         <TextBlock Text="{x:Bind ViewModel.ContextPercentageText, Mode=OneWay}"
