@@ -2,13 +2,14 @@
 
 Real-time Claude Code usage monitoring for Windows. A Windows port of [ccInfo](https://github.com/stefanlange/ccInfo) (macOS).
 
-**Current version:** v1.7.0 — workflow subagent visibility (Windows-only extension).
+**Current version:** v1.8.0 — context breakdown line under the context bar (Windows-only extension).
 
 ## Features
 
 - **5-Hour Usage Window** — Interactive area chart with color-coded zones (green/yellow/orange/red), reset countdown with absolute next-window start time, and glow indicator
 - **Weekly Quota** — Separate Sonnet and Opus progress bars with reset dates
 - **Context Window** — Real-time context utilization with model badge, autocompact warning, and live list of parallel subagents with per-agent context %
+- **Context Breakdown** — One line under the context bar splits the window into `Basis · Chat · Puffer · Frei`: the fixed baseline (system prompt, tools, MCP, skills, memory files and the first prompt, measured from the session's first answer), the conversation on top of it, the 33K autocompact buffer and the room left. Wraps per segment on narrow windows. Unlike `/context`, it cannot split the baseline into its parts — the session transcripts carry only the total
 - **Multi-Session Management** — Switch between active Claude Code sessions with project names, configurable visibility window (7/30/90 days or unlimited), and pencil-button rename with persistent custom names
 - **Multi-Org Support** — Re-detect organization picker for users with multiple Anthropic accounts
 - **Token Statistics** — Input/output/cache tokens aggregated by session, today, week, month
