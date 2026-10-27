@@ -75,17 +75,8 @@ public static partial class WorkflowScriptMeta
 
         try
         {
-            var scriptsDirectory = Path.Combine(sessionDirectory, "workflows", "scripts");
-            if (!Directory.Exists(scriptsDirectory))
-                return ScriptMeta.Empty;
-
-            // "*{runId}.js" and not "*.js" + filter: the glob is done by the OS, and a session can
-            // hold one script per run ever executed in it.
-            var matches = Directory.GetFiles(scriptsDirectory, "*" + runId + ".js");
-            if (matches.Length == 0)
-                return ScriptMeta.Empty;
-
-            return Parse(ReadPrefix(matches[0]));
+            var script = FindScript(sessionDirectory, runId);
+            return script is null ? ScriptMeta.Empty : Parse(ReadPrefix(script));
         }
         // One clause: five unrelated failure types, one identical response — no metadata, tooltip
         // drops the lines. ArgumentException covers invalid characters reaching Path.Combine from a
@@ -96,6 +87,67 @@ public static partial class WorkflowScriptMeta
             AppLog.Write(LogSource, ex, $"Failed to read workflow script for {runId}.");
             return ScriptMeta.Empty;
         }
+    }
+
+    /// <summary>
+    /// The run's script file, or null if no session holds one.
+    ///
+    /// The caller derives <paramref name="sessionDirectory"/> from the run directory by walking up
+    /// the subagent tree, which assumes both trees share a root. They usually do — but a session's
+    /// cwd can change mid-run, and Claude Code derives the project folder from the CURRENT cwd:
+    /// the transcripts stay under the slug the session started in while the scripts are written
+    /// under the slug of the new cwd, both below `projects/{slug}/{sessionId}`. Measured on one
+    /// live run: transcripts under `D--myProjects-eventRadar-PoC`, script under
+    /// `D--myProjects-eventRadar-PoC-backend`, same session id. The three script-borne fields —
+    /// name, description, phases — were blank for the whole run.
+    ///
+    /// So on a miss the same session id is tried under every sibling project. The session id keeps
+    /// the search honest: it can only ever reach another slug of the SAME session, never a
+    /// different one that happens to hold a run of the same id.
+    ///
+    /// ponytail: a linear scan of the projects root, done only when the direct lookup misses.
+    /// Measured at ~10 project folders, so ~10 stats per miss; hits are cached by the caller. If a
+    /// projects root ever grows into the thousands, index it instead of scanning.
+    /// </summary>
+    private static string? FindScript(string sessionDirectory, string runId)
+    {
+        var direct = MatchInSession(sessionDirectory, runId);
+        if (direct is not null)
+            return direct;
+
+        var sessionId = Path.GetFileName(sessionDirectory);
+        var projectsRoot = Path.GetDirectoryName(Path.GetDirectoryName(sessionDirectory));
+        if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(projectsRoot) || !Directory.Exists(projectsRoot))
+            return null;
+
+        foreach (var project in Directory.GetDirectories(projectsRoot))
+        {
+            var sibling = Path.Combine(project, sessionId);
+            if (string.Equals(sibling, sessionDirectory, StringComparison.OrdinalIgnoreCase))
+                continue;   // the direct lookup above already covered it
+
+            var match = MatchInSession(sibling, runId);
+            if (match is not null)
+                return match;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The run's script inside one session folder, or null when the folder has no scripts directory
+    /// or no file for this run.
+    /// </summary>
+    private static string? MatchInSession(string sessionDirectory, string runId)
+    {
+        var scriptsDirectory = Path.Combine(sessionDirectory, "workflows", "scripts");
+        if (!Directory.Exists(scriptsDirectory))
+            return null;
+
+        // "*{runId}.js" and not "*.js" + filter: the glob is done by the OS, and a session can
+        // hold one script per run ever executed in it.
+        var matches = Directory.GetFiles(scriptsDirectory, "*" + runId + ".js");
+        return matches.Length == 0 ? null : matches[0];
     }
 
     private static string ReadPrefix(string path)

@@ -289,6 +289,84 @@ public class WorkflowScriptMetaTests
         Assert.Equal("code-clone-review", WorkflowScriptMeta.Read(session.Path, "wf_1").Name);
     }
 
+    /// <summary>
+    /// A session's cwd can change mid-run, and Claude Code derives the project folder from the
+    /// current cwd: the subagent transcripts stay under the slug the session started in while the
+    /// scripts land under the slug of the new cwd. The reader derives the session directory from
+    /// the transcript path, so it looks in the wrong slug and used to give up there.
+    /// </summary>
+    [Fact]
+    public void Read_ScriptUnderASiblingProjectOfTheSameSession_IsFound()
+    {
+        using var projects = new TempProjects();
+        var transcripts = projects.CreateSession("D--myProjects-eventRadar-PoC");
+        projects.WriteScript("D--myProjects-eventRadar-PoC-backend", "vocab-wf_c04431a5-f55.js", RealScript);
+
+        var meta = WorkflowScriptMeta.Read(transcripts, "wf_c04431a5-f55");
+
+        Assert.Equal("code-clone-review", meta.Name);
+        Assert.Equal(3, meta.Phases.Count);
+    }
+
+    /// <summary>
+    /// The sibling search is keyed on the session id, so a run of the same id under a DIFFERENT
+    /// session must stay invisible — otherwise the fallback would turn a missing script into a
+    /// wrong one, which is worse than a blank tooltip line.
+    /// </summary>
+    [Fact]
+    public void Read_ScriptUnderADifferentSession_IsNotFound()
+    {
+        using var projects = new TempProjects();
+        var transcripts = projects.CreateSession("D--myProjects-eventRadar-PoC");
+        projects.WriteScript(
+            System.IO.Path.Combine("D--myProjects-other", Guid.NewGuid().ToString()),
+            "vocab-wf_c04431a5-f55.js",
+            RealScript,
+            appendSessionId: false);
+
+        Assert.Null(WorkflowScriptMeta.Read(transcripts, "wf_c04431a5-f55").Name);
+    }
+
+    /// <summary>
+    /// A `projects/{slug}/{sessionId}` layout: one session id, as many project slugs as a test
+    /// needs.
+    /// </summary>
+    private sealed class TempProjects : IDisposable
+    {
+        private readonly string _root =
+            System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ccinfo-projects-" + Guid.NewGuid().ToString("N"));
+
+        private readonly string _sessionId = Guid.NewGuid().ToString();
+
+        /// <summary>The session directory under <paramref name="slug"/>, as the reader receives it.</summary>
+        public string CreateSession(string slug)
+        {
+            var session = System.IO.Path.Combine(_root, slug, _sessionId);
+            Directory.CreateDirectory(System.IO.Path.Combine(session, "subagents", "workflows"));
+            return session;
+        }
+
+        public void WriteScript(string slug, string fileName, string content, bool appendSessionId = true)
+        {
+            var session = appendSessionId ? System.IO.Path.Combine(_root, slug, _sessionId) : System.IO.Path.Combine(_root, slug);
+            var scripts = System.IO.Path.Combine(session, "workflows", "scripts");
+            Directory.CreateDirectory(scripts);
+            File.WriteAllText(System.IO.Path.Combine(scripts, fileName), content);
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
+            }
+            catch (IOException)
+            {
+                // A leaked temp directory is not worth failing a green test over.
+            }
+        }
+    }
+
     private sealed class TempSession : IDisposable
     {
         public string Path { get; } =
